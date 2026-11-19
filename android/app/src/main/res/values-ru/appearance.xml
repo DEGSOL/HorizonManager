@@ -1,0 +1,13 @@
+<resources>
+    <string name="theme">Тема</string>
+    <string name="theme_ocean">Океан</string>
+    <string name="theme_graphite">Графит</string>
+    <string name="theme_jade">Нефрит</string>
+    <string name="theme_amethyst">Аметист</string>
+    <string name="theme_amber">Янтарь</string>
+    <string name="oldest_first">По времени (сначала старые)</string>
+    <string name="news_search">Поиск новостей</string>
+    <string name="clear_search">Очистить поиск</string>
+    <string name="chronology_progress">Загрузка выпуска для сортировки · %1$d / %2$d</string>
+    <string name="servers_description">Выбор и добавление VPS</string>
+</resources>

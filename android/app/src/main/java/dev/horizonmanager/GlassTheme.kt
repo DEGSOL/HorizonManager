@@ -11,7 +11,12 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.OutlinedButton as MaterialOutlinedButton
+import androidx.compose.material3.TextButton as MaterialTextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Text
@@ -30,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
@@ -46,27 +52,25 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private val ocean = Color(0xFF0B1423)
-private val ice = Color(0xFF9CDBFF)
-private val canvasTone = Color(0xFF080C16)
-private val glassBorder = Brush.linearGradient(listOf(
-    Color(0x8BE8F5FF), Color(0x2B96D8FF), Color(0x371C6FAE), Color(0x64C3DCFF),
-))
-private val tileEdge = Brush.linearGradient(listOf(Color(0x398DD4FC), Color(0x170B617D), Color(0x453D688D)))
-private val tileFill = Brush.linearGradient(listOf(Color(0xEC16243A), Color(0xF4101B2C), Color(0xF40D1727)))
+internal val LocalHorizonPalette = staticCompositionLocalOf { ThemePreset.Ocean }
 
-private val palette = darkColorScheme(
-    primary = ice, onPrimary = Color(0xFF042136),
-    primaryContainer = Color(0xFF1B3E60), onPrimaryContainer = Color(0xFFE0F3FF),
-    secondary = Color(0xFFB5CFFF), secondaryContainer = Color(0xFF263955),
-    onSecondaryContainer = Color(0xFFE4EEFF), tertiary = Color(0xFF8CE4DC),
-    background = canvasTone, onBackground = Color(0xFFF2F7FD),
-    surface = ocean, onSurface = Color(0xFFF2F7FD), onSurfaceVariant = Color(0xFFB6C9DD),
-    surfaceVariant = Color(0xFF202D42), surfaceContainerLowest = canvasTone,
-    surfaceContainerLow = Color(0xFF121D2E), surfaceContainer = Color(0xFF141F32),
-    surfaceContainerHigh = Color(0xFF1A2940), surfaceContainerHighest = Color(0xFF243751),
-    outline = Color(0xFF6D879F), outlineVariant = Color(0xFF344961), error = Color(0xFFFFACA9),
-    errorContainer = Color(0xFF4C202C), onErrorContainer = Color(0xFFFFDDD9),
+private fun ThemePreset.glassEdge() = Brush.linearGradient(
+    listOf(text.copy(alpha = 0.55f), link.copy(alpha = 0.27f), tint.copy(alpha = 0.20f), link.copy(alpha = 0.39f)),
+)
+
+private fun ThemePreset.colors() = darkColorScheme(
+    primary = panel(0.50f), onPrimary = text,
+    primaryContainer = panel(0.30f), onPrimaryContainer = text,
+    secondary = tint, onSecondary = text, secondaryContainer = panel(0.33f), onSecondaryContainer = text,
+    tertiary = link, onTertiary = text, tertiaryContainer = panel(0.34f), onTertiaryContainer = text,
+    inversePrimary = panel(0.39f), inverseSurface = panel(0.29f), inverseOnSurface = text,
+    background = background, onBackground = text, surface = panel(0.06f), onSurface = text,
+    surfaceDim = background, surfaceBright = panel(0.22f), surfaceTint = tint, onSurfaceVariant = muted,
+    surfaceVariant = panel(0.20f), surfaceContainerLowest = background,
+    surfaceContainerLow = panel(0.10f), surfaceContainer = panel(0.14f),
+    surfaceContainerHigh = panel(0.21f), surfaceContainerHighest = panel(0.25f),
+    outline = muted.copy(alpha = 0.57f), outlineVariant = tint.copy(alpha = 0.42f),
+    error = text, onError = text, errorContainer = Color(0xFF512C35), onErrorContainer = text,
 )
 
 private fun type(size: Int, line: Int, weight: FontWeight = FontWeight.Normal, tracking: Double = 0.0): TextStyle =
@@ -92,19 +96,44 @@ private val textStyles = Typography(
 )
 
 @Composable
-internal fun HorizonTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = palette, typography = textStyles, shapes = Shapes(
+internal fun HorizonTheme(preset: ThemePreset, content: @Composable () -> Unit) {
+    val colors = remember(preset) { preset.colors() }
+    MaterialTheme(colorScheme = colors, typography = textStyles, shapes = Shapes(
         extraSmall = RoundedCornerShape(10.dp), small = RoundedCornerShape(15.dp),
         medium = RoundedCornerShape(21.dp), large = RoundedCornerShape(27.dp),
         extraLarge = RoundedCornerShape(34.dp),
-    ), content = content)
+    )) {
+        CompositionLocalProvider(LocalHorizonPalette provides preset, LocalContentColor provides preset.text, content = content)
+    }
 }
 
-internal data class HorizonTab(@StringRes val label: Int, val icon: ImageVector)
+@Composable
+internal fun TextButton(onClick: () -> Unit, enabled: Boolean = true, content: @Composable RowScope.() -> Unit) {
+    val palette = LocalHorizonPalette.current
+    MaterialTextButton(onClick, enabled = enabled,
+        colors = ButtonDefaults.textButtonColors(contentColor = palette.text, disabledContentColor = palette.muted.copy(alpha = 0.70f)),
+        content = content)
+}
+
+@Composable
+internal fun OutlinedButton(onClick: () -> Unit, enabled: Boolean = true, content: @Composable RowScope.() -> Unit) {
+    val palette = LocalHorizonPalette.current
+    MaterialOutlinedButton(onClick, enabled = enabled,
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.text, disabledContentColor = palette.muted.copy(alpha = 0.70f)),
+        content = content)
+}
+
+@Composable
+internal fun horizonFieldColors() = LocalHorizonPalette.current.let { palette ->
+    OutlinedTextFieldDefaults.colors(focusedLabelColor = palette.text, focusedBorderColor = palette.link, cursorColor = palette.link)
+}
+
+internal data class HorizonTab(@param:StringRes val label: Int, val icon: ImageVector)
 
 @Composable
 internal fun GlassLayout(tabs: List<HorizonTab>, selection: Int, showTabs: Boolean, select: (Int) -> Unit,
                          content: @Composable BoxScope.() -> Unit) {
+    val palette = LocalHorizonPalette.current
     val supportsBlur = showTabs && Build.VERSION.SDK_INT >= 31
     val scene = if (supportsBlur) rememberGraphicsLayer() else null
     var contentOrigin by remember { mutableStateOf(Offset.Zero) }
@@ -117,14 +146,14 @@ internal fun GlassLayout(tabs: List<HorizonTab>, selection: Int, showTabs: Boole
 
     Box(Modifier.fillMaxSize().imePadding()) {
         Box(Modifier.fillMaxSize().then(capture).drawWithContent {
-            drawRect(Brush.verticalGradient(listOf(Color(0xFF101D31), canvasTone, Color(0xFF0B1322))))
+            drawRect(Brush.verticalGradient(listOf(palette.panel(0.15f), palette.background, palette.panel(0.05f))))
             drawRect(Brush.radialGradient(
-                colors = listOf(Color(0x58275080), Color.Transparent),
+                colors = listOf(palette.tint.copy(alpha = 0.31f), Color.Transparent),
                 center = Offset(size.width * 0.84f, 0f),
                 radius = maxOf(size.width, size.height * 0.54f),
             ))
             drawRect(Brush.radialGradient(
-                colors = listOf(Color(0x4B0D666B), Color.Transparent),
+                colors = listOf(palette.tint.copy(alpha = 0.21f), Color.Transparent),
                 center = Offset(0f, size.height * 0.94f),
                 radius = maxOf(size.width, size.height * 0.46f),
             ))
@@ -143,6 +172,7 @@ internal fun GlassLayout(tabs: List<HorizonTab>, selection: Int, showTabs: Boole
 @Composable
 private fun GlassTabs(tabs: List<HorizonTab>, selection: Int, scene: GraphicsLayer?, contentOrigin: Offset,
                       select: (Int) -> Unit) {
+    val palette = LocalHorizonPalette.current
     var glassOrigin by remember { mutableStateOf(Offset.Zero) }
     val blurRadius = with(LocalDensity.current) { 19.dp.toPx() }
     Box(
@@ -162,27 +192,27 @@ private fun GlassTabs(tabs: List<HorizonTab>, selection: Int, scene: GraphicsLay
         Row(
             Modifier.fillMaxWidth()
                 .background(Brush.verticalGradient(listOf(
-                    Color(0xC6375575), Color(0xE2182B47), Color(0xEE0E2139),
+                    palette.panel(0.37f).copy(alpha = 0.77f), palette.panel(0.19f).copy(alpha = 0.88f), palette.panel(0.13f).copy(alpha = 0.93f),
                 )))
-                .border(1.dp, glassBorder, CircleShape).selectableGroup().padding(5.dp),
+                .border(1.dp, palette.glassEdge(), CircleShape).selectableGroup().padding(5.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             tabs.forEachIndexed { index, tab ->
                 val selected = selection == index
-                val tint by animateColorAsState(if (selected) Color(0xFFF7FCFF) else Color(0xFFD0E1F1), label = "tab tint")
-                val highlight by animateColorAsState(if (selected) Color(0x704F9ED6) else Color.Transparent, label = "tab glass")
+                val tint by animateColorAsState(if (selected) palette.text else palette.muted, label = "tab tint")
+                val highlight by animateColorAsState(if (selected) palette.tint.copy(alpha = 0.40f) else Color.Transparent, label = "tab glass")
                 Column(
                     Modifier.weight(1f).heightIn(min = 57.dp).clip(CircleShape)
                         .background(Brush.verticalGradient(listOf(highlight, highlight.copy(alpha = highlight.alpha * 0.42f))))
                         .then(if (selected) Modifier.border(1.dp, Brush.verticalGradient(listOf(
-                            Color(0x8EBAE8FF), Color(0x4278B5E3), Color(0x36B7DBFF),
+                            palette.link.copy(alpha = 0.53f), palette.tint.copy(alpha = 0.30f), palette.link.copy(alpha = 0.25f),
                         )), CircleShape) else Modifier)
                         .selectable(selected, role = Role.Tab, onClick = { select(index) })
                         .padding(horizontal = 4.dp, vertical = 6.dp),
                     verticalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterVertically),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Icon(tab.icon, null, Modifier.size(22.dp), tint = if (selected) ice else tint)
+                    Icon(tab.icon, null, Modifier.size(22.dp), tint = if (selected) palette.link else tint)
                     Text(stringResource(tab.label), color = tint, style = MaterialTheme.typography.labelMedium,
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
@@ -194,8 +224,11 @@ private fun GlassTabs(tabs: List<HorizonTab>, selection: Int, scene: GraphicsLay
 @Composable
 internal fun Tile(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     val shape = MaterialTheme.shapes.large
+    val palette = LocalHorizonPalette.current
     Column(
-        Modifier.fillMaxWidth().clip(shape).background(tileFill).border(0.8.dp, tileEdge, shape)
+        Modifier.fillMaxWidth().clip(shape)
+            .background(Brush.linearGradient(listOf(palette.panel(0.16f), palette.panel(0.08f), palette.panel(0.04f))))
+            .border(0.8.dp, Brush.linearGradient(listOf(palette.link.copy(alpha = 0.23f), palette.tint.copy(alpha = 0.16f))), shape)
             .then(modifier).padding(horizontal = 17.dp, vertical = 15.dp),
         verticalArrangement = Arrangement.spacedBy(9.dp),
         content = content,
@@ -212,17 +245,27 @@ internal fun GlassSettingRow(title: String, subtitle: String, enabled: Boolean =
                 Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall)
             }
-            Text("›", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
+            Text("›", style = MaterialTheme.typography.headlineSmall, color = LocalHorizonPalette.current.link)
         }
     }
 }
 
 @Composable
+internal fun Modifier.glassPanel(shape: Shape, raised: Boolean = false): Modifier {
+    val palette = LocalHorizonPalette.current
+    return clip(shape)
+        .background(Brush.verticalGradient(listOf(
+            palette.panel(if (raised) 0.32f else 0.24f).copy(alpha = 0.93f),
+            palette.panel(0.12f).copy(alpha = 0.96f),
+            palette.panel(0.07f).copy(alpha = 0.98f),
+        )))
+        .border(1.dp, palette.glassEdge(), shape)
+}
+
+@Composable
 internal fun GlassToolbarButton(title: String, onClick: () -> Unit) {
-    Text(title, color = Color(0xFFE9F7FF), style = MaterialTheme.typography.labelLarge,
-        modifier = Modifier.clip(CircleShape)
-            .background(Brush.verticalGradient(listOf(Color(0x704E7092), Color(0x501D3551))))
-            .border(1.dp, glassBorder, CircleShape)
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = 15.dp, vertical = 13.dp))
+    Box(Modifier.glassPanel(CircleShape).clickable(role = Role.Button, onClick = onClick)
+        .heightIn(min = 48.dp).padding(horizontal = 15.dp), contentAlignment = Alignment.Center) {
+        Text(title, color = LocalHorizonPalette.current.text, style = MaterialTheme.typography.labelLarge)
+    }
 }

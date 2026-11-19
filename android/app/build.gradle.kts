@@ -15,8 +15,9 @@ android {
         applicationId = "dev.horizonmanager"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.1.3"
+        versionCode = 5
+        versionName = "0.1.4"
+        buildConfigField("String", "AGENT_VERSION", "\"0.1.3\"")
     }
     buildFeatures { compose = true; buildConfig = true }
     signingConfigs {

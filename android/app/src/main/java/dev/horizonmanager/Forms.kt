@@ -13,7 +13,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -138,7 +137,7 @@ internal fun Choice(title: String, entries: List<String>, current: String, chang
 @Composable
 internal fun ValueField(title: String, text: String, set: (String) -> Unit, numeric: Boolean = false, multiline: Boolean = false) {
     OutlinedTextField(value = text, onValueChange = set, label = { Text(title) },
-        modifier = Modifier.fillMaxWidth(), singleLine = !multiline,
+        modifier = Modifier.fillMaxWidth(), singleLine = !multiline, colors = horizonFieldColors(),
         minLines = if (multiline) 3 else 1, maxLines = if (multiline) 10 else 1,
         keyboardOptions = KeyboardOptions(keyboardType = if (numeric) KeyboardType.Decimal else KeyboardType.Text))
 }

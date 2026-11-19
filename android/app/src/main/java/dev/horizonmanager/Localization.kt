@@ -32,7 +32,7 @@ internal fun digestLanguage(available: List<String>): String? =
 
 internal fun agentUpdateAvailable(installed: String): Boolean {
     val current = installed.split('.').mapNotNull(String::toIntOrNull)
-    val target = BuildConfig.VERSION_NAME.split('.').mapNotNull(String::toIntOrNull)
+    val target = BuildConfig.AGENT_VERSION.split('.').mapNotNull(String::toIntOrNull)
     if (current.size != 3 || target.size != 3) return false
     val difference = current.zip(target).firstOrNull { (left, right) -> left != right }
     return difference != null && difference.first < difference.second

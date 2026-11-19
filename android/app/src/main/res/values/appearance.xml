@@ -1,0 +1,13 @@
+<resources>
+    <string name="theme">Theme</string>
+    <string name="theme_ocean">Ocean</string>
+    <string name="theme_graphite">Graphite</string>
+    <string name="theme_jade">Jade</string>
+    <string name="theme_amethyst">Amethyst</string>
+    <string name="theme_amber">Amber</string>
+    <string name="oldest_first">By time (oldest first)</string>
+    <string name="news_search">Search news</string>
+    <string name="clear_search">Clear search</string>
+    <string name="chronology_progress">Loading the full issue for sorting · %1$d / %2$d</string>
+    <string name="servers_description">Select or add a VPS</string>
+</resources>

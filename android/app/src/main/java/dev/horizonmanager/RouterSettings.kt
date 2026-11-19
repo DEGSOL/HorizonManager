@@ -15,10 +15,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -104,7 +102,7 @@ internal fun RouterSettings(
                 models = null
                 checkedKey = null
             }, label = { Text(ui(R.string.ui_api_key, router.title)) },
-            modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !loading && !busy,
+            modifier = Modifier.fillMaxWidth(), singleLine = true, colors = horizonFieldColors(), enabled = !loading && !busy,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { if (input.isNotBlank()) request++ }),
@@ -157,7 +155,7 @@ private fun RouterPicker(models: List<RouterModel>, selectedId: String, close: (
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = query, onValueChange = { query = it }, label = { Text(ui(R.string.ui_search_by_name)) },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    modifier = Modifier.fillMaxWidth(), singleLine = true, colors = horizonFieldColors(),
                 )
                 if (filtered.isEmpty()) Text(ui(R.string.ui_no_models_found))
                 LazyColumn(Modifier.heightIn(max = 340.dp)) {

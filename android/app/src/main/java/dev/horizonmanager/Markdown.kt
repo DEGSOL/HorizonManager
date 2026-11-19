@@ -36,7 +36,7 @@ internal fun Markdown(markdown: String) {
 
 @Composable
 private fun Block(node: Node) {
-    val colors = MaterialTheme.colorScheme
+    val linkColor = LocalHorizonPalette.current.link
     val uri = LocalUriHandler.current
     when (node) {
         is BulletList, is OrderedList, is ListItem, is BlockQuote -> {
@@ -61,7 +61,7 @@ private fun Block(node: Node) {
                         is Link -> {
                             if (isWeb(value.destination)) {
                                 val link = LinkAnnotation.Url(value.destination,
-                                    TextLinkStyles(style = SpanStyle(color = colors.primary, textDecoration = TextDecoration.Underline))) {
+                                    TextLinkStyles(style = SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline))) {
                                     runCatching { uri.openUri(value.destination) }
                                 }
                                 withLink(link) { children(value).forEach(::inline) }

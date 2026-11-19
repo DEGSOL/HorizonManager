@@ -308,7 +308,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                 report["code"].orEmpty())
         }
         val version = runCatching { withAgent(server) { (it.get("health") as JSONObject).optString("agent") } }.getOrNull()
-        if (version == BuildConfig.VERSION_NAME && (fresh && report["install"] == "success" || !fresh && report["install"] != "running")) {
+        if (version == BuildConfig.AGENT_VERSION && (fresh && report["install"] == "success" || !fresh && report["install"] != "running")) {
             mutable.update { it.copy(probe = report, updatingAgent = false, schema = JSONObject(),
                 notice = ui(R.string.ui_agent_updated)) }
             synchronize(server, everything = true)
@@ -468,6 +468,41 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             val page = withAgent(server) { it.get("digests/$run/$language?offset=$offset") as JSONObject }
             saveDigest(server.id, page, offset)
             showCached(server.id, run, language)
+        }
+    }
+
+    fun loadChronology(run: String, language: String) {
+        val panel = state.value
+        val server = panel.server ?: return
+        if (panel.selectedRun != run || panel.language != language || panel.articles.size >= panel.total) return
+        if (active?.isActive == true && !activeIsQuiet) {
+            viewModelScope.launch { active?.join(); loadChronology(run, language) }
+            return
+        }
+        operation {
+            val pages = cache.digest(server.id, run, language)
+            var offset = 0
+            for (page in pages) {
+                if (page.offset > offset) break
+                offset = maxOf(offset, page.offset + JSONObject(page.data).getJSONArray("items").length())
+            }
+            var total = state.value.total
+            val downloaded = mutableListOf<Pair<Int, JSONObject>>()
+            try {
+                if (offset < total) withAgent(server) { api ->
+                    while (offset < total) {
+                        val page = api.get("digests/$run/$language?offset=$offset&limit=40") as JSONObject
+                        val count = page.getJSONArray("items").length()
+                        if (count == 0) throw Problem("AGENT_PROTOCOL")
+                        downloaded += offset to page
+                        offset += count
+                        total = page.getInt("total")
+                    }
+                }
+            } finally {
+                downloaded.forEach { (start, page) -> saveDigest(server.id, page, start) }
+                showCached(server.id, run, language)
+            }
         }
     }
 

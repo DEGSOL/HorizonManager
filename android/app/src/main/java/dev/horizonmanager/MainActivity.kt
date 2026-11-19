@@ -25,6 +25,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -58,8 +59,15 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         notificationServer = notificationTarget(intent)
         enableEdgeToEdge()
+        val preferences = getSharedPreferences("appearance", MODE_PRIVATE)
         setContent {
-            HorizonTheme { Manager(viewModel(), notificationServer) { notificationServer = "" } }
+            var preset by remember { mutableStateOf(ThemePreset.fromId(preferences.getString("preset", null))) }
+            HorizonTheme(preset) {
+                Manager(viewModel(), notificationServer, { notificationServer = "" }, preset) {
+                    preset = it
+                    preferences.edit().putString("preset", it.id).apply()
+                }
+            }
         }
     }
 }
@@ -74,7 +82,8 @@ private val tabs = listOf(
 )
 
 @Composable
-private fun Manager(model: ManagerModel, notificationServer: String, consumed: () -> Unit) {
+private fun Manager(model: ManagerModel, notificationServer: String, consumed: () -> Unit,
+                    preset: ThemePreset, selectTheme: (ThemePreset) -> Unit) {
     val panel by model.state.collectAsStateWithLifecycle()
     val currentServer = panel.server
     val locale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
@@ -84,6 +93,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     var manageServers by remember { mutableStateOf(false) }
     var editServer by remember { mutableStateOf(false) }
     var configPage by rememberSaveable(currentServer?.id) { mutableStateOf("") }
+    val feedFilters = remember(currentServer?.id) { NewsFilters() }
     var archiveIssue by rememberSaveable(currentServer?.id) { mutableStateOf("") }
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val now by produceState(Instant.now(), lifecycle) {
@@ -174,16 +184,18 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
             }
         }
     }
+    val showingSetupSettings = !panel.ready && tab == SETTINGS && !editServer
     fun goBack() {
         when {
             manageServers -> manageServers = false
             editServer -> editServer = false
             configPage.isNotEmpty() -> configPage = ""
+            showingSetupSettings -> tab = FEED
             tab == ARCHIVE && archiveIssue.isNotEmpty() -> archiveIssue = ""
         }
     }
 
-    val canGoBack = manageServers || editServer || configPage.isNotEmpty() || (tab == ARCHIVE && openedIssue != null)
+    val canGoBack = manageServers || editServer || configPage.isNotEmpty() || showingSetupSettings || (tab == ARCHIVE && openedIssue != null)
     BackHandler(canGoBack, ::goBack)
 
     confirm?.let { (description, action) ->
@@ -216,6 +228,8 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         val section = if (panel.ready) tab else -1
         val heading = when {
             manageServers -> ui(R.string.ui_servers)
+            configPage == "theme" -> ui(R.string.theme)
+            showingSetupSettings -> ui(R.string.settings)
             !panel.ready || editServer -> "Horizon Manager"
             configPage == "journal" -> ui(R.string.journal)
             configPage == "sources" -> ui(R.string.sources)
@@ -234,9 +248,17 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
                 .verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(13.dp)) {
-                Header(heading, currentServer?.name.orEmpty(), {
-                    if (canGoBack) goBack() else manageServers = true
-                }, if (canGoBack) ui(R.string.ui_back) else ui(R.string.ui_servers))
+                val action: (@Composable () -> Unit)? = when {
+                    canGoBack -> ({ GlassToolbarButton(ui(R.string.ui_back), ::goBack) })
+                    !panel.ready -> ({ GlassToolbarButton(ui(R.string.settings)) { openSettings("") } })
+                    tab == FEED -> ({
+                        val matches = issues.feed?.optString("id") == panel.selectedRun
+                        NewsToolbar(feedFilters, if (matches) articleProfiles(panel.articles) else emptyList(),
+                            enabled = matches && panel.markdown.isNotEmpty())
+                    })
+                    else -> null
+                }
+                Header(heading, currentServer?.name.orEmpty(), action, feedToolbar = tab == FEED && panel.ready && !canGoBack)
                 if (panel.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                 if (panel.problem.isNotEmpty()) Message(errorText(panel.problem), panel.problem, true) { model.dismissMessage() }
                 if (panel.notice.isNotEmpty()) Message(panel.notice, "") { model.dismissMessage() }
@@ -255,6 +277,11 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                         }
                         Button(onClick = { model.add(); manageServers = false; editServer = true }) { Text(ui(R.string.ui_add_server)) }
                     }
+                    configPage == "theme" -> ThemeSettings(preset, selectTheme)
+                    showingSetupSettings -> {
+                        if (panel.servers.isNotEmpty()) ServerSettingsRow { manageServers = true }
+                        GlassSettingRow(ui(R.string.theme), ui(preset.title)) { openSettings("theme") }
+                    }
                     !panel.ready || editServer -> Setup(panel, model, editServer) { editServer = false }
                     configPage == "journal" -> Journal(panel, { description, action -> confirm = description to action }, model) {
                         exportDoc = it; output.launch("horizon-journal.json")
@@ -268,12 +295,16 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                         archiveIssue = issue.getString("id")
                         model.openArchive(issue)
                     }, model::loadMoreDigests)
-                    tab == FEED -> News(panel, model, issues.feed, { openSettings("ai") }, { openSettings("sources") })
-                    else -> Settings(panel, model, ::openSettings, { editServer = true },
+                    tab == FEED -> News(panel, model, issues.feed, { openSettings("ai") }, { openSettings("sources") }, feedFilters)
+                    else -> {
+                        ServerSettingsRow { manageServers = true }
+                        GlassSettingRow(ui(R.string.theme), ui(preset.title)) { openSettings("theme") }
+                        Settings(panel, model, ::openSettings, { editServer = true },
                         { toImport -> fileAction = toImport; input.launch(arrayOf("*/*")) },
                         { filename, content -> exportDoc = content; output.launch(filename) },
                         { if (Build.VERSION.SDK_INT >= 33) permission.launch(Manifest.permission.POST_NOTIFICATIONS) },
-                        { description, action -> confirm = description to action })
+                            { description, action -> confirm = description to action })
+                    }
                 }
                 if (showTabs) Spacer(Modifier.height(79.dp))
                 Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
@@ -287,22 +318,40 @@ private suspend fun androidx.lifecycle.LifecycleOwner.repeatAt(
 ) = this.lifecycle.repeatOnLifecycle(minimum, block)
 
 @Composable
-private fun Header(heading: String, server: String, onClick: () -> Unit, title: String) {
-    Row(Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            if (server.isNotEmpty()) Text(server, color = MaterialTheme.colorScheme.primary,
+private fun ServerSettingsRow(open: () -> Unit) {
+    GlassSettingRow(ui(R.string.ui_servers), ui(R.string.servers_description), open = open)
+}
+
+@Composable
+private fun Header(heading: String, server: String, actions: (@Composable () -> Unit)?, feedToolbar: Boolean) {
+    val title: @Composable () -> Unit = {
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            if (server.isNotEmpty()) Text(server, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.labelLarge)
             Text(heading, style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.onBackground)
         }
-        GlassToolbarButton(title, onClick)
+    }
+    BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 8.dp)) {
+        val fontScale = LocalConfiguration.current.fontScale
+        if (feedToolbar && maxWidth < (250 + 101 * fontScale).dp) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                title()
+                Box(Modifier.align(Alignment.End)) { actions?.invoke() }
+            }
+        } else {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f)) { title() }
+                actions?.invoke()
+            }
+        }
     }
 }
 
 @Composable
 private fun Message(text: String, code: String, error: Boolean = false, dismiss: () -> Unit) {
     Tile {
-        Text(text, color = if (error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+        Text(text, color = if (error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
         if (code.isNotEmpty()) Text(code, style = MaterialTheme.typography.labelSmall)
         TextButton(onClick = dismiss) { Text(ui(R.string.ui_close)) }
     }
@@ -323,7 +372,7 @@ internal fun PasswordDialog(title: String, detail: String, minimum: Int = 0, clo
 @Composable
 internal fun PasswordField(title: String, value: String, change: (String) -> Unit) {
     OutlinedTextField(value, change, label = { Text(title) }, modifier = Modifier.fillMaxWidth(),
-        singleLine = true, visualTransformation = PasswordVisualTransformation())
+        singleLine = true, colors = horizonFieldColors(), visualTransformation = PasswordVisualTransformation())
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -362,7 +411,7 @@ private fun Setup(panel: Panel, model: ManagerModel, forceEdit: Boolean, done: (
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(ui(R.string.ui_compare_the_fingerprint_with_the_one))
                     if (key.previous.isNotBlank()) Text(ui(R.string.ui_previous, key.previous))
-                    Text(ui(R.string.ui_received, key.fingerprint), color = MaterialTheme.colorScheme.primary)
+                    Text(ui(R.string.ui_received, key.fingerprint), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
             confirmButton = { Button(onClick = { model.confirmHost(true) }) { Text(ui(R.string.ui_fingerprint_matches)) } },

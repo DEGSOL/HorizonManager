@@ -10,7 +10,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.json.JSONArray
@@ -38,12 +37,9 @@ internal fun Archive(issues: List<JSONObject>, hours: Int, hasMore: Boolean, bus
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun News(panel: Panel, model: ManagerModel, issue: JSONObject?, ai: () -> Unit, sources: () -> Unit) {
-    var search by remember { mutableStateOf("") }
-    var onlySaved by remember { mutableStateOf(false) }
-    var onlyUnread by remember { mutableStateOf(false) }
-    var profile by remember { mutableStateOf("") }
-    var order by remember { mutableStateOf(ui(R.string.ui_by_score)) }
+internal fun News(panel: Panel, model: ManagerModel, issue: JSONObject?, ai: () -> Unit, sources: () -> Unit,
+                  feedFilters: NewsFilters? = null) {
+    val filters = feedFilters ?: remember { NewsFilters() }
     var open by remember(panel.selectedRun, panel.language) { mutableStateOf<JSONObject?>(null) }
     var markdown by remember(panel.selectedRun) { mutableStateOf(false) }
     if (issue == null) {
@@ -75,7 +71,6 @@ internal fun News(panel: Panel, model: ManagerModel, issue: JSONObject?, ai: () 
         return
     }
     val flags = panel.flags.associateBy { it.article }
-    val uri = LocalUriHandler.current
     Tile {
         Text(ui(R.string.ui_digest), style = MaterialTheme.typography.titleMedium)
         Text(localTime(digestTime(issue)), style = MaterialTheme.typography.bodyMedium,
@@ -99,24 +94,41 @@ internal fun News(panel: Panel, model: ManagerModel, issue: JSONObject?, ai: () 
         else Tile { Text(ui(R.string.ui_the_markdown_digest_has_not_been)) }
         return
     }
-    ValueField(ui(R.string.ui_search_downloaded_articles), search, { search = it })
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilterChip(onlySaved, { onlySaved = !onlySaved }, { Text(ui(R.string.ui_saved)) })
-        FilterChip(onlyUnread, { onlyUnread = !onlyUnread }, { Text(ui(R.string.ui_unread)) })
-        Choice(ui(R.string.ui_profile), listOf("") + panel.articles.map { it.optString("profile") }.filter { it.isNotBlank() }.distinct(),
-            profile, { profile = it }, { it.ifBlank { ui(R.string.ui_all) } })
-        Choice(ui(R.string.ui_sort), listOf(ui(R.string.ui_by_score), ui(R.string.ui_by_date), ui(R.string.ui_by_title)), order, { order = it }, { it })
+    if (feedFilters == null) {
+        ValueField(ui(R.string.ui_search_downloaded_articles), filters.query, { filters.query = it })
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(filters.saved, { filters.saved = !filters.saved }, { Text(ui(R.string.ui_saved)) })
+            FilterChip(filters.unread, { filters.unread = !filters.unread }, { Text(ui(R.string.ui_unread)) })
+            Choice(ui(R.string.ui_profile), listOf("") + articleProfiles(panel.articles),
+                filters.profile, { filters.profile = it }, { it.ifBlank { ui(R.string.ui_all) } })
+            Choice(ui(R.string.ui_sort), NewsOrder.entries.map { it.name }, filters.order.name,
+                { filters.order = NewsOrder.valueOf(it) }, { ui(NewsOrder.valueOf(it).label) })
+        }
+    }
+    val needsChronologyPages = filters.order == NewsOrder.Oldest && panel.articles.size < panel.total
+    LaunchedEffect(run, panel.language, filters.order) {
+        if (needsChronologyPages) model.loadChronology(run, panel.language)
+    }
+    if (needsChronologyPages) {
+        Tile {
+            if (panel.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            Text(ui(R.string.chronology_progress, panel.articles.size, panel.total))
+            if (!panel.busy && panel.problem.isNotEmpty()) {
+                TextButton(onClick = { model.loadChronology(run, panel.language) }) { Text(ui(R.string.ui_retry)) }
+            }
+        }
+        return
     }
     val shown = panel.articles.asSequence().filter { row ->
         val flag = flags[row.getString("id")]
-        (!onlySaved || flag?.saved == true) && (!onlyUnread || flag?.read != true) &&
-            (profile.isEmpty() || row.optString("profile") == profile) &&
-            (search.isBlank() || listOf("title", "summary", "source", "category").any { row.optString(it).contains(search, true) })
+        (!filters.saved || flag?.saved == true) && (!filters.unread || flag?.read != true) &&
+            (filters.profile.isEmpty() || row.optString("profile") == filters.profile) &&
+            (filters.query.isBlank() || listOf("title", "summary", "source", "category").any { row.optString(it).contains(filters.query.trim(), true) })
     }.let { filtered ->
-        when (order) {
-            ui(R.string.ui_by_date) -> filtered.sortedByDescending { it.optString("time") }
-            ui(R.string.ui_by_title) -> filtered.sortedBy { it.optString("title").lowercase() }
-            else -> filtered.sortedByDescending { it.optDouble("score", -1.0) }
+        when (filters.order) {
+            NewsOrder.Oldest -> filtered.sortedBy(::chronologicalTime)
+            NewsOrder.Title -> filtered.sortedBy { it.optString("title").lowercase() }
+            NewsOrder.Score -> filtered.sortedByDescending { it.optDouble("score", -1.0) }
         }
     }.toList()
     if (shown.isEmpty()) Tile {
@@ -130,7 +142,7 @@ internal fun News(panel: Panel, model: ManagerModel, issue: JSONObject?, ai: () 
         Tile(Modifier.clickable { open = article; model.flag(id, read = true) }) {
             Text(listOf(source, category, article.optString("profile").takeUnless { it == "null" }.orEmpty())
                 .filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary)
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(article.optString("title"), style = MaterialTheme.typography.titleLarge)
             val summary = article.optString("summary")
             if (summary.isNotBlank()) Text(summary, maxLines = 5, overflow = TextOverflow.Ellipsis)
@@ -148,47 +160,7 @@ internal fun News(panel: Panel, model: ManagerModel, issue: JSONObject?, ai: () 
             Text(ui(R.string.ui_load_more_of, panel.articles.size, panel.total))
         }
     }
-    open?.let { article ->
-        var comments by remember(article.getString("id")) { mutableStateOf(false) }
-        val blocks = article.optJSONArray("blocks")?.objects()?.filterNot { it.optBoolean("primary") }.orEmpty()
-        val citations = article.optJSONArray("citations")?.objects().orEmpty().filter { isWeb(it.optString("url")) }
-        val reason = article.optString("reason").takeIf { it != "null" }.orEmpty()
-        AlertDialog(onDismissRequest = { open = null }, title = { Text(article.optString("title"), maxLines = 3) },
-            text = {
-                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    val body = article.optString("body").ifBlank { article.optString("summary") }
-                    if (article.optBoolean("body_is_plain")) {
-                        Text(body)
-                    } else {
-                        Markdown(body)
-                    }
-                    if (reason.isNotBlank() || blocks.isNotEmpty() || citations.isNotEmpty()) {
-                        TextButton(onClick = { comments = !comments }) {
-                            Text(if (comments) ui(R.string.ui_hide_horizon_commentary) else ui(R.string.ui_horizon_commentary))
-                        }
-                    }
-                    if (comments) {
-                        if (reason.isNotBlank()) {
-                            Text(ui(R.string.ui_horizon_assessment), style = MaterialTheme.typography.titleMedium)
-                            Markdown(reason)
-                        }
-                        blocks.forEach { block ->
-                            Text(block.optString("title"), style = MaterialTheme.typography.titleMedium)
-                            Markdown(block.optString("content"))
-                        }
-                        citations.forEach { citation ->
-                            val url = citation.optString("url")
-                            TextButton(onClick = { runCatching { uri.openUri(url) } }) {
-                                Text(citation.optString("title").ifBlank { url })
-                            }
-                        }
-                    }
-                }
-            }, confirmButton = {
-                val link = article.optString("url")
-                if (isWeb(link)) Button(onClick = { runCatching { uri.openUri(link) } }) { Text(ui(R.string.ui_original_source)) }
-            }, dismissButton = { TextButton(onClick = { open = null }) { Text(ui(R.string.ui_close)) } })
-    }
+    open?.let { article -> ArticleDialog(article) { open = null } }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -392,7 +364,7 @@ internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model:
             val warning = row.optString("level") in listOf("ERROR", "CRITICAL", "WARNING")
             Text("${row.optString("component")} · ${row.optString("level")} · ${localTime(row.optString("time"))}",
                 style = MaterialTheme.typography.labelMedium,
-                color = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+                color = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
             Text(row.optString("detail").ifBlank { phaseName(row.optString("code")) }, maxLines = 3, overflow = TextOverflow.Ellipsis)
         }
     }
