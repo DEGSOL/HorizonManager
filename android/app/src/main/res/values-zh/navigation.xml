@@ -1,0 +1,15 @@
+<resources>
+    <string name="archive">归档</string>
+    <string name="feed">动态</string>
+    <string name="archive_period">显示 %1$d 小时前完成的简报。</string>
+    <string name="empty_archive">暂无归档</string>
+    <string name="older_issues">加载更早的简报</string>
+    <string name="empty_current_digest">暂无最新简报</string>
+    <string name="current_period">过去 %1$d 小时内没有生成简报。</string>
+    <string name="issue_not_loaded">此简报尚未加载。</string>
+    <string name="sources_description">添加、编辑和测试来源</string>
+    <string name="control_description">运行、VPS 状态与维护</string>
+    <string name="router_vps_network">VPS 无法连接到 %1$s。请检查服务器连接。</string>
+    <string name="router_upgrade_required">请更新 VPS 代理，以使用服务器保存的密钥加载模型。</string>
+    <string name="agent_https_unreachable">VPS 代理未通过 HTTPS 响应。</string>
+</resources>

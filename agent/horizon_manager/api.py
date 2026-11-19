@@ -9,6 +9,7 @@ import shutil
 import threading
 import time
 from contextlib import asynccontextmanager, suppress
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 from uuid import UUID, uuid4
@@ -20,7 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from src.models import SOURCE_REGISTRY
 from src.processing.content import split_content
 
-from . import VERSION, backup, jobs, push
+from . import VERSION, backup, jobs, push, router_catalog
 from .configuration import DIGEST_LANGUAGES, ai_missing, schema, secret_name_allowed, validate
 from .scheduler import Schedule, next_run
 from .store import Store
@@ -52,6 +53,10 @@ class JobInput(Body):
     bucket: str | None = Field(default=None, max_length=20)
     index: int | None = Field(default=None, ge=0, le=10000)
     run: str | None = Field(default=None, max_length=32)
+
+
+class CatalogKey(Body):
+    key: str = Field(min_length=8, max_length=512)
 
 
 class PushDevice(Body):
@@ -185,6 +190,25 @@ def create_app(root, token):
     def get_config():
         with store.db() as db:
             return public(store.settings(db))
+
+    async def load_catalog(router, key):
+        if not key:
+            fail(404, "ROUTER_KEY_MISSING")
+        try:
+            return await router_catalog.fetch(router, key)
+        except router_catalog.CatalogError as exc:
+            fail(502, exc.code, fields=[str(exc.status)] if exc.status is not None else [])
+
+    @app.get("/v1/ai/catalog/{router}")
+    async def saved_router_catalog(router: Literal["openrouter", "unorouter"]):
+        with store.db() as db:
+            settings = store.settings(db)
+        key = router_catalog.saved_key(router, settings["config"]["ai"], settings["secrets"])
+        return await load_catalog(router, key)
+
+    @app.post("/v1/ai/catalog/{router}")
+    async def preview_router_catalog(router: Literal["openrouter", "unorouter"], body: CatalogKey):
+        return await load_catalog(router, body.key)
 
     def no_active(db):
         if db.execute(f"SELECT 1 FROM jobs WHERE {jobs.ACTIVE}").fetchone():
@@ -327,7 +351,8 @@ def create_app(root, token):
     def completed_digests():
         with store.db() as db:
             rows = db.execute("SELECT id,result FROM jobs WHERE kind='run' AND result IS NOT NULL")
-            return {row["id"] for row in rows if json.loads(row["result"]).get("languages")}
+            results = {row["id"]: json.loads(row["result"]) for row in rows}
+        return {run: result.get("ready_at") for run, result in results.items() if result.get("languages")}
 
     def artifacts(run):
         if not ID.fullmatch(run) or (not run.startswith("run-") and run not in completed_digests()):
@@ -337,26 +362,42 @@ def create_app(root, token):
             fail(404, "RUN_UNKNOWN")
         return path
 
+    def digest_info(path, completed):
+        summaries = {lang: path / f"summary-{lang}.md" for lang in DIGEST_LANGUAGES}
+        languages = [lang for lang, file in summaries.items() if file.is_file()]
+        if not languages:
+            return None
+        try:
+            metadata = json.loads((path / "meta.json").read_text(encoding="utf-8"))
+            created = metadata["created_at"]
+            ready = completed.get(path.name) or datetime.fromtimestamp(
+                min(summaries[lang].stat().st_mtime for lang in languages), timezone.utc).isoformat()
+            return {"id": path.name, "created": created, "ready_at": ready, "languages": languages}
+        except (OSError, ValueError, KeyError):
+            return None
+
     @app.get("/v1/digests")
-    def digests(limit: int = Query(60, ge=1, le=100)):
+    def digests(limit: int = Query(60, ge=1, le=100), after: str | None = Query(None, max_length=32)):
         directory = root / "runs"
         if not directory.is_dir():
             return []
-        result = []
         completed = completed_digests()
+        result = []
         for path in directory.iterdir():
             if not path.is_dir() or not ID.fullmatch(path.name) or (not path.name.startswith("run-") and path.name not in completed):
                 continue
-            languages = [lang for lang in DIGEST_LANGUAGES if (path / f"summary-{lang}.md").is_file()]
-            if not languages:
-                continue
-            try:
-                with (path / "meta.json").open(encoding="utf-8") as file:
-                    metadata = json.load(file)
-                result.append({"id": path.name, "created": metadata["created_at"], "languages": languages})
-            except (OSError, ValueError, KeyError):
-                continue
-        return sorted(result, key=lambda row: row["created"], reverse=True)[:limit]
+            if info := digest_info(path, completed):
+                result.append(info)
+        result.sort(key=lambda row: (datetime.fromisoformat(row["ready_at"]), row["id"]), reverse=True)
+        offset = next((index + 1 for index, row in enumerate(result) if row["id"] == after), 0)
+        return result[offset:offset + limit]
+
+    @app.get("/v1/digest-info/{run}")
+    def get_digest_info(run: str):
+        info = digest_info(artifacts(run), completed_digests())
+        if info is None:
+            fail(404, "DIGEST_UNKNOWN")
+        return info
 
     @app.get("/v1/digest-marker")
     def digest_marker():

@@ -18,9 +18,27 @@ import org.json.JSONObject
 import org.unifiedpush.android.connector.UnifiedPush
 import java.util.Locale
 
+@Composable
+internal fun Archive(issues: List<JSONObject>, hours: Int, hasMore: Boolean, busy: Boolean,
+                     open: (JSONObject) -> Unit, loadMore: () -> Unit) {
+    Text(ui(R.string.archive_period, hours), style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (issues.isEmpty()) {
+        Tile { Text(ui(R.string.empty_archive), style = MaterialTheme.typography.titleMedium) }
+    }
+    issues.forEach { issue ->
+        key(issue.getString("id")) {
+            GlassSettingRow(localTime(digestTime(issue)), ui(R.string.ui_full_digest), enabled = !busy) { open(issue) }
+        }
+    }
+    if (hasMore) {
+        OutlinedButton(enabled = !busy, onClick = loadMore) { Text(ui(R.string.older_issues)) }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun News(panel: Panel, model: ManagerModel, ai: () -> Unit, sources: () -> Unit) {
+internal fun News(panel: Panel, model: ManagerModel, issue: JSONObject?, ai: () -> Unit, sources: () -> Unit) {
     var search by remember { mutableStateOf("") }
     var onlySaved by remember { mutableStateOf(false) }
     var onlyUnread by remember { mutableStateOf(false) }
@@ -28,30 +46,40 @@ internal fun News(panel: Panel, model: ManagerModel, ai: () -> Unit, sources: ()
     var order by remember { mutableStateOf(ui(R.string.ui_by_score)) }
     var open by remember(panel.selectedRun, panel.language) { mutableStateOf<JSONObject?>(null) }
     var markdown by remember(panel.selectedRun) { mutableStateOf(false) }
-    if (panel.archive.isEmpty()) {
+    if (issue == null) {
         Tile {
-            Text(ui(R.string.ui_your_first_digest), style = MaterialTheme.typography.titleLarge)
-            Text(ui(R.string.ui_news_will_appear_here_after_horizon))
-            Text(ui(R.string.ui_choose_an_ai_model_in_settings))
+            Text(ui(if (panel.archive.isEmpty()) R.string.ui_your_first_digest else R.string.empty_current_digest),
+                style = MaterialTheme.typography.titleLarge)
+            Text(if (panel.archive.isEmpty()) ui(R.string.ui_news_will_appear_here_after_horizon)
+                else ui(R.string.current_period, panel.collectionHours))
+            if (panel.archive.isEmpty()) Text(ui(R.string.ui_choose_an_ai_model_in_settings))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { model.submit() }, enabled = !panel.busy) { Text(ui(R.string.ui_start_collection)) }
-                OutlinedButton(onClick = ai, enabled = panel.schema.length() > 0) { Text(ui(R.string.ui_configure_ai)) }
-                OutlinedButton(onClick = sources) { Text(ui(R.string.ui_add_a_source)) }
+                if (panel.archive.isEmpty()) {
+                    OutlinedButton(onClick = ai, enabled = panel.schema.length() > 0) { Text(ui(R.string.ui_configure_ai)) }
+                    OutlinedButton(onClick = sources) { Text(ui(R.string.ui_add_a_source)) }
+                }
                 TextButton(onClick = { model.refresh() }, enabled = !panel.busy) { Text(ui(R.string.ui_check_the_feed)) }
             }
         }
         return
     }
+    val run = issue.getString("id")
+    val languages = issue.getJSONArray("languages").strings()
+    if (panel.selectedRun != run || panel.markdown.isEmpty()) {
+        Tile {
+            if (panel.busy || panel.problem.isEmpty()) LinearProgressIndicator(Modifier.fillMaxWidth())
+            Text(ui(R.string.issue_not_loaded))
+            TextButton(onClick = { model.refresh() }, enabled = !panel.busy) { Text(ui(R.string.ui_sync)) }
+        }
+        return
+    }
     val flags = panel.flags.associateBy { it.article }
-    val selected = panel.archive.firstOrNull { it.optString("id") == panel.selectedRun }
-    val languages = selected?.optJSONArray("languages")?.strings().orEmpty()
-    val archive = panel.archive.associateBy { it.optString("id") }
     val uri = LocalUriHandler.current
     Tile {
-        Text(ui(R.string.ui_digest_archive), style = MaterialTheme.typography.titleMedium)
-        Choice(ui(R.string.ui_issue), archive.keys.toList(), panel.selectedRun, { entry ->
-            digestLanguage(archive[entry]?.optJSONArray("languages")?.strings().orEmpty())?.let { model.openDigest(entry, it) }
-        }, { run -> archive[run]?.optString("created")?.let(::localTime) ?: run })
+        Text(ui(R.string.ui_digest), style = MaterialTheme.typography.titleMedium)
+        Text(localTime(digestTime(issue)), style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (languages.isNotEmpty() && digestLocale() !in languages) {
                 TextButton(onClick = { model.translateDigest(panel.selectedRun) },
@@ -432,12 +460,13 @@ internal fun Settings(panel: Panel, model: ManagerModel, open: (String) -> Unit,
         "profiles" to ui(R.string.ui_prompts_scoring_criteria_and_output_blocks), "digest" to ui(R.string.ui_quotas_order_and_grouping),
         "collection" to ui(R.string.ui_collection_time_window), "delivery" to ui(R.string.ui_email_and_webhook), "schedule" to ui(R.string.ui_days_intervals_and_time_zone),
         "secrets" to ui(R.string.ui_ai_keys_and_integration_tokens), "advanced" to ui(R.string.ui_extractors_and_display)) else emptyList()
-    pages.forEach { (page, subtitle) -> Tile(Modifier.clickable { open(page) }) {
-        Text(when (page) { "profiles" -> ui(R.string.ui_processing_profiles); "delivery" -> ui(R.string.ui_delivery); "schedule" -> ui(R.string.ui_schedule)
-            "secrets" -> ui(R.string.ui_secrets); "advanced" -> ui(R.string.ui_advanced_settings); else -> label(page) },
-            style = MaterialTheme.typography.titleMedium)
-        Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    } }
+    GlassSettingRow(ui(R.string.sources), ui(R.string.sources_description)) { open("sources") }
+    GlassSettingRow(ui(R.string.control), ui(R.string.control_description)) { open("control") }
+    pages.forEach { (page, subtitle) ->
+        val title = when (page) { "profiles" -> ui(R.string.ui_processing_profiles); "delivery" -> ui(R.string.ui_delivery); "schedule" -> ui(R.string.ui_schedule)
+            "secrets" -> ui(R.string.ui_secrets); "advanced" -> ui(R.string.ui_advanced_settings); else -> label(page) }
+        GlassSettingRow(title, subtitle) { open(page) }
+    }
     Tile {
         Text(ui(R.string.ui_connection), style = MaterialTheme.typography.titleMedium)
         var url by remember(server.id, server.https) { mutableStateOf(server.https) }
@@ -502,6 +531,12 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, back:
     var profiles by remember(page, panel.config.optInt("revision")) { mutableStateOf(JSONArray(storedProfiles.toString())) }
     val ids = profileIds(profiles)
     val fields = schema.getJSONObject("properties")
+    val aiDraft = working.optJSONObject("ai")
+    val secretAlias = aiDraft?.optString("api_key_env").orEmpty()
+    val secrets = panel.config.optJSONArray("secrets")?.strings().orEmpty()
+    val configuredSecret = secretAlias in secrets
+    var genericKey by remember(secretAlias, aiDraft?.optString("provider"), panel.config.optInt("revision")) { mutableStateOf("") }
+    var showGenericKey by remember(secretAlias, panel.config.optInt("revision")) { mutableStateOf(!configuredSecret) }
     Tile {
         when (page) {
             "schedule" -> ScheduleForm(panel, model)
@@ -588,23 +623,34 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, back:
                     ValueField(ui(R.string.ui_compatible_api_address_optional), ai.optString("base_url").takeUnless { it == "null" }.orEmpty(), {
                         replace(ai.copyObject().put("base_url", it.ifBlank { null } ?: JSONObject.NULL))
                     })
-                    if (provider != "ollama") Text(ui(R.string.ui_add_the_key_under_secrets, ai.optString("api_key_env")))
+                    if (provider != "ollama") {
+                        if (configuredSecret) {
+                            Text(ui(R.string.ui_key_saved_on_the_vps), style = MaterialTheme.typography.bodyMedium)
+                            if (!showGenericKey) TextButton(onClick = { showGenericKey = true }) {
+                                Text(ui(R.string.ui_replace_api_key))
+                            }
+                        }
+                        if (showGenericKey) PasswordField(ui(R.string.ui_api_key, provider), genericKey) { genericKey = it }
+                    }
                     Text(ui(R.string.ui_enter_the_model_id_from_your))
                     val advanced = definition(schema, fields.getJSONObject("ai")).copyObject()
                     advanced.getJSONObject("properties").remove("languages")
                     EditValue(schema, advanced, "ai", ai,
                         { working = working.copyObject().put("ai", it) }, ids, ui(R.string.ui_advanced_ai_options))
                 } else {
-                    val hasKey = router.secretName in panel.config.optJSONArray("secrets")?.strings().orEmpty()
+                    val savedAlias = router.secretAlias(stored.getJSONObject("ai"))
+                    val knownSecrets = panel.config.optJSONArray("secrets")?.strings().orEmpty()
+                    val alias = savedAlias.takeIf { it in knownSecrets } ?: router.secretName
+                    val hasKey = alias in knownSecrets
                     key(serverId, router, panel.config.optInt("revision")) {
                         RouterSettings(
                             router, ai.optString("model"), hasKey, panel.busy,
                             { key -> model.loadRouterCatalog(serverId, router, key) },
                             { id -> replace(ai.copyObject().put("model", id)) },
                         ) { newKey ->
-                            val edited = ai.copyObject().put("api_key_env", router.secretName)
+                            val edited = ai.copyObject().put("api_key_env", alias)
                             val secret = JSONObject()
-                            if (newKey != null) secret.put(router.secretName, newKey)
+                            if (newKey != null) secret.put(alias, newKey)
                             model.saveConfig(working.copyObject().put("ai", edited), profiles, secret)
                         }
                     }
@@ -632,7 +678,12 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, back:
         }
         if (page !in listOf("schedule", "secrets")) Row {
             if (page != "ai" || AiRouter.configured(working.getJSONObject("ai")) == null) {
-                Button(onClick = { model.saveConfig(working, profiles) }, enabled = !panel.busy) { Text(ui(R.string.ui_save_settings)) }
+                Button(onClick = {
+                    val keys = JSONObject()
+                    if (page == "ai" && genericKey.isNotBlank() && aiDraft?.optString("provider") != "ollama")
+                        keys.put(secretAlias, genericKey.trim())
+                    model.saveConfig(working, profiles, keys)
+                }, enabled = !panel.busy) { Text(ui(R.string.ui_save_settings)) }
             }
             TextButton(onClick = back) { Text(ui(R.string.ui_back)) }
         }

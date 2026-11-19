@@ -26,7 +26,7 @@ class DigestNotificationTest {
         assertEquals("zh", digestLocale(Locale.forLanguageTag("zh-Hant-TW")))
         assertEquals("en", digestLocale(Locale.forLanguageTag("nl-NL")))
         assertTrue(agentUpdateAvailable("0.1.0"))
-        assertFalse(agentUpdateAvailable("0.1.2"))
+        assertFalse(agentUpdateAvailable("0.1.3"))
         assertFalse(agentUpdateAvailable("0.1.10"))
     }
 }

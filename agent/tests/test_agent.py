@@ -11,6 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import uuid4
+from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -176,6 +177,8 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(job["result"]["kept"], 1)
         digests = self.client.get("/v1/digests").json()
         self.assertEqual([d["id"] for d in digests], [id.hex])
+        self.assertEqual(digests[0]["ready_at"], job["result"]["ready_at"])
+        self.assertEqual(self.client.get(f"/v1/digest-info/{id.hex}").json(), digests[0])
         result = self.client.get(f"/v1/digests/{id.hex}/en").json()
         self.assertEqual(result["items"][0]["score"], 9)
         self.assertEqual(digests[0]["languages"], ["en", "zh", "ru"])
@@ -230,6 +233,42 @@ class AgentTests(unittest.TestCase):
         invalid = dict(data, endpoint="https://ntfy.sh@localhost/upFixtureDevice")
         self.assertEqual(self.client.put(device, json=invalid).status_code, 422)
         self.assertEqual(self.client.delete(device).json(), {"registered": False})
+
+    def test_router_catalog_uses_a_persisted_key_and_returns_no_credentials(self):
+        path = "/v1/ai/catalog/openrouter"
+        self.assertEqual(self.client.get(path).json()["detail"]["code"], "ROUTER_KEY_MISSING")
+        incoming = self.config()
+        incoming["config"]["ai"]["base_url"] = "https://openrouter.ai/api/v1"
+        self.assertEqual(self.client.put("/v1/config", json=incoming).status_code, 200)
+
+        catalog = {"data": [{"id": "sample/text-model", "name": "Sample", "context_length": 16384}]}
+        fetch = AsyncMock(return_value=catalog)
+        with patch("horizon_manager.router_catalog.fetch", fetch):
+            with TestClient(create_app(self.root, TOKEN), headers=AUTH) as reconnected:
+                self.assertNotIn(SECRET, reconnected.get("/v1/config").text)
+                response = reconnected.get(path)
+                self.assertEqual(response.json(), catalog)
+                self.assertNotIn(SECRET, response.text)
+                fetch.assert_awaited_once_with("openrouter", SECRET)
+                entered = "fixture-preview-key"
+                self.assertEqual(reconnected.post(path, json={"key": entered}).json(), catalog)
+                fetch.assert_awaited_with("openrouter", entered)
+                reconnected.get(path)
+                fetch.assert_awaited_with("openrouter", SECRET)
+        self.assertEqual(self.client.get("/v1/ai/catalog/custom").status_code, 422)
+
+    def test_archive_cursor_orders_by_completion_time(self):
+        ids = ["run-20261119T090000Z-aaaaaaaa", "run-20261119T103000Z-bbbbbbbb", "run-20261119T090000Z-cccccccc"]
+        for run, stamp in zip(ids, (1600010000, 1600008000, 1600007000)):
+            directory = self.root / "runs" / run
+            directory.mkdir(parents=True)
+            (directory / "meta.json").write_text(json.dumps({"created_at": "2026-11-19T09:00:00Z"}))
+            summary = directory / "summary-en.md"
+            summary.write_text("# Digest")
+            os.utime(summary, (stamp, stamp))
+        first = self.client.get("/v1/digests?limit=2").json()
+        self.assertEqual([row["id"] for row in first], ids[:2])
+        self.assertEqual([row["id"] for row in self.client.get("/v1/digests", params={"after": ids[1]}).json()], ids[2:])
 
     def test_ai_wrong_secret_and_cancel(self):
         self.assertEqual(self.client.put("/v1/config", json=self.config(secret="wrong")).status_code, 200)

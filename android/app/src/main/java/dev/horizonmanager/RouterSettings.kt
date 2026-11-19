@@ -76,14 +76,16 @@ internal fun RouterSettings(
                 "ROUTER_KEY_FORMAT" -> ui(R.string.ui_check_the_api_key_for_spaces)
                 "ROUTER_KEY_REJECTED" -> ui(R.string.ui_rejected_this_api_key_check_it, router.title)
                 "ROUTER_RATE_LIMIT" -> ui(R.string.ui_limited_the_request_rate_try_again, router.title)
-                "ROUTER_CATALOG_NETWORK" -> ui(R.string.ui_could_not_connect_to_check_your, router.title)
+                "ROUTER_CATALOG_NETWORK" -> ui(R.string.router_vps_network, router.title)
+                "AGENT_UPDATE_REQUIRED" -> ui(R.string.router_upgrade_required)
+                "AUTH_REQUIRED", "SSH_CONNECT", "SSH_TIMEOUT", "SSH_DNS", "SSH_REFUSED", "AGENT_UNREACHABLE", "HTTPS_UNREACHABLE" ->
+                    errorText(problem.code)
                 "TLS_INVALID" -> ui(R.string.ui_could_not_verify_the_certificate, router.title)
                 "ROUTER_CATALOG_HTTP" -> ui(R.string.ui_returned_http_error, router.title, problem.detail)
                 else -> ui(R.string.ui_returned_the_catalog_in_an_unexpected, router.title)
             }
         } catch (_: Exception) {
-            showKeyField = true
-            error = ui(R.string.ui_could_not_read_the_saved_key)
+            error = ui(R.string.router_vps_network, router.title)
         } finally {
             loading = false
         }

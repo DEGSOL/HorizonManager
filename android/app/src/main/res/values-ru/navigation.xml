@@ -1,0 +1,15 @@
+<resources>
+    <string name="archive">Архив</string>
+    <string name="feed">Лента</string>
+    <string name="archive_period">Выпуски, готовые более %1$d ч назад.</string>
+    <string name="empty_archive">Архив пока пуст</string>
+    <string name="older_issues">Загрузить более ранние выпуски</string>
+    <string name="empty_current_digest">Нет актуального дайджеста</string>
+    <string name="current_period">За последние %1$d ч дайджесты не выходили.</string>
+    <string name="issue_not_loaded">Выпуск ещё не загружен.</string>
+    <string name="sources_description">Добавление, настройка и проверка источников</string>
+    <string name="control_description">Запуски, состояние VPS и обслуживание</string>
+    <string name="router_vps_network">VPS не смог связаться с %1$s. Проверьте подключение сервера.</string>
+    <string name="router_upgrade_required">Обновите агент на VPS, чтобы загрузить модели с сохранённым ключом.</string>
+    <string name="agent_https_unreachable">Агент VPS не ответил по HTTPS.</string>
+</resources>

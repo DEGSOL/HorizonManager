@@ -76,12 +76,10 @@ internal class Vault(context: Context) {
         write("push:$server", value, bound = true)
     }
 
-    fun routerKey(server: String, router: AiRouter): String? = synchronized(LOCK) {
-        read("router:$server:${router.id}", bound = true)
-    }
-
-    fun storeRouterKey(server: String, router: AiRouter, value: String?) = synchronized(LOCK) {
-        write("router:$server:${router.id}", value, bound = true)
+    fun removeLegacyRouterKeys(profiles: List<Server>) = synchronized(LOCK) {
+        storage.edit().apply {
+            for (server in profiles) for (router in AiRouter.entries) remove("router:${server.id}:${router.id}")
+        }.apply()
     }
 
     private companion object {

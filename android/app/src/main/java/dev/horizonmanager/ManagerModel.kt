@@ -31,6 +31,8 @@ internal data class Panel(
     val config: JSONObject = JSONObject(),
     val schema: JSONObject = JSONObject(),
     val archive: List<JSONObject> = emptyList(),
+    val hasMoreDigests: Boolean = false,
+    val collectionHours: Int = DEFAULT_COLLECTION_HOURS,
     val jobs: List<JSONObject> = emptyList(),
     val sourceHistory: List<JSONObject> = emptyList(),
     val events: List<JSONObject> = emptyList(),
@@ -61,12 +63,15 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     private var journalSync = 0L
     private var pendingNotification = ""
     private var installOperation = ""
-    private var followLatest = true
+    private var archiveRun: String? = null
+    private val archiveSettings = app.getSharedPreferences("digest_windows", 0)
 
     init {
         viewModelScope.launch {
             try {
-                val servers = withContext(Dispatchers.IO) { vault.load() }
+                val servers = withContext(Dispatchers.IO) {
+                    vault.load().also(vault::removeLegacyRouterKeys)
+                }
                 mutable.update { it.copy(servers = servers) }
                 DigestWorker.schedule(app, servers)
                 val id = pendingNotification.ifEmpty { selection.getString("id", "").orEmpty() }
@@ -162,8 +167,9 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         }
         candidate = null
         selection.edit().putString("id", server.id).apply()
-        followLatest = true
-        mutable.update { Panel(servers = it.servers, server = server, ready = server.installed) }
+        archiveRun = null
+        mutable.update { Panel(servers = it.servers, server = server, ready = server.installed,
+            collectionHours = archiveSettings.getInt(server.id, DEFAULT_COLLECTION_HOURS)) }
         observe(server.id)
         operation {
             loadArchive(server)
@@ -185,8 +191,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         } else if (profile.id != state.value.server?.id) {
             select(profile)
         } else {
-            followLatest = true
-            refresh()
+            showFeed()
         }
     }
 
@@ -326,7 +331,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         val cached = cache.archive(server.id) ?: return
         val history = JSONArray(cached).objects()
         if (state.value.server?.id != server.id) return
-        mutable.update { it.copy(archive = history) }
+        mutable.update { it.copy(archive = history, hasMoreDigests = history.size >= DIGEST_PAGE_SIZE) }
         history.firstOrNull()?.let { latest ->
             val lang = digestLanguage(latest.getJSONArray("languages").strings()) ?: return@let
             val run = latest.getString("id")
@@ -348,10 +353,17 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     private suspend fun synchronize(server: Server, everything: Boolean) {
         val cursor = cache.eventCursor(server.id)
         val remote = withAgent(server) { api ->
-            val archive = (api.get("digests") as JSONArray).objects()
+            val head = (api.get("digests?limit=$DIGEST_PAGE_SIZE") as JSONArray).objects()
             val panel = state.value
-            val selected = if (followLatest) archive.firstOrNull()
-                else archive.find { it.optString("id") == panel.selectedRun } ?: archive.firstOrNull()
+            val run = archiveRun
+            val older = panel.archive.drop(DIGEST_PAGE_SIZE)
+            val selected = if (run == null) head.firstOrNull() else head.find { it.optString("id") == run }
+                ?: if (older.any { it.optString("id") == run }) {
+                    runCatching { api.get("digest-info/$run") as JSONObject }
+                        .getOrElse { older.find { it.optString("id") == run } }
+                } else null
+            val archive = (head + listOfNotNull(selected) + older).distinctBy { it.optString("id") }
+            val hasMore = if (older.isNotEmpty()) panel.hasMoreDigests else head.size == DIGEST_PAGE_SIZE
             val lang = selected?.getJSONArray("languages")?.strings()?.let(::digestLanguage)
             val changed = selected?.getString("id") != panel.selectedRun || lang != panel.language
             val digest = if ((everything || changed) && selected != null && lang != null) {
@@ -364,9 +376,12 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             val status = api.get("status") as JSONObject
             val jobs = (api.get("jobs") as JSONArray).objects()
             val events = (api.get(if (cursor == 0L) "events?limit=250&latest=true" else "events?after=$cursor&limit=1000") as JSONArray).objects()
-            Refresh(archive, digest, config, schema, schedule, sources, status, jobs, events)
+            Refresh(archive, hasMore, digest, config, schema, schedule, sources, status, jobs, events)
         }
         cache.saveArchive(CachedArchive(server.id, JSONArray(remote.archive).toString()))
+        val hours = remote.config.optJSONObject("config")?.optJSONObject("collection")
+            ?.optInt("time_window_hours", DEFAULT_COLLECTION_HOURS)?.coerceIn(1, 8760) ?: state.value.collectionHours
+        if (hours != state.value.collectionHours) archiveSettings.edit().putInt(server.id, hours).apply()
         if (remote.digest != null) {
             val (run, lang) = saveDigest(server.id, remote.digest, 0)
             showCached(server.id, run, lang)
@@ -379,7 +394,8 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             journalSync = System.currentTimeMillis()
         }
         mutable.update { panel ->
-            panel.copy(archive = remote.archive, config = remote.config, schema = remote.schema,
+            panel.copy(archive = remote.archive, hasMoreDigests = remote.hasMore, collectionHours = hours,
+                config = remote.config, schema = remote.schema,
                 schedule = remote.schedule, sourceHistory = remote.sources, status = remote.status, jobs = remote.jobs,
                 problem = if (panel.problem.startsWith("AGENT_") || panel.problem.startsWith("SSH_")) "" else panel.problem)
         }
@@ -387,7 +403,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
 
 
     private data class Refresh(
-        val archive: List<JSONObject>, val digest: JSONObject?, val config: JSONObject, val schema: JSONObject,
+        val archive: List<JSONObject>, val hasMore: Boolean, val digest: JSONObject?, val config: JSONObject, val schema: JSONObject,
         val schedule: JSONObject, val sources: List<JSONObject>, val status: JSONObject, val jobs: List<JSONObject>,
         val events: List<JSONObject>,
     )
@@ -417,15 +433,55 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         }
     }
 
-    fun openDigest(run: String, language: String, offset: Int = 0) {
+    fun showFeed() {
+        val server = state.value.server?.takeIf { it.installed } ?: return
+        archiveRun = null
+        if (active?.isActive == true && !activeIsQuiet) {
+            viewModelScope.launch {
+                active?.join()
+                if (archiveRun == null && state.value.server?.id == server.id) showFeed()
+            }
+            return
+        }
+        val latest = state.value.archive.firstOrNull()
+        if (latest?.optString("id") == state.value.selectedRun && state.value.markdown.isNotEmpty()) return
+        operation {
+            val run = latest?.optString("id")
+            val lang = latest?.optJSONArray("languages")?.strings()?.let(::digestLanguage)
+            if (run == null || lang == null || !showCached(server.id, run, lang)) synchronize(server, everything = true)
+        }
+    }
+
+    fun openArchive(issue: JSONObject) {
+        val run = issue.getString("id")
+        val lang = issue.getJSONArray("languages").strings().let(::digestLanguage) ?: return
+        archiveRun = run
+        openDigest(run, lang, offset = 0)
+    }
+
+    fun openDigest(run: String, language: String, offset: Int) {
         val server = state.value.server ?: return
         operation {
-            if (offset == 0) followLatest = run == state.value.archive.firstOrNull()?.optString("id")
-            if (offset == 0 && !showCached(server.id, run, language))
+            val cached = offset == 0 && showCached(server.id, run, language)
+            if (offset == 0 && !cached)
                 mutable.update { it.copy(selectedRun = run, language = language, articles = emptyList(), markdown = "", total = 0) }
             val page = withAgent(server) { it.get("digests/$run/$language?offset=$offset") as JSONObject }
             saveDigest(server.id, page, offset)
             showCached(server.id, run, language)
+        }
+    }
+
+    fun loadMoreDigests() {
+        val server = state.value.server ?: return
+        operation {
+            val catalog = state.value.archive
+            val cursor = catalog.lastOrNull()?.getString("id") ?: return@operation
+            val page = withAgent(server) {
+                (it.get("digests?limit=$DIGEST_PAGE_SIZE&after=$cursor") as JSONArray).objects()
+            }
+            val extended = (catalog + page).distinctBy { it.optString("id") }
+            cache.saveArchive(CachedArchive(server.id, JSONArray(extended).toString()))
+            mutable.update { it.copy(archive = extended, hasMoreDigests = page.size == DIGEST_PAGE_SIZE && extended.size > catalog.size) }
         }
     }
 
@@ -454,27 +510,29 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
 
     suspend fun loadRouterCatalog(serverId: String, router: AiRouter, enteredKey: String?): List<RouterModel>? =
         withContext(Dispatchers.IO) {
-            val key = enteredKey ?: vault.routerKey(serverId, router)
-            key?.let { RouterCatalog.fetch(router, it) }
+            val server = state.value.server?.takeIf { it.id == serverId } ?: return@withContext null
+            try {
+                val catalog = withAgent(server) { api ->
+                    val path = "ai/catalog/${router.id}"
+                    if (enteredKey == null) api.get(path) else api.post(path, JSONObject().put("key", enteredKey))
+                }
+                RouterCatalog.parse(catalog.toString())
+            } catch (error: Problem) {
+                when (error.code) {
+                    "ROUTER_KEY_MISSING" -> null
+                    "API_404" -> throw Problem("AGENT_UPDATE_REQUIRED")
+                    else -> throw error
+                }
+            }
         }
 
     fun saveConfig(config: JSONObject, profiles: JSONArray, secrets: JSONObject = JSONObject()) {
-        val serverId = state.value.server?.id ?: return
         mutate(true) { api ->
             val response = api.put("config", JSONObject().put("revision", state.value.config.getInt("revision"))
                 .put("config", config).put("profiles", profiles).put("secrets", secrets)) as JSONObject
-            val routerKeysCached = AiRouter.entries.filter { secrets.has(it.secretName) }.all { router ->
-                runCatching {
-                    val key = if (secrets.isNull(router.secretName)) null else secrets.getString(router.secretName)
-                    vault.storeRouterKey(serverId, router, key)
-                }.isSuccess
-            }
             val missing = response.optJSONArray("missing")?.strings().orEmpty().joinToString()
-            when {
-                !routerKeysCached -> ui(R.string.ui_settings_saved_on_the_vps_the)
-                missing.isNotBlank() -> ui(R.string.ui_settings_saved_add_the_following_secrets, missing)
-                else -> ui(R.string.ui_settings_saved)
-            }
+            if (missing.isNotBlank()) ui(R.string.ui_settings_saved_add_the_following_secrets, missing)
+            else ui(R.string.ui_settings_saved)
         }
     }
 
@@ -501,14 +559,8 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         }
     }
 
-    private fun invalidateRouterKeys() {
-        val serverId = state.value.server?.id ?: return
-        for (router in AiRouter.entries) runCatching { vault.storeRouterKey(serverId, router, null) }
-    }
-
     fun revert() = mutate(true) {
         it.post("config/revert", JSONObject().put("revision", state.value.config.getInt("revision")))
-        invalidateRouterKeys()
         ui(R.string.ui_previous_configuration_restored)
     }
 
@@ -540,7 +592,6 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     fun restore(file: String, password: String) = mutate(true) {
         it.post("restore", JSONObject().put("password", password).put("archive", file)
             .put("revision", state.value.config.getInt("revision")))
-        invalidateRouterKeys()
         ui(R.string.ui_backup_restored)
     }
 

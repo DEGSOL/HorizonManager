@@ -1,17 +1,16 @@
 package dev.horizonmanager
 
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import org.json.JSONException
 import org.json.JSONObject
-import java.io.IOException
-import java.util.concurrent.TimeUnit
 
 internal enum class AiRouter(
-    val id: String, val title: String, val baseUrl: String, val catalogPath: String, val secretName: String,
+    val id: String, val title: String, val baseUrl: String, val secretName: String,
 ) {
-    OpenRouter("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", "/models/user", "HM_SECRET_OPENROUTER_KEY"),
-    UnoRouter("unorouter", "UnoRouter", "https://api.unorouter.com/v1", "/models", "HM_SECRET_UNOROUTER_KEY");
+    OpenRouter("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", "HM_SECRET_OPENROUTER_KEY"),
+    UnoRouter("unorouter", "UnoRouter", "https://api.unorouter.com/v1", "HM_SECRET_UNOROUTER_KEY");
+
+    fun secretAlias(saved: JSONObject): String =
+        saved.optString("api_key_env").takeIf { configured(saved) == this && it.isNotBlank() && it != "null" } ?: secretName
 
     fun defaults(ai: JSONObject): JSONObject = ai.copyObject()
         .put("provider", "openai").put("base_url", baseUrl).put("api_key_env", secretName).put("model", "")
@@ -30,31 +29,6 @@ internal enum class AiRouter(
 internal data class RouterModel(val id: String, val name: String, val contextLength: Int?)
 
 internal object RouterCatalog {
-    private val client = OkHttpClient.Builder()
-        .callTimeout(18, TimeUnit.SECONDS)
-        .followRedirects(false).followSslRedirects(false).build()
-
-    fun fetch(router: AiRouter, key: String): List<RouterModel> {
-        if (key.length !in 8..512 || key.any { it.code !in 0x21..0x7e }) throw Problem("ROUTER_KEY_FORMAT")
-        val request = Request.Builder().url(router.baseUrl + router.catalogPath)
-            .header("Authorization", "Bearer $key").header("Accept", "application/json").build()
-        try {
-            client.newCall(request).execute().use { response ->
-                when (response.code) {
-                    401, 403 -> throw Problem("ROUTER_KEY_REJECTED")
-                    429 -> throw Problem("ROUTER_RATE_LIMIT")
-                }
-                if (!response.isSuccessful) throw Problem("ROUTER_CATALOG_HTTP", response.code.toString())
-                val input = response.body ?: throw Problem("ROUTER_CATALOG_FORMAT")
-                return parse(input.byteStream().readBounded(4 * 1024 * 1024).decodeToString())
-            }
-        } catch (_: javax.net.ssl.SSLException) {
-            throw Problem("TLS_INVALID")
-        } catch (_: IOException) {
-            throw Problem("ROUTER_CATALOG_NETWORK")
-        }
-    }
-
     fun parse(json: String): List<RouterModel> {
         val data = try {
             JSONObject(json).getJSONArray("data")

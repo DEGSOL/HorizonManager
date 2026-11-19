@@ -1,0 +1,15 @@
+<resources>
+    <string name="archive">Archive</string>
+    <string name="feed">Feed</string>
+    <string name="archive_period">Digests finished more than %1$d h ago.</string>
+    <string name="empty_archive">The archive is empty</string>
+    <string name="older_issues">Load older digests</string>
+    <string name="empty_current_digest">No current digest</string>
+    <string name="current_period">No digest finished in the last %1$d h.</string>
+    <string name="issue_not_loaded">This digest has not loaded yet.</string>
+    <string name="sources_description">Add, edit and test sources</string>
+    <string name="control_description">Runs, server status and maintenance</string>
+    <string name="router_vps_network">The VPS could not reach %1$s. Check the server connection.</string>
+    <string name="router_upgrade_required">Update the VPS agent to load models with the key saved on your server.</string>
+    <string name="agent_https_unreachable">The VPS agent did not respond over HTTPS.</string>
+</resources>

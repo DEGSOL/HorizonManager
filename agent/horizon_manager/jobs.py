@@ -50,9 +50,11 @@ def consume(store, job, event):
             Store.event(db, event["phase"], component="horizon", job=job, detail=event["detail"])
         elif kind == "result":
             data = event["data"]
-            db.execute("UPDATE jobs SET result=? WHERE id=?", (json.dumps(data), job))
-            if data.get("languages") and not data.get("localized_run"):
+            digest_ready = data.get("languages") and not data.get("localized_run")
+            if digest_ready:
+                data = {**data, "ready_at": utc()}
                 enqueue_digest(db, job)
+            db.execute("UPDATE jobs SET result=? WHERE id=?", (json.dumps(data), job))
         elif kind == "log":
             Store.event(db, event["code"], event["level"], "horizon", job, event["detail"])
         elif kind == "source":

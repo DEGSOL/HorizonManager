@@ -12,27 +12,22 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
@@ -47,16 +42,6 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-
-private val graphite = Color(0xFF101417)
-private val colors = darkColorScheme(
-    primary = Color(0xFF9CCAFF), onPrimary = Color(0xFF0C2D4C),
-    primaryContainer = Color(0xFF223A50), onPrimaryContainer = Color(0xFFC6E1FF),
-    background = graphite, surface = graphite, surfaceContainer = Color(0xFF1A2026),
-    surfaceContainerHigh = Color(0xFF212932), surfaceVariant = Color(0xFF262F38),
-    onSurface = Color(0xFFE4E9F0), onSurfaceVariant = Color(0xFFAFBBC8),
-    outlineVariant = Color(0xFF34414C), error = Color(0xFFFFB4A9),
-)
 
 class MainActivity : ComponentActivity() {
     private var notificationServer by mutableStateOf("")
@@ -74,14 +59,18 @@ class MainActivity : ComponentActivity() {
         notificationServer = notificationTarget(intent)
         enableEdgeToEdge()
         setContent {
-            MaterialTheme(colorScheme = colors) { Manager(viewModel(), notificationServer) { notificationServer = "" } }
+            HorizonTheme { Manager(viewModel(), notificationServer) { notificationServer = "" } }
         }
     }
 }
 
+private const val ARCHIVE = 0
+private const val FEED = 1
+private const val SETTINGS = 2
 private val tabs = listOf(
-    R.string.news to Icons.Default.Home, R.string.sources to Icons.AutoMirrored.Filled.List,
-    R.string.control to Icons.Default.Menu, R.string.settings to Icons.Default.Settings,
+    HorizonTab(R.string.archive, Icons.Default.Menu),
+    HorizonTab(R.string.feed, Icons.AutoMirrored.Filled.List),
+    HorizonTab(R.string.settings, Icons.Default.Settings),
 )
 
 @Composable
@@ -91,17 +80,39 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     val locale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    var tab by remember(currentServer?.id) { mutableIntStateOf(0) }
+    var tab by rememberSaveable(currentServer?.id) { mutableIntStateOf(FEED) }
+    var manageServers by remember { mutableStateOf(false) }
+    var editServer by remember { mutableStateOf(false) }
+    var configPage by rememberSaveable(currentServer?.id) { mutableStateOf("") }
+    var archiveIssue by rememberSaveable(currentServer?.id) { mutableStateOf("") }
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    val now by produceState(Instant.now(), lifecycle) {
+        lifecycle.repeatAt(androidx.lifecycle.Lifecycle.State.RESUMED) {
+            while (true) {
+                value = Instant.now()
+                delay(30_000)
+            }
+        }
+    }
+    val issues = remember(panel.archive, panel.collectionHours, now) {
+        splitDigests(panel.archive, panel.collectionHours, now)
+    }
+    val openedIssue = issues.archive.find { it.optString("id") == archiveIssue }
+    fun openSettings(page: String) {
+        tab = SETTINGS
+        configPage = page
+    }
     LaunchedEffect(notificationServer) {
         if (notificationServer.isNotEmpty()) {
-            tab = 0
+            tab = FEED
+            archiveIssue = ""
+            configPage = ""
+            manageServers = false
+            editServer = false
             model.openNotification(notificationServer)
             consumed()
         }
     }
-    var manageServers by remember { mutableStateOf(false) }
-    var editServer by remember { mutableStateOf(false) }
-    var configPage by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
     var exportDoc by remember { mutableStateOf("") }
     var fileAction by remember { mutableStateOf("") }
@@ -146,7 +157,6 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
             model.clearFile()
         }
     }
-    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val running = panel.jobs.firstOrNull()?.optString("state") in setOf("running", "queued")
     val checkingInstall = panel.probe["install"] == "running" || panel.updatingAgent
     LaunchedEffect(currentServer?.id, panel.ready, running, checkingInstall, lifecycle, locale) {
@@ -164,9 +174,17 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
             }
         }
     }
-    BackHandler(manageServers || editServer || configPage.isNotEmpty()) {
-        when { configPage.isNotEmpty() -> configPage = ""; editServer -> editServer = false; else -> manageServers = false }
+    fun goBack() {
+        when {
+            manageServers -> manageServers = false
+            editServer -> editServer = false
+            configPage.isNotEmpty() -> configPage = ""
+            tab == ARCHIVE && archiveIssue.isNotEmpty() -> archiveIssue = ""
+        }
     }
+
+    val canGoBack = manageServers || editServer || configPage.isNotEmpty() || (tab == ARCHIVE && openedIssue != null)
+    BackHandler(canGoBack, ::goBack)
 
     confirm?.let { (description, action) ->
         AlertDialog(onDismissRequest = { confirm = null }, title = { Text(ui(R.string.ui_confirm_action)) },
@@ -186,64 +204,79 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         }
     }
 
-    Scaffold(
-        containerColor = graphite,
-        bottomBar = {
-            if (panel.ready && !manageServers && !editServer && configPage.isEmpty()) {
-                NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
-                    tabs.forEachIndexed { index, (res, icon) ->
-                        val title = stringResource(res)
-                        NavigationBarItem(selected = index == tab, onClick = { tab = index },
-                            icon = { Icon(icon, title) },
-                            label = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) })
-                    }
-                }
-            }
-        },
-    ) { insets ->
-        Column(Modifier.padding(insets).fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-                val section = if (panel.ready) tab else -1
-                key(section, configPage, manageServers, editServer, currentServer?.id, locale) {
-                    Column(Modifier.widthIn(max = 780.dp).fillMaxWidth().verticalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
-                        Header(if (configPage == "journal") stringResource(R.string.journal) else if (manageServers) ui(R.string.ui_servers) else if (panel.ready && !editServer) stringResource(tabs[tab].first)
-                            else "Horizon Manager", currentServer?.name.orEmpty(), {
-                            if (configPage.isNotEmpty()) configPage = "" else manageServers = !manageServers
-                        }, if (configPage.isNotEmpty() || manageServers) ui(R.string.ui_back) else ui(R.string.ui_servers))
-                        if (panel.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-                        if (panel.problem.isNotEmpty()) Message(errorText(panel.problem), panel.problem, true) { model.dismissMessage() }
-                        if (panel.notice.isNotEmpty()) Message(panel.notice, "") { model.dismissMessage() }
-                        if (fileMessage.isNotEmpty()) Message(fileMessage, "") { fileMessage = "" }
-                        when {
-                            manageServers -> {
-                                panel.servers.forEach { server ->
-                                    Tile(Modifier.clickable { model.select(server); manageServers = false; editServer = false }) {
-                                        Text(server.name, style = MaterialTheme.typography.titleMedium)
-                                        Text("${server.user} @ ${server.host} · ${server.port}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                }
-                                Button(onClick = { model.add(); manageServers = false; editServer = true }) { Text(ui(R.string.ui_add_server)) }
+    val showTabs = panel.ready && !manageServers && !editServer
+    GlassLayout(tabs, tab, showTabs, select = { chosen ->
+        if (chosen != tab || configPage.isNotEmpty() || openedIssue != null) {
+            tab = chosen
+            configPage = ""
+            archiveIssue = ""
+            if (chosen == FEED) model.showFeed()
+        }
+    }) {
+        val section = if (panel.ready) tab else -1
+        val heading = when {
+            manageServers -> ui(R.string.ui_servers)
+            !panel.ready || editServer -> "Horizon Manager"
+            configPage == "journal" -> ui(R.string.journal)
+            configPage == "sources" -> ui(R.string.sources)
+            configPage == "control" -> ui(R.string.control)
+            configPage == "schedule" -> ui(R.string.ui_schedule)
+            configPage == "delivery" -> ui(R.string.ui_delivery)
+            configPage == "secrets" -> ui(R.string.ui_secrets)
+            configPage == "advanced" -> ui(R.string.ui_advanced_settings)
+            configPage == "profiles" -> ui(R.string.ui_processing_profiles)
+            configPage.isNotEmpty() -> label(configPage)
+            tab == ARCHIVE && openedIssue != null -> ui(R.string.ui_digest)
+            else -> ui(tabs[tab].label)
+        }
+        key(section, configPage, openedIssue?.optString("id"), manageServers, editServer, currentServer?.id, locale) {
+            Column(Modifier.align(Alignment.TopCenter).widthIn(max = 780.dp).fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+                .verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(13.dp)) {
+                Header(heading, currentServer?.name.orEmpty(), {
+                    if (canGoBack) goBack() else manageServers = true
+                }, if (canGoBack) ui(R.string.ui_back) else ui(R.string.ui_servers))
+                if (panel.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                if (panel.problem.isNotEmpty()) Message(errorText(panel.problem), panel.problem, true) { model.dismissMessage() }
+                if (panel.notice.isNotEmpty()) Message(panel.notice, "") { model.dismissMessage() }
+                if (fileMessage.isNotEmpty()) Message(fileMessage, "") { fileMessage = "" }
+                when {
+                    manageServers -> {
+                        panel.servers.forEach { server ->
+                            GlassSettingRow(server.name, "${server.user} @ ${server.host} · ${server.port}", enabled = !panel.busy) {
+                                model.select(server)
+                                configPage = ""
+                                archiveIssue = ""
+                                tab = FEED
+                                manageServers = false
+                                editServer = false
                             }
-                            !panel.ready || editServer -> Setup(panel, model, editServer) { editServer = false }
-                            configPage == "journal" -> Journal(panel, { description, action -> confirm = description to action }, model) {
-                                exportDoc = it; output.launch("horizon-journal.json")
-                            }
-                            configPage.isNotEmpty() -> SettingsForm(panel, model, configPage, { configPage = "" })
-                            tab == 0 -> News(panel, model, { configPage = "ai" }, { tab = 1 })
-                            tab == 1 -> Sources(panel, model)
-                            tab == 2 -> Control(panel, model, { description, action -> confirm = description to action },
-                                { backupDialog = "export" },
-                                { fileAction = "backup"; input.launch(arrayOf("*/*")) }, { configPage = it })
-                            else -> Settings(panel, model, { configPage = it }, { editServer = true },
-                                { toImport -> fileAction = toImport; input.launch(arrayOf("*/*")) },
-                                { filename, content -> exportDoc = content; output.launch(filename) },
-                                { if (Build.VERSION.SDK_INT >= 33) permission.launch(Manifest.permission.POST_NOTIFICATIONS) },
-                                { description, action -> confirm = description to action })
                         }
-                        Spacer(Modifier.height(16.dp))
+                        Button(onClick = { model.add(); manageServers = false; editServer = true }) { Text(ui(R.string.ui_add_server)) }
                     }
+                    !panel.ready || editServer -> Setup(panel, model, editServer) { editServer = false }
+                    configPage == "journal" -> Journal(panel, { description, action -> confirm = description to action }, model) {
+                        exportDoc = it; output.launch("horizon-journal.json")
+                    }
+                    configPage == "sources" -> Sources(panel, model)
+                    configPage == "control" -> Control(panel, model, { description, action -> confirm = description to action },
+                        { backupDialog = "export" }, { fileAction = "backup"; input.launch(arrayOf("*/*")) }, ::openSettings)
+                    configPage.isNotEmpty() -> SettingsForm(panel, model, configPage, { configPage = "" })
+                    tab == ARCHIVE && openedIssue != null -> News(panel, model, openedIssue, { openSettings("ai") }, { openSettings("sources") })
+                    tab == ARCHIVE -> Archive(issues.archive, panel.collectionHours, panel.hasMoreDigests, panel.busy, { issue ->
+                        archiveIssue = issue.getString("id")
+                        model.openArchive(issue)
+                    }, model::loadMoreDigests)
+                    tab == FEED -> News(panel, model, issues.feed, { openSettings("ai") }, { openSettings("sources") })
+                    else -> Settings(panel, model, ::openSettings, { editServer = true },
+                        { toImport -> fileAction = toImport; input.launch(arrayOf("*/*")) },
+                        { filename, content -> exportDoc = content; output.launch(filename) },
+                        { if (Build.VERSION.SDK_INT >= 33) permission.launch(Manifest.permission.POST_NOTIFICATIONS) },
+                        { description, action -> confirm = description to action })
                 }
+                if (showTabs) Spacer(Modifier.height(79.dp))
+                Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
             }
         }
     }
@@ -255,21 +288,14 @@ private suspend fun androidx.lifecycle.LifecycleOwner.repeatAt(
 
 @Composable
 private fun Header(heading: String, server: String, onClick: () -> Unit, title: String) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            if (server.isNotEmpty()) Text(server, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
-            Text(heading, style = MaterialTheme.typography.headlineMedium)
+    Row(Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            if (server.isNotEmpty()) Text(server, color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelLarge)
+            Text(heading, style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.onBackground)
         }
-        TextButton(onClick = onClick) { Text(title) }
-    }
-}
-
-@Composable
-internal fun Tile(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    OutlinedCard(Modifier.fillMaxWidth().then(modifier),
-        colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
-        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
+        GlassToolbarButton(title, onClick)
     }
 }
 
@@ -468,6 +494,7 @@ internal fun errorText(code: String) = when (code.substringBefore(" · ")) {
     "AGENT_UNREACHABLE" -> ui(R.string.ui_the_agent_did_not_respond_over)
     "AUTH_REQUIRED" -> ui(R.string.ui_the_agent_rejected_the_access_key)
     "UPSTREAM_CHECK_UNAVAILABLE" -> ui(R.string.ui_could_not_verify_the_version_on)
+    "HTTPS_UNREACHABLE" -> ui(R.string.agent_https_unreachable)
     "TLS_INVALID" -> ui(R.string.ui_the_https_certificate_could_not_be)
     "HTTPS_URL" -> ui(R.string.ui_enter_an_address_like_https_example)
     "ACTIVE_JOB" -> ui(R.string.ui_wait_for_the_active_job_to)
