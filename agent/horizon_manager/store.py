@@ -28,8 +28,16 @@ class Store:
                     id TEXT PRIMARY KEY, kind TEXT NOT NULL, state TEXT NOT NULL,
                     created TEXT NOT NULL, updated TEXT NOT NULL, phase TEXT NOT NULL,
                     input TEXT NOT NULL, result TEXT, stop INTEGER NOT NULL DEFAULT 0);
-                CREATE UNIQUE INDEX IF NOT EXISTS only_one_active
-                    ON jobs ((1)) WHERE state IN ('queued', 'running');
+                CREATE UNIQUE INDEX IF NOT EXISTS one_active_pipeline
+                    ON jobs ((1)) WHERE kind != 'article_context' AND state IN ('queued', 'running');
+                CREATE UNIQUE INDEX IF NOT EXISTS one_running_article
+                    ON jobs ((1)) WHERE kind = 'article_context' AND state = 'running';
+                CREATE TABLE IF NOT EXISTS article_context_jobs (
+                    run TEXT NOT NULL, article TEXT NOT NULL, job TEXT NOT NULL REFERENCES jobs(id),
+                    PRIMARY KEY(run,article));
+                CREATE TABLE IF NOT EXISTS enrichment_options (
+                    id INTEGER PRIMARY KEY CHECK(id=1), mode TEXT NOT NULL
+                        CHECK(mode IN ('on_demand', 'automatic')));
                 CREATE TABLE IF NOT EXISTS events (
                     id INTEGER PRIMARY KEY AUTOINCREMENT, time TEXT NOT NULL,
                     component TEXT NOT NULL, level TEXT NOT NULL,
@@ -47,6 +55,7 @@ class Store:
                     source TEXT PRIMARY KEY, status TEXT NOT NULL,
                     checked TEXT NOT NULL, last_success TEXT);
             """)
+            db.execute("DROP INDEX IF EXISTS only_one_active")
             db.execute("INSERT OR IGNORE INTO configuration VALUES (1, 1, ?, ?, '{}')",
                        (json.dumps(initial_config()), json.dumps(builtin_profiles())))
             db.execute("INSERT OR IGNORE INTO schedule VALUES (1, '{\"mode\":\"off\"}', NULL)")
@@ -65,6 +74,15 @@ class Store:
     def media_search(db):
         row = db.execute("SELECT enabled FROM media_options WHERE id=1").fetchone()
         return bool(row and row[0])
+
+    @staticmethod
+    def enrichment_mode(db):
+        row = db.execute("SELECT mode FROM enrichment_options WHERE id=1").fetchone()
+        return row[0] if row else "on_demand"
+
+    @staticmethod
+    def set_enrichment_mode(db, mode):
+        db.execute("INSERT OR REPLACE INTO enrichment_options VALUES (1, ?)", (mode,))
 
     def settings(self, db):
         row = db.execute("SELECT * FROM configuration WHERE id=1").fetchone()

@@ -1,6 +1,7 @@
 package dev.horizonmanager
 
 import android.app.Application
+import android.util.AtomicFile
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
@@ -13,6 +14,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.security.SecureRandom
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -640,6 +642,48 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                 }
             }
         }
+
+    suspend fun getArticleContext(
+        serverId: String, run: String, article: String, language: String, submit: Boolean,
+    ): JSONObject = withContext(Dispatchers.IO) {
+        val server = state.value.server?.takeIf { it.id == serverId }
+            ?: throw Problem("AGENT_UNREACHABLE")
+        if (!Regex("(?:[a-f0-9]{32}|run-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{8})").matches(run) ||
+            language !in setOf("en", "zh", "ru") || article.isBlank()) {
+            throw Problem("ARTICLE_UNKNOWN")
+        }
+        val articleKey = contextHash(article)
+        val directory = File(app.cacheDir, "article-context")
+        val file = AtomicFile(File(directory, contextHash("$serverId/$run/$articleKey/$language") + ".json"))
+        runCatching { JSONObject(file.readFully().toString(Charsets.UTF_8)) }.getOrNull()?.let {
+            if (it.optString("state") == "ready") return@withContext it
+        }
+        val path = "article-context/$run/$articleKey/$language"
+        val result = try {
+            withAgent(server) { (if (submit) it.post(path) else it.get(path)) as JSONObject }
+        } catch (error: Problem) {
+            if (error.code == "API_404") throw Problem("AGENT_UPDATE_REQUIRED")
+            throw error
+        }
+        if (result.optString("state") == "ready") {
+            runCatching {
+                directory.mkdirs()
+                val output = file.startWrite()
+                try {
+                    output.write(result.toString().toByteArray(Charsets.UTF_8))
+                    file.finishWrite(output)
+                } catch (error: Exception) {
+                    file.failWrite(output)
+                    throw error
+                }
+            }
+        }
+        result
+    }
+
+    fun enrichmentMode(mode: String) = mutate { api ->
+        api.put("enrichment-mode", JSONObject().put("mode", mode))
+    }
 
     fun mediaSearch(enabled: Boolean) = mutate(false) { api ->
         api.put("media-search", JSONObject().put("enabled", enabled))

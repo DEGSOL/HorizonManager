@@ -84,7 +84,19 @@ internal fun DigestSettings(open: (String) -> Unit) {
 }
 
 @Composable
-internal fun AiSettings(open: (String) -> Unit) {
+internal fun AiSettings(panel: Panel, model: ManagerModel, open: (String) -> Unit) {
+    val mode = panel.status.optString("enrichment_mode")
+    Tile {
+        Choice(ui(R.string.enrichment_mode), listOf("on_demand", "automatic"),
+            mode.ifBlank { "on_demand" }, model::enrichmentMode, {
+                ui(if (it == "automatic") R.string.enrichment_automatic else R.string.enrichment_on_demand)
+            }, enabled = mode.isNotBlank() && !panel.busy)
+        Text(
+            ui(if (mode.isNotBlank()) R.string.enrichment_mode_detail else R.string.article_context_update),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
     GlassSettingRow(ui(R.string.settings_ai_model), ui(R.string.ui_model_api_address_and_request_limits)) { open("ai") }
     SettingsSection(R.string.ui_advanced_settings) {
         GlassSettingRow(ui(R.string.ui_processing_profiles), ui(R.string.ui_prompts_scoring_criteria_and_output_blocks)) { open("profiles") }

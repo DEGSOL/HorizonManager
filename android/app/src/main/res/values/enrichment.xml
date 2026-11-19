@@ -1,0 +1,15 @@
+<resources>
+    <string name="enrichment_mode">Article enrichment</string>
+    <string name="enrichment_on_demand">On demand</string>
+    <string name="enrichment_automatic">Automatic</string>
+    <string name="enrichment_mode_detail">Applies to the next digest, including scheduled runs.</string>
+    <string name="article_more">Details</string>
+    <string name="article_context_pending">Finding context…</string>
+    <string name="article_context_heading">Additional context</string>
+    <string name="article_context_update">Update the VPS agent in Maintenance to request context.</string>
+    <string name="article_context_timeout">This request timed out. You can try again.</string>
+    <string name="article_context_ai_setup">Check the AI settings and API key, then try again.</string>
+    <string name="article_context_rate_limit">The AI provider rate limit was reached. Try again later.</string>
+    <string name="article_context_unavailable">The article or its processing profile is unavailable.</string>
+    <string name="article_context_failed">Could not load context. You can try again.</string>
+</resources>

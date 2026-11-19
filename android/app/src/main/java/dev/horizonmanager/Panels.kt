@@ -41,7 +41,9 @@ internal fun Sources(panel: Panel, model: ManagerModel, dirtyChange: (Boolean) -
                 val schema = definition(sourceRoot, sourceSchema.getJSONObject(type))
                 val item = schema.getJSONObject("properties").getJSONObject("channels").getJSONObject("items")
                 TelegramSources(working.optJSONObject(type) ?: JSONObject(), original.optJSONObject(type) ?: JSONObject(),
-                    sourceRoot, item, ids, panel.busy || panel.jobs.any { it.optString("state") in setOf("queued", "running") },
+                    sourceRoot, item, ids, panel.busy || panel.jobs.any {
+                        it.optString("kind") != "article_context" && it.optString("state") in setOf("queued", "running")
+                    },
                     { working = working.copyObject().put(type, it) },
                     { index -> model.submit("source", "telegram", if (index == null) null else "channels", index) })
             } else EditValue(sourceRoot, sourceSchema.getJSONObject(type), type, working.opt(type), {
@@ -113,7 +115,9 @@ internal fun Control(panel: Panel, model: ManagerModel, confirm: (String, () -> 
                      configure: (String) -> Unit) {
     val status = panel.status
     ServerConnectionStatus(panel, model)
-    val active = panel.jobs.firstOrNull { it.optString("state") in listOf("queued", "running") }
+    val active = panel.jobs.firstOrNull {
+        it.optString("kind") != "article_context" && it.optString("state") in setOf("queued", "running")
+    }
     val latest = panel.jobs.firstOrNull { it.optString("kind") == "run" && it.optString("state") == "success" }
     val issue = panel.events.firstOrNull { it.optString("level") in listOf("ERROR", "CRITICAL") }
     Tile {
@@ -146,7 +150,7 @@ internal fun Control(panel: Panel, model: ManagerModel, confirm: (String, () -> 
     if (panel.jobs.isNotEmpty()) Tile {
         Text(ui(R.string.ui_job_history), style = MaterialTheme.typography.titleMedium)
         panel.jobs.take(25).forEach { job ->
-            val kind = when (job.optString("kind")) { "ai" -> ui(R.string.ui_ai_test); "source" -> ui(R.string.ui_source_test); "localize" -> ui(R.string.ui_translation); else -> ui(R.string.ui_digest) }
+            val kind = when (job.optString("kind")) { "ai" -> ui(R.string.ui_ai_test); "source" -> ui(R.string.ui_source_test); "localize" -> ui(R.string.ui_translation); "article_context" -> ui(R.string.article_context_heading); else -> ui(R.string.ui_digest) }
             Text("$kind · ${stateName(job.optString("state"))} · ${localTime(job.optString("created"))}")
             Text(job.optString("id"), style = MaterialTheme.typography.labelSmall)
             job.optJSONObject("result")?.let { result ->

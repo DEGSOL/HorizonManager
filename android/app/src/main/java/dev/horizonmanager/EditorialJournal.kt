@@ -29,6 +29,7 @@ private val journalLevels = setOf("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL
 private val phases = setOf("fetch", "score", "filter", "enrich", "generate", "save", "delivery")
 private val exitStatus = Regex("(?:preflight|packages|files|runtime|service|health) · exit [0-9]{1,3}")
 private val sourceResult = Regex(".* · ([0-9]{1,9})(?: · (AUTH|RATE_LIMIT|HTTP_NOT_FOUND|TIMEOUT|INVALID_FORMAT|NETWORK|UPSTREAM_FAILURE))?")
+private val contextResult = Regex("[0-9]{1,9} ms(?: · [A-Z][A-Z0-9_]{1,79})?")
 private val safeException = setOf("TimeoutError", "ConnectionError", "ValueError", "RuntimeError", "OSError", "HTTPError")
 
 internal fun diagnosticEvent(row: JSONObject): JSONObject {
@@ -38,7 +39,9 @@ internal fun diagnosticEvent(row: JSONObject): JSONObject {
     val detail = when {
         code.startsWith("INSTALL_") -> raw.takeIf(exitStatus::matches)
         code.startsWith("SOURCE_") -> sourceResult.matchEntire(raw)?.groupValues?.drop(1)?.filter(String::isNotBlank)?.joinToString(" · ")
-        code == "JOB_QUEUED" -> raw.takeIf { it in setOf("run", "ai", "source", "localize") }
+        code == "JOB_QUEUED" -> raw.takeIf { it in setOf("run", "ai", "source", "localize", "article_context") }
+        code.startsWith("ARTICLE_CONTEXT_") -> raw.takeIf(contextResult::matches)
+        code == "ENRICHMENT_MODE_CHANGED" -> raw.takeIf { it in setOf("on_demand", "automatic") }
         code in setOf("HORIZON_EXIT", "JOURNAL_CLEARED", "MEDIA_READY") -> raw.takeIf { it.length <= 9 && it.toIntOrNull() != null }
         else -> raw.takeIf { it in safeException || it == "src.ai.classifier · fallback" }
     }

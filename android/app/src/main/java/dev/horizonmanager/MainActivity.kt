@@ -430,7 +430,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                             }
                             "local" -> LocalReadingData(panel)
                             "digest_settings" -> DigestSettings(::openSettings)
-                            "ai_settings" -> AiSettings(::openSettings)
+                            "ai_settings" -> AiSettings(panel, model, ::openSettings)
                             "settings", "news_settings", "server_settings", "interface" ->
                                 SettingsHome(panel, preset, ::openSettings, screen.page) { manageServers = true }
                             "images" -> ImageSettings(panel, model)

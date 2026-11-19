@@ -38,6 +38,7 @@ internal fun ArticleDialog(
     flag: ArticleFlag?,
     onSave: () -> Unit,
     onRead: () -> Unit,
+    contextContent: @Composable () -> Unit,
     close: () -> Unit,
 ) {
     val uri = LocalUriHandler.current
@@ -45,12 +46,6 @@ internal fun ArticleDialog(
     val theme = LocalHorizonPalette.current
     val link = article.optString("url")
     val body = article.optString("body").ifBlank { article.optString("summary") }
-    val blocks =
-        article.optJSONArray("blocks")?.objects()?.filterNot { it.optBoolean("primary") }.orEmpty()
-    val citations =
-        article.optJSONArray("citations")?.objects().orEmpty().filter { isWeb(it.optString("url")) }
-    val reason = article.optString("reason").takeIf { it != "null" }.orEmpty()
-    var comments by remember(article.optString("id")) { mutableStateOf(false) }
     var actions by remember { mutableStateOf(false) }
     val shareText =
         listOf(article.optString("title"), body, link.takeIf(::isWeb).orEmpty())
@@ -200,33 +195,7 @@ internal fun ArticleDialog(
                 if (article.optBoolean("body_is_plain"))
                     Text(body, style = MaterialTheme.typography.bodyLarge)
                 else Markdown(body)
-                if (reason.isNotBlank() || blocks.isNotEmpty() || citations.isNotEmpty()) {
-                    TextButton(onClick = { comments = !comments }) {
-                        Text(
-                            if (comments) ui(R.string.ui_hide_horizon_commentary)
-                            else ui(R.string.ui_horizon_commentary)
-                        )
-                    }
-                }
-                Reveal(comments) {
-                    if (reason.isNotBlank()) {
-                        Text(
-                            ui(R.string.ui_horizon_assessment),
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        Markdown(reason)
-                    }
-                    blocks.forEach { block ->
-                        Text(block.optString("title"), style = MaterialTheme.typography.titleMedium)
-                        Markdown(block.optString("content"))
-                    }
-                    citations.forEach { citation ->
-                        val url = citation.optString("url")
-                        TextButton(onClick = { runCatching { uri.openUri(url) } }) {
-                            Text(citation.optString("title").ifBlank { url }, color = theme.link)
-                        }
-                    }
-                }
+                contextContent()
                 val media = article.optJSONObject("media")
                 if (media != null && isWeb(media.optString("source")) && cover != null) {
                     TextButton(

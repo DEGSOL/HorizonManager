@@ -22,9 +22,10 @@ from src.models import SOURCE_REGISTRY
 from src.processing.content import split_content
 
 from . import VERSION, backup, jobs, push, router_catalog
+from .article_context import find_item, key_for, localized_context, previous_context
 from .configuration import DIGEST_LANGUAGES, ai_missing, schema, secret_name_allowed, validate
 from .scheduler import Schedule, next_run
-from .store import Store
+from .store import Store, utc
 
 REVISION = "12d5fbde4d9e0776a48618ea65d16fe6d1e1b606"
 ID = re.compile(r"(?:[a-f0-9]{32}|run-\d{8}T\d{6}Z-[a-f0-9]{8})")
@@ -57,6 +58,10 @@ class JobInput(Body):
 
 class MediaSearch(Body):
     enabled: bool
+
+
+class EnrichmentMode(Body):
+    mode: Literal["on_demand", "automatic"]
 
 
 class CatalogKey(Body):
@@ -117,7 +122,8 @@ def create_app(root, token):
     async def lifespan(app):
         sync_installer_events()
         jobs.recovery(store)
-        tasks = [asyncio.create_task(jobs.loop(store)), asyncio.create_task(push.loop(store))]
+        tasks = [asyncio.create_task(jobs.loop(store)), asyncio.create_task(jobs.loop(store, article=True)),
+                 asyncio.create_task(push.loop(store))]
         try:
             yield
         finally:
@@ -188,7 +194,7 @@ def create_app(root, token):
         with store.db() as db:
             next_at = db.execute("SELECT next FROM schedule WHERE id=1").fetchone()[0]
             return {**health(), "disk_free": disk.free, "disk_total": disk.total,
-                    "media_search": store.media_search(db),
+                    "media_search": store.media_search(db), "enrichment_mode": store.enrichment_mode(db),
                     "load": os.getloadavg()[0], "cpu": os.cpu_count(), "memory": mem, "next": next_at}
 
     @app.put("/v1/media-search")
@@ -197,6 +203,14 @@ def create_app(root, token):
             db.execute("INSERT OR REPLACE INTO media_options VALUES (1, ?)", (int(body.enabled),))
             Store.event(db, "MEDIA_SEARCH_CHANGED")
             return {"enabled": store.media_search(db)}
+
+    @app.put("/v1/enrichment-mode")
+    def set_enrichment_mode(body: EnrichmentMode):
+        with store.db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            Store.set_enrichment_mode(db, body.mode)
+            Store.event(db, "ENRICHMENT_MODE_CHANGED", detail=body.mode)
+            return {"mode": store.enrichment_mode(db)}
 
     @app.get("/v1/config")
     def get_config():
@@ -223,7 +237,7 @@ def create_app(root, token):
         return await load_catalog(router, body.key)
 
     def no_active(db):
-        if db.execute(f"SELECT 1 FROM jobs WHERE {jobs.ACTIVE}").fetchone():
+        if db.execute(f"SELECT 1 FROM jobs WHERE {jobs.PIPELINE_ACTIVE}").fetchone():
             fail(409, "ACTIVE_JOB")
 
     @app.put("/v1/config")
@@ -292,7 +306,8 @@ def create_app(root, token):
                 if existing["kind"] != body.kind or json.loads(existing["input"]) != data:
                     fail(409, "JOB_ID_CONFLICT")
             else:
-                no_active(db)
+                if db.execute(f"SELECT 1 FROM jobs WHERE {jobs.PIPELINE_ACTIVE}").fetchone():
+                    fail(409, "ACTIVE_JOB")
                 if body.kind in {"ai", "localize"}:
                     settings = store.settings(db)
                     model, _, _ = check_config(settings["config"], settings["profiles"], settings["secrets"])
@@ -302,9 +317,12 @@ def create_app(root, token):
         return {"id": job}
 
     @app.get("/v1/jobs")
-    def list_jobs(limit: int = Query(50, ge=1, le=100)):
+    def list_jobs(limit: int = Query(50, ge=1, le=100), active: bool = False):
+        where = f"WHERE {jobs.ACTIVE}" if active else ""
         with store.db() as db:
-            rows = db.execute("SELECT id,kind,state,created,updated,phase,result FROM jobs ORDER BY rowid DESC LIMIT ?", (limit,))
+            rows = db.execute(f"""SELECT id,kind,state,created,updated,phase,
+                      CASE WHEN kind != 'article_context' THEN result END AS result
+                      FROM jobs {where} ORDER BY rowid DESC LIMIT ?""", (limit,))
             return [{**dict(row), "result": json.loads(row["result"]) if row["result"] else None} for row in rows]
 
     @app.post("/v1/jobs/{job}/stop")
@@ -315,7 +333,7 @@ def create_app(root, token):
             if row is None:
                 fail(404, "JOB_UNKNOWN")
             if row["state"] == "queued":
-                db.execute("UPDATE jobs SET state='cancelled' WHERE id=?", (job,))
+                db.execute("UPDATE jobs SET state='cancelled',phase='CANCELLED',updated=? WHERE id=?", (utc(), job))
             elif row["state"] == "running":
                 db.execute("UPDATE jobs SET stop=1 WHERE id=?", (job,))
             else:
@@ -451,6 +469,54 @@ def create_app(root, token):
             fail(404, "MEDIA_UNAVAILABLE")
         return json.loads(path.read_text(encoding="utf-8"))
 
+    def stored_context(db, run, key, language):
+        row = db.execute("""SELECT jobs.id, state, phase, result
+            FROM article_context_jobs JOIN jobs ON jobs.id=article_context_jobs.job
+            WHERE run=? AND article=?""", (run, key)).fetchone()
+        if row is None:
+            return None
+        if row["result"]:
+            rendered = localized_context(json.loads(row["result"])["context"], language)
+            if rendered:
+                return rendered
+        state = row["state"]
+        if state in {"queued", "running"}:
+            return {"state": state, "job": row["id"]}
+        return {"state": "failed", "code": row["phase"]}
+
+    def access_context(run, key, language, submit):
+        if not ID.fullmatch(run) or not re.fullmatch(r"[a-f0-9]{64}", key):
+            fail(404, "ARTICLE_UNKNOWN")
+        with store.db() as db:
+            saved = stored_context(db, run, key, language)
+        if saved and (saved["state"] != "failed" or not submit):
+            return saved
+        path = artifacts(run)
+        previous = localized_context(previous_context(path, key), language)
+        if previous:
+            return previous
+        if find_item(path, key, ("filtered", "enriched", "localized")) is None:
+            fail(404, "ARTICLE_UNKNOWN")
+        if not submit:
+            return {"state": "idle"}
+        with store.db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            refreshed = stored_context(db, run, key, language)
+            if refreshed and refreshed["state"] != "failed":
+                return refreshed
+            job = uuid4().hex
+            Store.queue(db, job, "article_context", {"run": run, "article": key})
+            db.execute("INSERT OR REPLACE INTO article_context_jobs VALUES (?,?,?)", (run, key, job))
+            return {"state": "queued", "job": job}
+
+    @app.get("/v1/article-context/{run}/{key}/{language}")
+    def get_article_context(run: str, key: str, language: Literal["en", "zh", "ru"]):
+        return access_context(run, key, language, submit=False)
+
+    @app.post("/v1/article-context/{run}/{key}/{language}")
+    def request_article_context(run: str, key: str, language: Literal["en", "zh", "ru"]):
+        return access_context(run, key, language, submit=True)
+
     @app.get("/v1/digests/{run}/{language}")
     def digest(run: str, language: Literal["en", "zh", "ru"], offset: int = Query(0, ge=0), limit: int = Query(40, ge=1, le=80)):
         path = artifacts(run)
@@ -481,7 +547,9 @@ def create_app(root, token):
                 "category": (item.get("metadata") or {}).get("category"),
                 "profile": (process.get("classification") or {}).get("profile"),
                 "score": analysis.get("score"), "summary": body[:8000],
-                "body": body, "body_is_plain": not bool(primary),
+                "body": body, "body_is_plain": not bool(primary) or (
+                    len(blocks) == 1 and blocks[0].get("id") == "article" and blocks[0].get("title") == ""
+                ),
                 "reason": (analysis.get("reason") or "")[:8000] if not has_localized_items else "",
                 "blocks": blocks[:30], "citations": artifact.get("sources", [])[:50],
             })
@@ -493,8 +561,10 @@ def create_app(root, token):
             settings = store.settings(db)
             schedule = json.loads(db.execute("SELECT spec FROM schedule WHERE id=1").fetchone()[0])
             media_search = store.media_search(db)
+            enrichment_mode = store.enrichment_mode(db)
             Store.event(db, "BACKUP_EXPORTED")
-        return {"archive": backup.pack({"horizon": REVISION, "settings": settings, "schedule": schedule, "media_search": media_search}, body.password)}
+        return {"archive": backup.pack({"horizon": REVISION, "settings": settings, "schedule": schedule,
+                                        "media_search": media_search, "enrichment_mode": enrichment_mode}, body.password)}
 
     @app.post("/v1/restore")
     def restore(body: ImportBackup):
@@ -521,6 +591,9 @@ def create_app(root, token):
                        (restored_schedule.model_dump_json(), next_run(restored_schedule, time.time())))
             if isinstance(payload.get("media_search"), bool):
                 db.execute("INSERT OR REPLACE INTO media_options VALUES (1, ?)", (int(payload["media_search"]),))
+            mode = payload.get("enrichment_mode")
+            if mode in ("on_demand", "automatic"):
+                Store.set_enrichment_mode(db, mode)
             Store.event(db, "BACKUP_RESTORED")
             return public(store.settings(db))
 

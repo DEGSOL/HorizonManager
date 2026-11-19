@@ -377,8 +377,20 @@ internal fun NewsScreen(
             if (selected != null) {
                 val id = selected.getString("id")
                 val flag = flags[id]
-                ArticleDialog(selected, flag, { model.flag(id, save = flag?.saved != true) },
-                    { model.flag(id, read = flag?.read != true) }) { openId = "" }
+                val serverId = panel.server?.id.orEmpty()
+                val run = panel.selectedRun
+                val language = panel.language
+                ArticleDialog(
+                    selected, flag, { model.flag(id, save = flag?.saved != true) },
+                    { model.flag(id, read = flag?.read != true) },
+                    contextContent = {
+                        key(serverId, run, language, id) {
+                            ArticleContext(selected) { submit ->
+                                model.getArticleContext(serverId, run, id, language, submit)
+                            }
+                        }
+                    },
+                ) { openId = "" }
             }
         }
     }

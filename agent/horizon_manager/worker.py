@@ -7,17 +7,18 @@ import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from tempfile import TemporaryDirectory
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 from urllib.parse import quote, quote_plus
 
 from rich.console import Console
 from src.ai.client import create_ai_client
-from src.mcp.horizon_adapter import dicts_to_items
+from src.mcp.horizon_adapter import dicts_to_items, items_to_dicts
 from src.mcp.service import HorizonPipelineService
 from src.models import Config
 
+from .article_context import context_artifacts, find_item, read_json
 from .configuration import DIGEST_LANGUAGES, only_source, write_profiles
-from .localized_digest import complete_artifacts, save_localized
+from .localized_digest import atomic_text, base_artifacts, complete_artifacts, save_localized
 
 STATE = Path(os.environ["HM_STATE"])
 WIRE = sys.stdout
@@ -96,6 +97,49 @@ def fetch_report(result, secrets):
             send("source", source=redact_source(name, secrets), status="failure", count=0, reason=category(reason))
 
 
+async def enrich_article(work, data, settings, params):
+    runs = STATE / "runs"
+    path = runs / params["run"]
+    raw = find_item(path, params["article"], ("filtered", "enriched", "localized"))
+    if raw is None:
+        raise ValueError("ARTICLE_UNKNOWN")
+    item = dicts_to_items([raw])[0]
+    profile_id = item.processing.classification.profile if item.processing and item.processing.classification else None
+    snapshot = read_json(path / "enrichment_profiles.json", {})
+    profile = snapshot.get(profile_id) or next(
+        (value for value in settings["profiles"] if value["definition"]["id"] == profile_id), None)
+    if profile is None:
+        raise ValueError("ARTICLE_PROFILE_UNAVAILABLE")
+
+    # The main worker owns data/config.json. Give this task its own config
+    # while retaining Horizon's shared read-only access to digest history.
+    with TemporaryDirectory(prefix="article-profiles-", dir=STATE) as profiles, NamedTemporaryFile(
+            mode="w", encoding="utf-8", prefix="article-", suffix=".json", dir=data) as cfg:
+        write_profiles(Path(profiles), [profile])
+        config = settings["config"]
+        effective = {**config,
+                     "ai": {**config["ai"], "languages": list(DIGEST_LANGUAGES)},
+                     "processing": {"profiles_dir": profiles, "default_profile": profile_id}}
+        # Preserve the account selected by the original Horizon pipeline,
+        # without writing back to the immutable run's metadata.
+        if effective["ai"].get("provider") == "openai-chatgpt":
+            meta = read_json(path / "meta.json", {})
+            if meta.get("chatgpt_account"):
+                effective["ai"]["chatgpt_account"] = meta["chatgpt_account"]
+        json.dump(effective, cfg, ensure_ascii=False)
+        cfg.flush()
+        service = HorizonPipelineService(runs, Console(file=sys.stderr, quiet=True))
+        context, _, _ = service._build_context(str(work), cfg.name, sources=None)
+        phase("enrich")
+        outcome = await service._orchestrator(context).enrich_items([item])
+        if outcome.status != "success":
+            raise ValueError(category(outcome.failures.get(item.id, "")))
+        artifacts = context_artifacts(items_to_dicts([item])[0])
+        if not artifacts:
+            raise ValueError("ARTICLE_CONTEXT_EMPTY")
+        send("result", data={"context": artifacts})
+
+
 async def main(payload, job):
     settings, params, kind = payload["settings"], payload["params"], payload["kind"]
     config = settings["config"]
@@ -114,6 +158,9 @@ async def main(payload, job):
     work = STATE / "horizon"
     data = work / "data"
     data.mkdir(parents=True, exist_ok=True)
+    if kind == "article_context":
+        await enrich_article(work, data, settings, params)
+        return
     cfg = data / "config.json"
     if kind == "source":
         config = only_source(config, params["source"], params.get("bucket"), params.get("index"))
@@ -171,7 +218,8 @@ async def main(payload, job):
             kept = filtered["kept"]
             stage = "filtered"
             enriched_count = 0
-            if kept:
+            mode = payload.get("enrichment_mode", "on_demand")
+            if kept and mode == "automatic":
                 phase("enrich")
                 enriched = await service.enrich_items(job, **common)
                 if enriched["status"] == "failure":
@@ -184,9 +232,18 @@ async def main(payload, job):
             orchestrator = service._orchestrator(context)
             today = datetime.now(timezone.utc).date().isoformat()
             items = dicts_to_items(service.run_store.load_items(job, stage))
-            await complete_artifacts(items, DIGEST_LANGUAGES, context.config.ai)
+            if mode == "automatic":
+                await complete_artifacts(items, DIGEST_LANGUAGES, context.config.ai)
+            else:
+                base_artifacts(items, DIGEST_LANGUAGES)
+            run_path = store_dir / job
+            assigned = {item.processing.classification.profile for item in items if item.processing.classification}
+            atomic_text(run_path / "enrichment_profiles.json", json.dumps({
+                profile["definition"]["id"]: profile for profile in settings["profiles"]
+                if profile["definition"]["id"] in assigned
+            }, ensure_ascii=False))
             summaries = await save_localized(
-                store_dir / job, items, DIGEST_LANGUAGES, checked_raw=raw, date=today,
+                run_path, items, DIGEST_LANGUAGES, checked_raw=raw, date=today,
                 config=context.config, names=service._profiles(context).names,
             )
             phase("save")
@@ -194,7 +251,7 @@ async def main(payload, job):
                 orchestrator.storage.save_daily_summary(today, markdown, language=language)
             send("result", data={
                 "raw": raw, "scored": scored["scored"], "kept": kept, "enriched": enriched_count,
-                "languages": list(summaries), "stage": stage, "fetch_status": status,
+                "languages": list(summaries), "stage": stage, "fetch_status": status, "enrichment_mode": mode,
             })
             email = orchestrator.email_manager if context.config.email and context.config.email.enabled else None
             webhook = orchestrator.webhook_notifier

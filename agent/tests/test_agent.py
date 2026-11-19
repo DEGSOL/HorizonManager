@@ -5,6 +5,7 @@ import os
 import threading
 import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from email.utils import format_datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -16,6 +17,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 
 from horizon_manager.api import REVISION, create_app
+from horizon_manager.article_context import key_for
 from horizon_manager.backup import pack, unpack
 from horizon_manager.configuration import only_source
 from horizon_manager.push import enqueue_digest, signed_message, valid_endpoint
@@ -58,6 +60,10 @@ class Fixture(BaseHTTPRequestHandler):
         if request.get("model") == "slow":
             time.sleep(3)
         instructions = request["messages"][0]["content"]
+        if "Artifact" in instructions or "blocks" in instructions:
+            self.server.enrichment_requests.append(request["messages"])
+            if request.get("model") == "slow-context":
+                time.sleep(3)
         if "Return OK as plain text." in instructions:
             content = "OK"
         elif "Artifact" in instructions or "blocks" in instructions:
@@ -103,6 +109,7 @@ class AgentTests(unittest.TestCase):
         cls.thread.join()
 
     def setUp(self):
+        self.fixture.enrichment_requests = []
         self.temp = TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
@@ -173,6 +180,7 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(response.json()["config"]["ai"]["model"], "fixture-model")
 
     def test_pipeline_partial_rss_failure_digest_and_logs(self):
+        self.assertEqual(self.client.put("/v1/enrichment-mode", json={"mode": "automatic"}).status_code, 200)
         response = self.client.put("/v1/config", json=self.config())
         self.assertEqual(response.status_code, 200, response.text)
         id = uuid4()
@@ -186,6 +194,8 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(job["result"]["fetch_status"], "partial_failure")
         self.assertEqual(job["result"]["raw"], 1)
         self.assertEqual(job["result"]["kept"], 1)
+        self.assertEqual(job["result"]["enriched"], 1)
+        self.assertEqual(len(self.fixture.enrichment_requests), 3)
         digests = self.client.get("/v1/digests").json()
         self.assertEqual([d["id"] for d in digests], [id.hex])
         self.assertEqual(digests[0]["ready_at"], job["result"]["ready_at"])
@@ -202,12 +212,88 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(ru["items"][0]["reason"], "")
         self.assertEqual(zh["items"][0]["body"], "简体中文新闻正文。")
         self.assertIn("Fixture engineering article", result["markdown"])
+        article_key = key_for(result["items"][0]["id"])
+        path = f"/v1/article-context/{id.hex}/{article_key}/ru"
+        self.assertEqual(self.client.post(path, json={}).json()["state"], "ready")
+        self.assertEqual(len(self.fixture.enrichment_requests), 3)
         self.assertTrue(any("Broken fixture" in str(event) and "HTTP_NOT_FOUND" in str(event) for event in events))
         self.assertNotIn(SECRET, json.dumps(events))
         with Store(self.root).db() as db:
             self.assertEqual(db.execute("SELECT state FROM jobs WHERE id=?", (id.hex,)).fetchone()[0], "success")
 
+    def test_on_demand_selected_article_is_deduplicated_and_does_not_rebuild_digest(self):
+        self.assertEqual(self.client.get("/v1/status").json()["enrichment_mode"], "on_demand")
+        self.assertEqual(self.client.put("/v1/config", json=self.config()).status_code, 200)
+        run = uuid4()
+        self.client.post("/v1/jobs", json={"id": str(run)})
+        digest_job = self.wait(run.hex)
+        self.assertEqual(digest_job["state"], "success")
+        self.assertEqual(digest_job["result"]["stage"], "filtered")
+        self.assertEqual(digest_job["result"]["enriched"], 0)
+        self.assertEqual(self.fixture.enrichment_requests, [])
+        directory = self.root / "runs" / run.hex
+        self.assertFalse((directory / "enriched_items.json").exists())
+        digest_path = f"/v1/digests/{run.hex}/en"
+        digest = self.client.get(digest_path).json()
+        self.assertEqual(digest["items"][0]["body"], "Fixture AI summary")
+        self.assertEqual(digest["items"][0]["url"], "https://example.org/fixture-news")
+        self.assertIn("Fixture AI summary", digest["markdown"])
+
+        # A second candidate in the saved stage must not be sent to Horizon.
+        filtered = directory / "filtered_items.json"
+        items = json.loads(filtered.read_bytes())
+        other = {**items[0], "id": "other-saved-id", "title": "Unselected sentinel"}
+        filtered.write_text(json.dumps([*items, other]))
+        article = f"/v1/article-context/{run.hex}/{key_for(items[0]['id'])}"
+        self.assertEqual(self.client.get(f"{article}/en").json(), {"state": "idle"})
+        self.assertEqual(self.client.post(f"{article}/en", json={},
+                                         headers={"Authorization": "Bearer wrong"}).status_code, 401)
+        choice = lambda language: self.client.post(f"{article}/{language}", json={}).json()
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            replies = list(pool.map(choice, ("en", "ru")))
+        self.assertEqual(replies[0]["job"], replies[1]["job"])
+        self.assertEqual(self.wait(replies[0]["job"])["state"], "success")
+        replies = [self.client.get(f"{article}/{lang}").json() for lang in ("en", "ru", "zh")]
+        self.assertEqual([reply["state"] for reply in replies], ["ready"] * 3)
+        self.assertEqual(replies[1]["blocks"][0]["content"], "Текст новости на русском языке.")
+        self.assertEqual(len(self.fixture.enrichment_requests), 3)
+        self.assertNotIn("Unselected sentinel", json.dumps(self.fixture.enrichment_requests))
+        self.assertEqual(self.client.get(digest_path).json(), digest)
+        self.assertEqual(self.client.get("/v1/digest-marker").json(), {"id": run.hex})
+        # Fetch through a separately created agent instance with the same state.
+        restarted = TestClient(create_app(self.root, TOKEN), headers=AUTH)
+        self.assertEqual(restarted.post(f"{article}/ru", json={}).json(), replies[1])
+        self.assertEqual(len(self.fixture.enrichment_requests), 3)
+        journal = self.client.get("/v1/events").json()
+        self.assertTrue(any(x["code"] == "ARTICLE_CONTEXT_STARTED" for x in journal))
+        self.assertTrue(any(x["code"] == "ARTICLE_CONTEXT_SUCCESS" and x["detail"].endswith(" ms") for x in journal))
+
+    def test_article_timeout_can_be_retried_without_regenerating_the_issue(self):
+        self.assertEqual(self.client.put("/v1/config", json=self.config()).status_code, 200)
+        run = uuid4()
+        self.client.post("/v1/jobs", json={"id": str(run)})
+        self.assertEqual(self.wait(run.hex)["state"], "success")
+        item = self.client.get(f"/v1/digests/{run.hex}/en").json()["items"][0]
+        path = f"/v1/article-context/{run.hex}/{key_for(item['id'])}/en"
+        config = self.config("slow-context")
+        config["revision"] = self.client.get("/v1/config").json()["revision"]
+        self.assertEqual(self.client.put("/v1/config", json=config).status_code, 200)
+        with patch("horizon_manager.jobs.CONTEXT_TIMEOUT", 0.5):
+            first = self.client.post(path, json={}).json()["job"]
+            self.assertEqual(self.wait(first)["state"], "timeout")
+        self.assertEqual(self.client.get(path).json(), {"state": "failed", "code": "TIMEOUT"})
+        self.assertTrue(any(x["code"] == "ARTICLE_CONTEXT_TIMEOUT" and x["detail"].endswith(" · TIMEOUT")
+                            for x in self.client.get("/v1/events").json()))
+        config["config"]["ai"]["model"] = "fixture-model"
+        config["revision"] += 1
+        self.assertEqual(self.client.put("/v1/config", json=config).status_code, 200)
+        second = self.client.post(path, json={}).json()["job"]
+        self.assertNotEqual(second, first)
+        self.assertEqual(self.wait(second)["state"], "success")
+        self.assertEqual(self.client.get(path).json()["state"], "ready")
+
     def test_translate_an_existing_digest(self):
+        self.client.put("/v1/enrichment-mode", json={"mode": "automatic"})
         self.assertEqual(self.client.put("/v1/config", json=self.config()).status_code, 200)
         run = uuid4()
         self.client.post("/v1/jobs", json={"id": str(run)})
@@ -310,7 +396,12 @@ class AgentTests(unittest.TestCase):
                 break
             time.sleep(0.1)
         self.assertTrue(jobs)
-        self.assertEqual(self.wait(jobs[0]["id"])["state"], "success")
+        job = self.wait(jobs[0]["id"])
+        self.assertEqual(job["state"], "success")
+        self.assertEqual(job["result"]["stage"], "filtered")
+        self.assertEqual(job["result"]["enrichment_mode"], "on_demand")
+        self.assertEqual(self.fixture.enrichment_requests, [])
+        self.assertFalse(any(event["code"] == "enrich" for event in self.client.get("/v1/events").json()))
         self.assertEqual(self.client.get("/v1/schedule").json()["spec"]["hours"], 2)
 
     def test_restart_marks_inflight_without_resubmission(self):

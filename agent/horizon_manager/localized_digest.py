@@ -58,6 +58,18 @@ class LocalizedSummarizer(DailySummarizer):
         return "\n\n".join(parts) + "\n\n---\n\n"
 
 
+def base_artifacts(items, languages):
+    for item in items:
+        analysis = item.processing.analysis
+        summary = analysis.summary.strip() if analysis else ""
+        body = summary or (split_content(item.content).main or "").strip() or item.title
+        for language in languages:
+            item.processing.artifacts[language] = ContentArtifact(
+                language=language, title=normalize_language(item.title, language),
+                blocks=[ContentBlock(id="article", title="", content=normalize_language(body, language), primary=True)],
+            )
+
+
 async def complete_artifacts(items, languages, config):
     missing = [(item, language) for item in items for language in languages
                if not any(block.primary and block.content.strip() for block in

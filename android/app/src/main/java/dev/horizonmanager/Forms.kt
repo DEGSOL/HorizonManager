@@ -121,12 +121,15 @@ internal fun sample(root: JSONObject, raw: JSONObject, required: Boolean = false
 }
 
 @Composable
-internal fun Choice(title: String, entries: List<String>, current: String, change: (String) -> Unit, labelOf: (String) -> String = ::label) {
+internal fun Choice(
+    title: String, entries: List<String>, current: String, change: (String) -> Unit,
+    labelOf: (String) -> String = ::label, enabled: Boolean = true,
+) {
     var expanded by remember { mutableStateOf(false) }
     Column {
         Text(title, style = MaterialTheme.typography.labelMedium)
-        TextButton(onClick = { expanded = true }) { Text(labelOf(current.ifBlank { ui(R.string.ui_select) })) }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        TextButton(onClick = { expanded = true }, enabled = enabled) { Text(labelOf(current.ifBlank { ui(R.string.ui_select) })) }
+        DropdownMenu(expanded = expanded && enabled, onDismissRequest = { expanded = false }) {
             entries.forEach { value ->
                 DropdownMenuItem(text = { Text(labelOf(value)) }, onClick = { change(value); expanded = false })
             }

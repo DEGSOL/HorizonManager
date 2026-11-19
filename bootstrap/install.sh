@@ -141,7 +141,7 @@ if [[ "$upgrading" == yes ]]; then
        cmp -s "$staging/agent/requirements.txt" "$app/agent/requirements.txt"; then
         reuse_runtime=yes
     fi
-    agent_get 'jobs?limit=1' | python3 -c 'import json,sys; assert not any(x["state"] in {"queued","running"} for x in json.load(sys.stdin))' || block 30
+    agent_get 'jobs?limit=100&active=true' | python3 -c 'import json,sys; assert not any(x["state"] in {"queued","running"} for x in json.load(sys.stdin))' || block 30
     rollback_dir="$candidate_rollback"
     systemctl stop horizon-manager.service
 fi
