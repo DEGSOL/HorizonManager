@@ -32,6 +32,7 @@ internal data class Panel(
     val schema: JSONObject = JSONObject(),
     val archive: List<JSONObject> = emptyList(),
     val hasMoreDigests: Boolean = false,
+    val manuallyArchived: Set<String> = emptySet(),
     val collectionHours: Int = DEFAULT_COLLECTION_HOURS,
     val jobs: List<JSONObject> = emptyList(),
     val sourceHistory: List<JSONObject> = emptyList(),
@@ -65,6 +66,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     private var installOperation = ""
     private var archiveRun: String? = null
     private val archiveSettings = app.getSharedPreferences("digest_windows", 0)
+    private val archiveOverrides = app.getSharedPreferences("digest_archive_overrides", 0)
 
     init {
         viewModelScope.launch {
@@ -169,7 +171,8 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         selection.edit().putString("id", server.id).apply()
         archiveRun = null
         mutable.update { Panel(servers = it.servers, server = server, ready = server.installed,
-            collectionHours = archiveSettings.getInt(server.id, DEFAULT_COLLECTION_HOURS)) }
+            collectionHours = archiveSettings.getInt(server.id, DEFAULT_COLLECTION_HOURS),
+            manuallyArchived = archiveOverrides.getStringSet(server.id, emptySet()).orEmpty().toSet()) }
         observe(server.id)
         operation {
             loadArchive(server)
@@ -332,7 +335,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         val history = JSONArray(cached).objects()
         if (state.value.server?.id != server.id) return
         mutable.update { it.copy(archive = history, hasMoreDigests = history.size >= DIGEST_PAGE_SIZE) }
-        history.firstOrNull()?.let { latest ->
+        state.value.feedIssue(history)?.let { latest ->
             val lang = digestLanguage(latest.getJSONArray("languages").strings()) ?: return@let
             val run = latest.getString("id")
             showCached(server.id, run, lang)
@@ -357,7 +360,9 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             val panel = state.value
             val run = archiveRun
             val older = panel.archive.drop(DIGEST_PAGE_SIZE)
-            val selected = if (run == null) head.firstOrNull() else head.find { it.optString("id") == run }
+            val config = if (everything || panel.config.length() == 0) api.get("config") as JSONObject else panel.config
+            val hours = collectionHours(config, panel.collectionHours)
+            val selected = if (run == null) panel.feedIssue(head + older, hours) else head.find { it.optString("id") == run }
                 ?: if (older.any { it.optString("id") == run }) {
                     runCatching { api.get("digest-info/$run") as JSONObject }
                         .getOrElse { older.find { it.optString("id") == run } }
@@ -369,7 +374,6 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             val digest = if ((everything || changed) && selected != null && lang != null) {
                 api.get("digests/${selected.getString("id")}/$lang") as JSONObject
             } else null
-            val config = if (everything || panel.config.length() == 0) api.get("config") as JSONObject else panel.config
             val schema = if (panel.schema.length() == 0) api.get("schema") as JSONObject else panel.schema
             val schedule = if (everything || panel.schedule.length() == 0) api.get("schedule") as JSONObject else panel.schedule
             val sources = (api.get("sources") as JSONArray).objects()
@@ -379,8 +383,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             Refresh(archive, hasMore, digest, config, schema, schedule, sources, status, jobs, events)
         }
         cache.saveArchive(CachedArchive(server.id, JSONArray(remote.archive).toString()))
-        val hours = remote.config.optJSONObject("config")?.optJSONObject("collection")
-            ?.optInt("time_window_hours", DEFAULT_COLLECTION_HOURS)?.coerceIn(1, 8760) ?: state.value.collectionHours
+        val hours = collectionHours(remote.config, state.value.collectionHours)
         if (hours != state.value.collectionHours) archiveSettings.edit().putInt(server.id, hours).apply()
         if (remote.digest != null) {
             val (run, lang) = saveDigest(server.id, remote.digest, 0)
@@ -401,6 +404,10 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         }
     }
 
+
+    private fun collectionHours(config: JSONObject, fallback: Int) =
+        config.optJSONObject("config")?.optJSONObject("collection")
+            ?.optInt("time_window_hours", DEFAULT_COLLECTION_HOURS)?.coerceIn(1, 8760) ?: fallback
 
     private data class Refresh(
         val archive: List<JSONObject>, val hasMore: Boolean, val digest: JSONObject?, val config: JSONObject, val schema: JSONObject,
@@ -443,13 +450,23 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             }
             return
         }
-        val latest = state.value.archive.firstOrNull()
+        val latest = state.value.feedIssue()
         if (latest?.optString("id") == state.value.selectedRun && state.value.markdown.isNotEmpty()) return
         operation {
             val run = latest?.optString("id")
             val lang = latest?.optJSONArray("languages")?.strings()?.let(::digestLanguage)
             if (run == null || lang == null || !showCached(server.id, run, lang)) synchronize(server, everything = true)
         }
+    }
+
+    fun archiveDigest(run: String) {
+        val panel = state.value
+        val server = panel.server ?: return
+        if (run in panel.manuallyArchived || panel.archive.none { it.optString("id") == run }) return
+        val archived = panel.manuallyArchived + run
+        archiveOverrides.edit().putStringSet(server.id, archived).apply()
+        mutable.update { it.copy(manuallyArchived = archived) }
+        if (state.value.feedIssue() != null) showFeed()
     }
 
     fun openArchive(issue: JSONObject) {
@@ -522,9 +539,8 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
 
     fun flag(article: String, save: Boolean? = null, read: Boolean? = null) {
         val server = state.value.server ?: return
-        val old = state.value.flags.find { it.article == article }
         viewModelScope.launch {
-            cache.saveFlag(ArticleFlag(server.id, article, save ?: old?.saved ?: false, read ?: old?.read ?: false))
+            cache.updateFlag(server.id, article, save, read)
         }
     }
 

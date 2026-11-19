@@ -6,10 +6,22 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.MailOutline
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.json.JSONArray
@@ -19,8 +31,9 @@ import java.util.Locale
 
 @Composable
 internal fun Archive(issues: List<JSONObject>, hours: Int, hasMore: Boolean, busy: Boolean,
-                     open: (JSONObject) -> Unit, loadMore: () -> Unit) {
-    Text(ui(R.string.archive_period, hours), style = MaterialTheme.typography.bodyMedium,
+                     hasEarlyArchives: Boolean, open: (JSONObject) -> Unit, loadMore: () -> Unit) {
+    Text(ui(if (hasEarlyArchives) R.string.archive_period_with_manual else R.string.archive_period, hours),
+        style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (issues.isEmpty()) {
         Tile { Text(ui(R.string.empty_archive), style = MaterialTheme.typography.titleMedium) }
@@ -40,14 +53,32 @@ internal fun Archive(issues: List<JSONObject>, hours: Int, hasMore: Boolean, bus
 internal fun News(panel: Panel, model: ManagerModel, issue: JSONObject?, ai: () -> Unit, sources: () -> Unit,
                   feedFilters: NewsFilters? = null) {
     val filters = feedFilters ?: remember { NewsFilters() }
+    val isFeed = feedFilters != null
+    val preparing = isFeed && digestIsPreparing(panel.jobs)
+    val palette = LocalHorizonPalette.current
     var open by remember(panel.selectedRun, panel.language) { mutableStateOf<JSONObject?>(null) }
     var markdown by remember(panel.selectedRun) { mutableStateOf(false) }
+    if (preparing) {
+        Tile {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                CircularProgressIndicator(Modifier.size(28.dp), color = palette.link, strokeWidth = 2.5.dp)
+                Column {
+                    Text(ui(R.string.digest_preparing), style = MaterialTheme.typography.titleMedium)
+                    Text(ui(R.string.digest_preparing_detail), style = MaterialTheme.typography.bodySmall, color = palette.muted)
+                }
+            }
+        }
+    }
     if (issue == null) {
+        if (preparing) return
         Tile {
             Text(ui(if (panel.archive.isEmpty()) R.string.ui_your_first_digest else R.string.empty_current_digest),
                 style = MaterialTheme.typography.titleLarge)
-            Text(if (panel.archive.isEmpty()) ui(R.string.ui_news_will_appear_here_after_horizon)
-                else ui(R.string.current_period, panel.collectionHours))
+            Text(when {
+                panel.archive.isEmpty() -> ui(R.string.ui_news_will_appear_here_after_horizon)
+                panel.manuallyArchived.isNotEmpty() -> ui(R.string.previous_issues_in_archive)
+                else -> ui(R.string.current_period, panel.collectionHours)
+            })
             if (panel.archive.isEmpty()) Text(ui(R.string.ui_choose_an_ai_model_in_settings))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { model.submit() }, enabled = !panel.busy) { Text(ui(R.string.ui_start_collection)) }
@@ -62,31 +93,48 @@ internal fun News(panel: Panel, model: ManagerModel, issue: JSONObject?, ai: () 
     }
     val run = issue.getString("id")
     val languages = issue.getJSONArray("languages").strings()
-    if (panel.selectedRun != run || panel.markdown.isEmpty()) {
-        Tile {
+    val loaded = panel.selectedRun == run && panel.markdown.isNotEmpty()
+    val needsTranslation = languages.isNotEmpty() && digestLocale() !in languages
+    val flags = panel.flags.associateBy { it.article }
+    Tile(accented = isFeed) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(ui(R.string.ui_digest), style = MaterialTheme.typography.titleMedium)
+                Text(localTime(digestTime(issue)), style = MaterialTheme.typography.bodyMedium, color = palette.muted)
+            }
+            if (isFeed) {
+                GlassIconAction(Icons.Default.Refresh, ui(R.string.ui_sync), enabled = !panel.busy) {
+                    model.refresh()
+                }
+                val issueIcon = if (markdown) Icons.AutoMirrored.Filled.List else ImageVector.vectorResource(R.drawable.ic_issue)
+                GlassIconAction(issueIcon, ui(if (markdown) R.string.ui_back_to_articles else R.string.ui_full_digest),
+                    enabled = loaded, active = markdown) { markdown = !markdown }
+                GlassIconAction(ImageVector.vectorResource(R.drawable.ic_archive_down), ui(R.string.archive_early)) {
+                    model.archiveDigest(run)
+                }
+            }
+        }
+        if (!loaded) {
             if (panel.busy || panel.problem.isEmpty()) LinearProgressIndicator(Modifier.fillMaxWidth())
             Text(ui(R.string.issue_not_loaded))
-            TextButton(onClick = { model.refresh() }, enabled = !panel.busy) { Text(ui(R.string.ui_sync)) }
         }
-        return
-    }
-    val flags = panel.flags.associateBy { it.article }
-    Tile {
-        Text(ui(R.string.ui_digest), style = MaterialTheme.typography.titleMedium)
-        Text(localTime(digestTime(issue)), style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (languages.isNotEmpty() && digestLocale() !in languages) {
+        if (!isFeed || (loaded && needsTranslation)) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (loaded && needsTranslation) {
                 TextButton(onClick = { model.translateDigest(panel.selectedRun) },
                     enabled = !panel.busy && panel.jobs.none { it.optString("state") in setOf("queued", "running") }) {
                     Text(ui(R.string.ui_translate_issue))
                 }
             }
-            TextButton(onClick = { model.refresh() }) { Text(ui(R.string.ui_sync)) }
-            TextButton(onClick = { markdown = !markdown }) { Text(if (markdown) ui(R.string.ui_back_to_articles) else ui(R.string.ui_full_digest)) }
+            if (!isFeed) {
+                TextButton(onClick = { model.refresh() }, enabled = !panel.busy) { Text(ui(R.string.ui_sync)) }
+                if (loaded) TextButton(onClick = { markdown = !markdown }) {
+                    Text(ui(if (markdown) R.string.ui_back_to_articles else R.string.ui_full_digest))
+                }
+            }
         }
     }
-    if (languages.isNotEmpty() && digestLocale() !in languages) {
+    if (!loaded) return
+    if (needsTranslation) {
         Text(ui(R.string.ui_this_issue_is_shown_in_an), style = MaterialTheme.typography.bodySmall)
     }
     if (markdown) {
@@ -94,7 +142,7 @@ internal fun News(panel: Panel, model: ManagerModel, issue: JSONObject?, ai: () 
         else Tile { Text(ui(R.string.ui_the_markdown_digest_has_not_been)) }
         return
     }
-    if (feedFilters == null) {
+    if (!isFeed) {
         ValueField(ui(R.string.ui_search_downloaded_articles), filters.query, { filters.query = it })
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(filters.saved, { filters.saved = !filters.saved }, { Text(ui(R.string.ui_saved)) })
@@ -139,17 +187,36 @@ internal fun News(panel: Panel, model: ManagerModel, issue: JSONObject?, ai: () 
         val flag = flags[id]
         val source = article.optString("source")
         val category = article.optString("category").takeUnless { it == "null" }.orEmpty()
+        val sourceLabel = listOf(source, category, article.optString("profile").takeUnless { it == "null" }.orEmpty())
+            .filter { it.isNotBlank() }.joinToString(" · ")
         Tile(Modifier.clickable { open = article; model.flag(id, read = true) }) {
-            Text(listOf(source, category, article.optString("profile").takeUnless { it == "null" }.orEmpty())
-                .filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (isFeed) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(sourceLabel, Modifier.weight(1f), style = MaterialTheme.typography.labelLarge,
+                        color = palette.muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    val saved = flag?.saved == true
+                    val read = flag?.read == true
+                    GlassIconAction(if (saved) Icons.Default.Star else Icons.Outlined.Star,
+                        ui(if (saved) R.string.remove_from_favorites else R.string.add_to_favorites), active = saved) {
+                        model.flag(id, save = !saved)
+                    }
+                    GlassIconAction(if (read) Icons.Default.Check else Icons.Outlined.MailOutline,
+                        ui(if (read) R.string.mark_unread else R.string.ui_mark_as_read), active = read) {
+                        model.flag(id, read = !read)
+                    }
+                }
+            } else {
+                Text(sourceLabel, style = MaterialTheme.typography.labelLarge, color = palette.muted)
+            }
             Text(article.optString("title"), style = MaterialTheme.typography.titleLarge)
             val summary = article.optString("summary")
-            if (summary.isNotBlank()) Text(summary, maxLines = 5, overflow = TextOverflow.Ellipsis)
+            if (summary.isNotBlank()) Text(summary, maxLines = if (isFeed) 3 else 5, overflow = TextOverflow.Ellipsis,
+                color = if (isFeed) palette.muted else palette.text)
             Text(localTime(article.optString("time")) +
                 article.optDouble("score").takeIf { it.isFinite() }?.let { " · %.1f / 10".format(Locale.ROOT, it) }.orEmpty(),
-                style = MaterialTheme.typography.bodySmall)
-            FlowRow {
+                style = MaterialTheme.typography.bodySmall,
+                color = if (isFeed) lerp(palette.muted, Color(0xFF969696), 0.55f) else palette.text)
+            if (!isFeed) FlowRow {
                 TextButton(onClick = { model.flag(id, save = flag?.saved != true) }) { Text(if (flag?.saved == true) ui(R.string.ui_saved_2e21e4) else ui(R.string.ui_save)) }
                 TextButton(onClick = { model.flag(id, read = flag?.read != true) }) { Text(if (flag?.read == true) ui(R.string.ui_read) else ui(R.string.ui_mark_as_read)) }
             }

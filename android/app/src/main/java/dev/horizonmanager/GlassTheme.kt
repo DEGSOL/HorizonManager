@@ -3,6 +3,10 @@ package dev.horizonmanager
 import android.os.Build
 import androidx.annotation.StringRes
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -48,7 +52,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -162,7 +165,7 @@ internal fun GlassLayout(tabs: List<HorizonTab>, selection: Int, showTabs: Boole
         if (showTabs) {
             Box(Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
                 .padding(start = 20.dp, end = 20.dp, bottom = 12.dp)
-                .widthIn(max = 490.dp).fillMaxWidth()) {
+                .widthIn(max = 300.dp).fillMaxWidth()) {
                 GlassTabs(tabs, selection, scene, contentOrigin, select)
             }
         }
@@ -189,32 +192,38 @@ private fun GlassTabs(tabs: List<HorizonTab>, selection: Int, scene: GraphicsLay
                 translate(offset.x, offset.y) { drawLayer(scene) }
             })
         }
-        Row(
+        BoxWithConstraints(
             Modifier.fillMaxWidth()
                 .background(Brush.verticalGradient(listOf(
-                    palette.panel(0.37f).copy(alpha = 0.77f), palette.panel(0.19f).copy(alpha = 0.88f), palette.panel(0.13f).copy(alpha = 0.93f),
+                    palette.panel(0.37f).copy(alpha = 0.76f), palette.panel(0.19f).copy(alpha = 0.88f),
+                    palette.panel(0.13f).copy(alpha = 0.94f),
                 )))
-                .border(1.dp, palette.glassEdge(), CircleShape).selectableGroup().padding(5.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .border(1.dp, palette.glassEdge(), CircleShape).padding(5.dp),
         ) {
-            tabs.forEachIndexed { index, tab ->
-                val selected = selection == index
-                val tint by animateColorAsState(if (selected) palette.text else palette.muted, label = "tab tint")
-                val highlight by animateColorAsState(if (selected) palette.tint.copy(alpha = 0.40f) else Color.Transparent, label = "tab glass")
-                Column(
-                    Modifier.weight(1f).heightIn(min = 57.dp).clip(CircleShape)
-                        .background(Brush.verticalGradient(listOf(highlight, highlight.copy(alpha = highlight.alpha * 0.42f))))
-                        .then(if (selected) Modifier.border(1.dp, Brush.verticalGradient(listOf(
-                            palette.link.copy(alpha = 0.53f), palette.tint.copy(alpha = 0.30f), palette.link.copy(alpha = 0.25f),
-                        )), CircleShape) else Modifier)
-                        .selectable(selected, role = Role.Tab, onClick = { select(index) })
-                        .padding(horizontal = 4.dp, vertical = 6.dp),
-                    verticalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterVertically),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Icon(tab.icon, null, Modifier.size(22.dp), tint = if (selected) palette.link else tint)
-                    Text(stringResource(tab.label), color = tint, style = MaterialTheme.typography.labelMedium,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val slot = maxWidth / tabs.size
+            val position by animateDpAsState(slot * selection,
+                animationSpec = spring(dampingRatio = 0.78f, stiffness = Spring.StiffnessMediumLow),
+                label = "tab selection")
+            Box(Modifier.align(Alignment.CenterStart).offset(x = position)
+                .width(slot).height(51.dp).padding(horizontal = 3.dp)
+                .clip(CircleShape)
+                .background(Brush.verticalGradient(listOf(
+                    palette.tint.copy(alpha = 0.60f), palette.tint.copy(alpha = 0.22f),
+                )))
+                .border(1.dp, palette.glassEdge(), CircleShape))
+            Row(Modifier.fillMaxWidth().selectableGroup(), verticalAlignment = Alignment.CenterVertically) {
+                tabs.forEachIndexed { index, tab ->
+                    val selected = selection == index
+                    val tint by animateColorAsState(if (selected) palette.link else palette.muted, label = "tab tint")
+                    val scale by animateFloatAsState(if (selected) 1.12f else 1f,
+                        animationSpec = spring(dampingRatio = 0.58f, stiffness = Spring.StiffnessMedium), label = "tab scale")
+                    Box(Modifier.weight(1f).height(51.dp).clip(CircleShape)
+                        .selectable(selected, role = Role.Tab, onClick = { select(index) }),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(tab.icon, stringResource(tab.label),
+                            Modifier.size(24.dp).graphicsLayer { scaleX = scale; scaleY = scale }, tint = tint)
+                    }
                 }
             }
         }
@@ -222,12 +231,14 @@ private fun GlassTabs(tabs: List<HorizonTab>, selection: Int, scene: GraphicsLay
 }
 
 @Composable
-internal fun Tile(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+internal fun Tile(modifier: Modifier = Modifier, accented: Boolean = false,
+                  content: @Composable ColumnScope.() -> Unit) {
     val shape = MaterialTheme.shapes.large
     val palette = LocalHorizonPalette.current
+    val face = if (accented) listOf(palette.panel(0.42f), palette.panel(0.26f), palette.panel(0.16f))
+        else listOf(palette.panel(0.16f), palette.panel(0.08f), palette.panel(0.04f))
     Column(
-        Modifier.fillMaxWidth().clip(shape)
-            .background(Brush.linearGradient(listOf(palette.panel(0.16f), palette.panel(0.08f), palette.panel(0.04f))))
+        Modifier.fillMaxWidth().clip(shape).background(Brush.linearGradient(face))
             .border(0.8.dp, Brush.linearGradient(listOf(palette.link.copy(alpha = 0.23f), palette.tint.copy(alpha = 0.16f))), shape)
             .then(modifier).padding(horizontal = 17.dp, vertical = 15.dp),
         verticalArrangement = Arrangement.spacedBy(9.dp),

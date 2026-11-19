@@ -12,6 +12,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 import org.json.JSONArray
 import org.json.JSONObject
@@ -117,8 +118,17 @@ internal interface Cache {
     @Query("SELECT * FROM ArticleFlag WHERE server = :server")
     fun flags(server: String): Flow<List<ArticleFlag>>
 
+    @Query("SELECT * FROM ArticleFlag WHERE server = :server AND article = :article")
+    suspend fun articleFlag(server: String, article: String): ArticleFlag?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveFlag(flag: ArticleFlag)
+
+    @Transaction
+    suspend fun updateFlag(server: String, article: String, saved: Boolean?, read: Boolean?) {
+        val previous = articleFlag(server, article)
+        saveFlag(ArticleFlag(server, article, saved ?: previous?.saved ?: false, read ?: previous?.read ?: false))
+    }
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveEvents(events: List<LocalEvent>)

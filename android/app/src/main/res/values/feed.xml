@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="archive_early">Move digest to archive</string>
+    <string name="archive_period_with_manual">Issues older than %1$d h and issues moved here manually.</string>
+    <string name="previous_issues_in_archive">Previous issues are available in the archive.</string>
+    <string name="digest_preparing">Preparing the digest</string>
+    <string name="digest_preparing_detail">The new issue will be ready soon.</string>
+    <string name="add_to_favorites">Add to favorites</string>
+    <string name="remove_from_favorites">Remove from favorites</string>
+    <string name="mark_unread">Mark as unread</string>
+</resources>

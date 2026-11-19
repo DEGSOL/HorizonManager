@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="archive_early">Переместить дайджест в архив</string>
+    <string name="archive_period_with_manual">Выпуски старше %1$d ч и выпуски, добавленные вручную.</string>
+    <string name="previous_issues_in_archive">Предыдущие выпуски доступны в архиве.</string>
+    <string name="digest_preparing">Дайджест подготавливается</string>
+    <string name="digest_preparing_detail">Новый выпуск скоро будет готов.</string>
+    <string name="add_to_favorites">Добавить в избранное</string>
+    <string name="remove_from_favorites">Убрать из избранного</string>
+    <string name="mark_unread">Отметить как непрочитанное</string>
+</resources>

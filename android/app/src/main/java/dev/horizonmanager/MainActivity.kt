@@ -17,8 +17,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -27,7 +25,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -75,9 +74,10 @@ class MainActivity : ComponentActivity() {
 private const val ARCHIVE = 0
 private const val FEED = 1
 private const val SETTINGS = 2
-private val tabs = listOf(
-    HorizonTab(R.string.archive, Icons.Default.Menu),
-    HorizonTab(R.string.feed, Icons.AutoMirrored.Filled.List),
+@Composable
+private fun mainTabs() = listOf(
+    HorizonTab(R.string.archive, ImageVector.vectorResource(R.drawable.ic_archive)),
+    HorizonTab(R.string.feed, ImageVector.vectorResource(R.drawable.ic_issue)),
     HorizonTab(R.string.settings, Icons.Default.Settings),
 )
 
@@ -104,8 +104,9 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
             }
         }
     }
-    val issues = remember(panel.archive, panel.collectionHours, now) {
-        splitDigests(panel.archive, panel.collectionHours, now)
+    val tabs = mainTabs()
+    val issues = remember(panel.archive, panel.collectionHours, panel.manuallyArchived, now) {
+        splitDigests(panel.archive, panel.collectionHours, now, panel.manuallyArchived)
     }
     val openedIssue = issues.archive.find { it.optString("id") == archiveIssue }
     fun openSettings(page: String) {
@@ -169,13 +170,17 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     }
     val running = panel.jobs.firstOrNull()?.optString("state") in setOf("running", "queued")
     val checkingInstall = panel.probe["install"] == "running" || panel.updatingAgent
-    LaunchedEffect(currentServer?.id, panel.ready, running, checkingInstall, lifecycle, locale) {
+    val watchingFeed = panel.ready && tab == FEED && !manageServers && !editServer
+    val preparing = digestIsPreparing(panel.jobs)
+    LaunchedEffect(currentServer?.id, panel.ready, running, checkingInstall, watchingFeed, preparing, lifecycle, locale) {
         androidx.lifecycle.Lifecycle.State.RESUMED.let { minimum ->
             lifecycle.repeatAt(minimum) {
                 while (true) {
                     delay(when {
                         checkingInstall -> 5_000
+                        watchingFeed && preparing -> 5_000
                         running -> 12_000
+                        watchingFeed -> 15_000
                         else -> 60_000
                     })
                     if (panel.ready) model.refresh(quiet = true)
@@ -291,7 +296,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                         { backupDialog = "export" }, { fileAction = "backup"; input.launch(arrayOf("*/*")) }, ::openSettings)
                     configPage.isNotEmpty() -> SettingsForm(panel, model, configPage, { configPage = "" })
                     tab == ARCHIVE && openedIssue != null -> News(panel, model, openedIssue, { openSettings("ai") }, { openSettings("sources") })
-                    tab == ARCHIVE -> Archive(issues.archive, panel.collectionHours, panel.hasMoreDigests, panel.busy, { issue ->
+                    tab == ARCHIVE -> Archive(issues.archive, panel.collectionHours, panel.hasMoreDigests, panel.busy, panel.manuallyArchived.isNotEmpty(), { issue ->
                         archiveIssue = issue.getString("id")
                         model.openArchive(issue)
                     }, model::loadMoreDigests)

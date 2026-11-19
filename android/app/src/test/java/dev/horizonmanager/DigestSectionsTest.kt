@@ -2,7 +2,9 @@ package dev.horizonmanager
 
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
 
@@ -30,6 +32,34 @@ class DigestSectionsTest {
         val sections = splitDigests(listOf(legacy, current), 6, Instant.parse("2026-11-19T12:00:00Z"))
         assertEquals(current, sections.feed)
         assertEquals(listOf(legacy), sections.archive)
+    }
+
+    @Test
+    fun manuallyArchivedIssueNeverWinsTheFeedSelection() {
+        val now = Instant.parse("2026-11-19T12:00:00Z")
+        val recent = issue("newest", "2026-11-19T11:10:00Z")
+        val previous = issue("previous", "2026-11-19T10:00:00Z")
+        val old = issue("old", "2026-11-18T11:00:00Z")
+        val all = listOf(recent, previous, old)
+        val first = splitDigests(all, 24, now, setOf("newest"))
+        assertEquals(previous, first.feed)
+        assertEquals(listOf(recent, old), first.archive)
+        val second = splitDigests(all, 24, now, setOf("newest", "previous"))
+        assertNull(second.feed)
+        assertEquals(all, second.archive)
+    }
+
+    @Test
+    fun preparingIndicatorTracksOnlyUnfinishedDigestRuns() {
+        val run = JSONObject().put("kind", "run").put("state", "queued")
+        assertTrue(digestIsPreparing(listOf(run)))
+        assertTrue(digestIsPreparing(listOf(run.put("state", "running"))))
+        assertFalse(digestIsPreparing(listOf(run.put("state", "failed"))))
+        assertFalse(digestIsPreparing(listOf(run.put("state", "success"))))
+        assertFalse(digestIsPreparing(listOf(run.put("state", "running")
+            .put("result", JSONObject().put("ready_at", "2026-11-19T11:10:00Z")))))
+        run.remove("result")
+        assertFalse(digestIsPreparing(listOf(run.put("kind", "localize"))))
     }
 
     private fun issue(id: String, ready: String): JSONObject =

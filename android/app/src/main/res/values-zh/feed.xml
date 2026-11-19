@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="archive_early">将简报移到归档</string>
+    <string name="archive_period_with_manual">超过 %1$d 小时的简报和手动归档的简报。</string>
+    <string name="previous_issues_in_archive">往期简报可在归档中查看。</string>
+    <string name="digest_preparing">正在准备简报</string>
+    <string name="digest_preparing_detail">新一期简报即将就绪。</string>
+    <string name="add_to_favorites">添加到收藏</string>
+    <string name="remove_from_favorites">取消收藏</string>
+    <string name="mark_unread">标为未读</string>
+</resources>

@@ -12,11 +12,11 @@ android {
     compileSdk = 36
     buildToolsVersion = "36.0.0"
     defaultConfig {
-        applicationId = "dev.horizonmanager"
+        applicationId = "dev.horizonmanager.mobile"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.1.4"
+        versionCode = 6
+        versionName = "0.1.5"
         buildConfigField("String", "AGENT_VERSION", "\"0.1.3\"")
     }
     buildFeatures { compose = true; buildConfig = true }
