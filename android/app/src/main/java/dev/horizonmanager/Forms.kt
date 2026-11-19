@@ -152,6 +152,7 @@ internal fun EditValue(
     profileIds: List<String>,
     title: String = label(field),
     expandedByDefault: Boolean = false,
+    showHeader: Boolean = true,
 ) {
     if (field in fixedPaths) return
     val schema = definition(root, raw)
@@ -189,8 +190,8 @@ internal fun EditValue(
                 }
                 type == "object" -> {
                     var shown by remember { mutableStateOf(expandedByDefault) }
-                    TextButton(onClick = { shown = !shown }) { Text(if (shown) ui(R.string.ui_collapse, title) else title) }
-                    if (shown) {
+                    if (showHeader) TextButton(onClick = { shown = !shown }) { Text(if (shown) ui(R.string.ui_collapse, title) else title) }
+                    Reveal(!showHeader || shown) {
                         val obj = current as? JSONObject ?: JSONObject()
                         val known = typed.optJSONObject("properties")
                         Column(Modifier.padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -222,25 +223,27 @@ internal fun EditValue(
                     val array = current as? JSONArray ?: JSONArray()
                     val entry = typed.optJSONObject("items")
                     TextButton(onClick = { shown = !shown }) { Text("$title · ${array.length()}${if (shown) " ▴" else " ▾"}") }
-                    if (shown) Column(Modifier.padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                        for (index in 0 until array.length()) {
-                            val item = array.get(index)
-                            key(index) {
-                                EditValue(root, entry ?: inferred(item), field + "_item", item,
-                                    { new -> onChange(JSONArray(array.toString()).put(index, new)) }, profileIds,
-                                    (item as? JSONObject)?.optString("name")?.ifBlank { null }
-                                        ?: (item as? JSONObject)?.optString("channel")?.ifBlank { null } ?: "${index + 1}. $title")
-                                Row {
-                                    TextButton(onClick = { onChange(JSONArray(array.toString()).apply { remove(index) }) }) { Text(ui(R.string.ui_remove)) }
-                                    TextButton(enabled = index > 0, onClick = {
-                                        onChange(JSONArray(array.toString()).put(index, array.get(index - 1)).put(index - 1, array.get(index)))
-                                    }) { Text(ui(R.string.ui_move_up)) }
+                    Reveal(shown) {
+                        Column(Modifier.padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                            for (index in 0 until array.length()) {
+                                val item = array.get(index)
+                                key(index) {
+                                    EditValue(root, entry ?: inferred(item), field + "_item", item,
+                                        { new -> onChange(JSONArray(array.toString()).put(index, new)) }, profileIds,
+                                        (item as? JSONObject)?.optString("name")?.ifBlank { null }
+                                            ?: (item as? JSONObject)?.optString("channel")?.ifBlank { null } ?: "${index + 1}. $title")
+                                    Row {
+                                        TextButton(onClick = { onChange(JSONArray(array.toString()).apply { remove(index) }) }) { Text(ui(R.string.ui_remove)) }
+                                        TextButton(enabled = index > 0, onClick = {
+                                            onChange(JSONArray(array.toString()).put(index, array.get(index - 1)).put(index - 1, array.get(index)))
+                                        }) { Text(ui(R.string.ui_move_up)) }
+                                    }
                                 }
                             }
+                            TextButton(onClick = {
+                                onChange(JSONArray(array.toString()).put(sample(root, entry ?: JSONObject().put("type", "string"), true)))
+                            }) { Text(ui(R.string.ui_add_559a87)) }
                         }
-                        TextButton(onClick = {
-                            onChange(JSONArray(array.toString()).put(sample(root, entry ?: JSONObject().put("type", "string"), true)))
-                        }) { Text(ui(R.string.ui_add_559a87)) }
                     }
                 }
                 type in listOf("integer", "number") -> {

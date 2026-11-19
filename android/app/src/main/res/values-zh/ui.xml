@@ -1,5 +1,4 @@
 <resources>
-    <string name="ui_file_saved">"文件已保存"</string>
     <string name="ui_could_not_write_the_file">"无法写入文件"</string>
     <string name="ui_the_file_is_damaged_too_large">"文件已损坏、过大或格式不受支持"</string>
     <string name="ui_confirm_action">"确认操作"</string>
@@ -15,7 +14,6 @@
     <string name="ui_close">"关闭"</string>
     <string name="ui_password">"密码"</string>
     <string name="ui_continue">"继续"</string>
-    <string name="ui_ssh_settings_verified">"SSH 设置已验证"</string>
     <string name="ui_verify_the_vps_key">"验证 VPS 密钥"</string>
     <string name="ui_the_vps_key_has_changed">"VPS 密钥已变更"</string>
     <string name="ui_compare_the_fingerprint_with_the_one">"信任密钥前，请将指纹与 VPS 控制台中显示的指纹核对。"</string>
@@ -118,27 +116,12 @@
     <string name="ui_the_response_was_in_an_unexpected">"响应格式不符合预期。"</string>
     <string name="ui_operation_details">"操作详情"</string>
     <string name="ui_horizon_manager_installed">"Horizon Manager 已安装"</string>
-    <string name="ui_installation_job_sent_to_the_vps">"安装任务已发送到 VPS"</string>
-    <string name="ui_agent_update_started">"代理更新已开始"</string>
-    <string name="ui_agent_updated">"代理已更新"</string>
-    <string name="ui_job_queued">"任务已加入队列"</string>
-    <string name="ui_digest_translation_queued">"简报翻译已加入队列"</string>
-    <string name="ui_stop_requested">"已请求停止"</string>
     <string name="ui_settings_saved_on_the_vps_the">"设置已保存到 VPS。目录密钥无法保存到手机。"</string>
-    <string name="ui_settings_saved_add_the_following_secrets">"设置已保存。请添加密钥：%1$s"</string>
-    <string name="ui_settings_saved">"设置已保存"</string>
-    <string name="ui_configuration_copied">"配置已复制"</string>
-    <string name="ui_previous_configuration_restored">"旧版配置已恢复"</string>
     <string name="ui_enabled_sources">"已启用的来源：%1$s"</string>
     <string name="ui_select_an_ai_model">" · 请选择 AI 模型"</string>
     <string name="ui_add">" · 请添加 %1$s"</string>
     <string name="ui_the_installed_revision_matches_the_main">"已安装版本与 GitHub 的 main 分支一致"</string>
     <string name="ui_github_revision_verified_for_this_build">"GitHub · %1$s。此版本已验证的修订 · %2$s"</string>
-    <string name="ui_schedule_saved_on_the_vps">"计划已保存到 VPS"</string>
-    <string name="ui_encrypted_backup_ready_to_save">"加密备份可保存"</string>
-    <string name="ui_backup_restored">"备份已恢复"</string>
-    <string name="ui_connection_settings_saved">"连接设置已保存"</string>
-    <string name="ui_agent_restarted">"代理已重启"</string>
     <string name="ui_by_score">"按评分"</string>
     <string name="ui_your_first_digest">"首份简报"</string>
     <string name="ui_news_will_appear_here_after_horizon">"Horizon 处理来源后，新闻将显示在这里。"</string>
@@ -154,7 +137,6 @@
     <string name="ui_back_to_articles">"返回文章"</string>
     <string name="ui_full_digest">"完整简报"</string>
     <string name="ui_this_issue_is_shown_in_an">"此期简报暂以已有语言显示。"</string>
-    <string name="ui_the_markdown_digest_has_not_been">"Markdown 简报尚未下载到手机。"</string>
     <string name="ui_search_downloaded_articles">"搜索已下载的文章"</string>
     <string name="ui_saved">"收藏"</string>
     <string name="ui_unread">"未读"</string>
@@ -165,7 +147,6 @@
     <string name="ui_by_title">"按标题"</string>
     <string name="ui_no_items_passed_the_horizon_filters">"此期没有内容通过 Horizon 筛选。"</string>
     <string name="ui_no_downloaded_articles_match_your_filters">"没有已下载的文章符合筛选条件。"</string>
-    <string name="ui_saved_2e21e4">"★ 已收藏"</string>
     <string name="ui_save">"☆ 收藏"</string>
     <string name="ui_read">"已读"</string>
     <string name="ui_mark_as_read">"标记为已读"</string>
@@ -253,11 +234,8 @@
     <string name="ui_settings_and_the_archive_will_stay">"设置和存档将保留在 VPS 上。如需单独的 sudo 密码，请输入。"</string>
     <string name="ui_push_notification_service">"推送通知服务"</string>
     <string name="ui_install_ntfy_and_enable_unifiedpush_in">"请安装 ntfy，并在其设置中启用 UnifiedPush。"</string>
-    <string name="ui_notification_registration_requested">"已请求注册推送通知"</string>
     <string name="ui_model_api_address_and_request_limits">"模型、API 地址和请求限制"</string>
     <string name="ui_prompts_scoring_criteria_and_output_blocks">"提示词、评分标准和输出区块"</string>
-    <string name="ui_quotas_order_and_grouping">"配额、顺序和分组"</string>
-    <string name="ui_collection_time_window">"收集时间范围"</string>
     <string name="ui_email_and_webhook">"邮件和 Webhook"</string>
     <string name="ui_days_intervals_and_time_zone">"日期、间隔和时区"</string>
     <string name="ui_ai_keys_and_integration_tokens">"AI 密钥和集成令牌"</string>
@@ -272,7 +250,6 @@
     <string name="ui_for_faster_alerts_connect_ntfy_through">"要更快收到通知，请通过 UnifiedPush 连接 ntfy。否则 Android 大约每 30 分钟检查一次 VPS。"</string>
     <string name="ui_connect_push_notifications">"连接推送通知"</string>
     <string name="ui_push_notifications_connected">"推送通知已连接"</string>
-    <string name="ui_push_notifications_disconnected">"推送通知已断开"</string>
     <string name="ui_disconnect_push_notifications">"断开推送通知"</string>
     <string name="ui_save_connection">"保存连接"</string>
     <string name="ui_ssh_settings">"SSH 设置"</string>

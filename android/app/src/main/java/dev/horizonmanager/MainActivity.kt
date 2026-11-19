@@ -12,6 +12,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -34,6 +41,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -74,6 +82,11 @@ class MainActivity : ComponentActivity() {
 private const val ARCHIVE = 0
 private const val FEED = 1
 private const val SETTINGS = 2
+
+private data class Screen(val page: String, val issueId: String = "") {
+    val reading get() = page == "feed" || page == "archived"
+}
+
 @Composable
 private fun mainTabs() = listOf(
     HorizonTab(R.string.archive, ImageVector.vectorResource(R.drawable.ic_archive)),
@@ -92,6 +105,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     var tab by rememberSaveable(currentServer?.id) { mutableIntStateOf(FEED) }
     var manageServers by remember { mutableStateOf(false) }
     var editServer by remember { mutableStateOf(false) }
+    var editVerification by remember { mutableStateOf("") }
     var configPage by rememberSaveable(currentServer?.id) { mutableStateOf("") }
     val feedFilters = remember(currentServer?.id) { NewsFilters() }
     var archiveIssue by rememberSaveable(currentServer?.id) { mutableStateOf("") }
@@ -109,6 +123,20 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         splitDigests(panel.archive, panel.collectionHours, now, panel.manuallyArchived)
     }
     val openedIssue = issues.archive.find { it.optString("id") == archiveIssue }
+    val archiveFilters = remember(currentServer?.id, archiveIssue) { NewsFilters() }
+    LaunchedEffect(editServer, panel.sshVerification) {
+        if (editServer && panel.sshVerification.isNotEmpty() && panel.sshVerification != editVerification) {
+            editServer = false
+            if (!panel.ready) tab = FEED
+        }
+    }
+    LaunchedEffect(tab, openedIssue?.optString("id"), currentServer?.id) {
+        if (tab == ARCHIVE && openedIssue != null) {
+            snapshotFlow { panel.busy }.first { !it }
+            val issue = openedIssue
+            model.openArchive(issue)
+        }
+    }
     fun openSettings(page: String) {
         tab = SETTINGS
         configPage = page
@@ -128,19 +156,24 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     var exportDoc by remember { mutableStateOf("") }
     var fileAction by remember { mutableStateOf("") }
     var restoreFile by remember { mutableStateOf("") }
-    var fileMessage by remember { mutableStateOf("") }
+    val errors = remember { SnackbarHostState() }
+    LaunchedEffect(panel.userProblem) {
+        val problem = panel.userProblem.takeIf(String::isNotEmpty) ?: return@LaunchedEffect
+        errors.showSnackbar(errorText(problem), duration = SnackbarDuration.Long)
+        model.consumeProblem(problem)
+    }
     var backupDialog by remember { mutableStateOf("") }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     val output = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         val content = exportDoc
         exportDoc = ""
         if (uri != null) scope.launch {
-            fileMessage = withContext(Dispatchers.IO) {
+            val saved = withContext(Dispatchers.IO) {
                 runCatching {
                     ctx.contentResolver.openOutputStream(uri)?.use { it.write(content.toByteArray()) } ?: error("output")
-                    ui(R.string.ui_file_saved)
-                }.getOrDefault(ui(R.string.ui_could_not_write_the_file))
+                }.isSuccess
             }
+            if (!saved) errors.showSnackbar(ui(R.string.ui_could_not_write_the_file))
         }
     }
     val input = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -156,8 +189,10 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                     "profiles" -> model.saveConfig(panel.config.getJSONObject("config"), JSONArray(content))
                     "config" -> model.importConfig(JSONObject(content))
                 }
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
             } catch (_: Exception) {
-                fileMessage = ui(R.string.ui_the_file_is_damaged_too_large)
+                errors.showSnackbar(ui(R.string.ui_the_file_is_damaged_too_large))
             }
         }
     }
@@ -194,7 +229,11 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         when {
             manageServers -> manageServers = false
             editServer -> editServer = false
-            configPage.isNotEmpty() -> configPage = ""
+            configPage.isNotEmpty() -> configPage = when (configPage) {
+                "journal", "transfer", "secrets", "advanced" -> "maintenance"
+                "delivery" -> "alerts"
+                else -> ""
+            }
             showingSetupSettings -> tab = FEED
             tab == ARCHIVE && archiveIssue.isNotEmpty() -> archiveIssue = ""
         }
@@ -204,7 +243,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     BackHandler(canGoBack, ::goBack)
 
     confirm?.let { (description, action) ->
-        AlertDialog(onDismissRequest = { confirm = null }, title = { Text(ui(R.string.ui_confirm_action)) },
+        HorizonAlertDialog(onDismissRequest = { confirm = null }, title = { Text(ui(R.string.ui_confirm_action)) },
             text = { Text(description) }, confirmButton = {
                 Button(onClick = { confirm = null; action() }) { Text(ui(R.string.ui_confirm)) }
             }, dismissButton = { TextButton(onClick = { confirm = null }) { Text(ui(R.string.ui_cancel)) } })
@@ -230,90 +269,127 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
             if (chosen == FEED) model.showFeed()
         }
     }) {
-        val section = if (panel.ready) tab else -1
-        val heading = when {
-            manageServers -> ui(R.string.ui_servers)
-            configPage == "theme" -> ui(R.string.theme)
-            showingSetupSettings -> ui(R.string.settings)
-            !panel.ready || editServer -> "Horizon Manager"
-            configPage == "journal" -> ui(R.string.journal)
-            configPage == "sources" -> ui(R.string.sources)
-            configPage == "control" -> ui(R.string.control)
-            configPage == "schedule" -> ui(R.string.ui_schedule)
-            configPage == "delivery" -> ui(R.string.ui_delivery)
-            configPage == "secrets" -> ui(R.string.ui_secrets)
-            configPage == "advanced" -> ui(R.string.ui_advanced_settings)
-            configPage == "profiles" -> ui(R.string.ui_processing_profiles)
-            configPage.isNotEmpty() -> label(configPage)
-            tab == ARCHIVE && openedIssue != null -> ui(R.string.ui_digest)
-            else -> ui(tabs[tab].label)
+        val destination = when {
+            manageServers -> Screen("servers")
+            configPage == "theme" -> Screen("theme")
+            editServer -> Screen("ssh")
+            showingSetupSettings -> Screen("settings")
+            !panel.ready -> Screen("setup")
+            configPage.isNotEmpty() -> Screen(configPage)
+            tab == ARCHIVE && openedIssue != null -> Screen("archived", archiveIssue)
+            tab == ARCHIVE -> Screen("archive")
+            tab == SETTINGS -> Screen("settings")
+            else -> Screen("feed")
         }
-        key(section, configPage, openedIssue?.optString("id"), manageServers, editServer, currentServer?.id, locale) {
-            Column(Modifier.align(Alignment.TopCenter).widthIn(max = 780.dp).fillMaxSize()
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
-                .verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(13.dp)) {
-                val action: (@Composable () -> Unit)? = when {
-                    canGoBack -> ({ GlassToolbarButton(ui(R.string.ui_back), ::goBack) })
-                    !panel.ready -> ({ GlassToolbarButton(ui(R.string.settings)) { openSettings("") } })
-                    tab == FEED -> ({
-                        val matches = issues.feed?.optString("id") == panel.selectedRun
-                        NewsToolbar(feedFilters, if (matches) articleProfiles(panel.articles) else emptyList(),
+        AnimatedContent(destination,
+            modifier = Modifier.align(Alignment.TopCenter).widthIn(max = 780.dp).fillMaxSize(),
+            transitionSpec = {
+                (fadeIn(tween(220, delayMillis = 40)) + slideInVertically(tween(260)) { it / 45 }) togetherWith
+                    (fadeOut(tween(130)) + slideOutVertically(tween(160)) { -it / 65 })
+            },
+            label = "screen",
+        ) { screen ->
+            val archived = screen.page == "archived"
+            val displayedIssue = if (archived) issues.archive.find { it.optString("id") == screen.issueId } else issues.feed
+            val filters = if (archived) archiveFilters else feedFilters
+            val screenBack = screen.page !in setOf("feed", "archive", "setup", "settings") ||
+                (screen.page == "settings" && showingSetupSettings)
+            val heading = when (screen.page) {
+                "servers" -> ui(R.string.ui_servers)
+                "theme" -> ui(R.string.theme)
+                "setup", "ssh" -> "Horizon Manager"
+                "settings" -> ui(R.string.settings)
+                "journal" -> ui(R.string.journal)
+                "sources" -> ui(R.string.sources)
+                "control" -> ui(R.string.control)
+                "schedule" -> ui(R.string.ui_schedule)
+                "delivery" -> ui(R.string.settings_server_delivery)
+                "alerts" -> ui(R.string.settings_notifications)
+                "connection" -> ui(R.string.ui_connection)
+                "maintenance" -> ui(R.string.ui_maintenance)
+                "transfer" -> ui(R.string.settings_transfer)
+                "secrets" -> ui(R.string.ui_secrets)
+                "advanced" -> ui(R.string.ui_advanced_settings)
+                "profiles" -> ui(R.string.ui_processing_profiles)
+                "digest" -> ui(R.string.settings_digest_rules)
+                "ai" -> ui(R.string.settings_ai_model)
+                "archived" -> ui(R.string.ui_digest)
+                "archive" -> ui(R.string.archive)
+                "feed" -> ui(R.string.feed)
+                else -> label(screen.page)
+            }
+            key(currentServer?.id, locale) {
+                Column(Modifier.fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+                    .verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(13.dp)) {
+                    val action: (@Composable () -> Unit)? = when {
+                        screenBack -> ({ GlassToolbarButton(ui(R.string.ui_back), ::goBack) })
+                        screen.page == "setup" -> ({ GlassToolbarButton(ui(R.string.settings)) { openSettings("") } })
+                        else -> null
+                    }
+                    val toolbar: (@Composable () -> Unit)? = if (screen.reading) ({
+                        val matches = displayedIssue?.optString("id") == panel.selectedRun
+                        NewsToolbar(filters, if (matches) articleProfiles(panel.articles) else emptyList(),
                             enabled = matches && panel.markdown.isNotEmpty())
-                    })
-                    else -> null
-                }
-                Header(heading, currentServer?.name.orEmpty(), action, feedToolbar = tab == FEED && panel.ready && !canGoBack)
-                if (panel.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-                if (panel.problem.isNotEmpty()) Message(errorText(panel.problem), panel.problem, true) { model.dismissMessage() }
-                if (panel.notice.isNotEmpty()) Message(panel.notice, "") { model.dismissMessage() }
-                if (fileMessage.isNotEmpty()) Message(fileMessage, "") { fileMessage = "" }
-                when {
-                    manageServers -> {
-                        panel.servers.forEach { server ->
-                            GlassSettingRow(server.name, "${server.user} @ ${server.host} · ${server.port}", enabled = !panel.busy) {
-                                model.select(server)
-                                configPage = ""
-                                archiveIssue = ""
-                                tab = FEED
-                                manageServers = false
-                                editServer = false
+                    }) else null
+                    Header(heading, currentServer?.name.orEmpty(), action, toolbar)
+                    Reveal(panel.busy) { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+                    when (screen.page) {
+                        "servers" -> {
+                            panel.servers.forEach { server -> key(server.id) {
+                                GlassSettingRow(server.name, "${server.user} @ ${server.host} · ${server.port}", enabled = !panel.busy) {
+                                    model.select(server)
+                                    configPage = ""
+                                    archiveIssue = ""
+                                    tab = FEED
+                                    manageServers = false
+                                }
+                            } }
+                            Button(onClick = { model.add(); manageServers = false; tab = FEED }, enabled = !panel.busy) {
+                                Text(ui(R.string.ui_add_server))
                             }
                         }
-                        Button(onClick = { model.add(); manageServers = false; editServer = true }) { Text(ui(R.string.ui_add_server)) }
-                    }
-                    configPage == "theme" -> ThemeSettings(preset, selectTheme)
-                    showingSetupSettings -> {
-                        if (panel.servers.isNotEmpty()) ServerSettingsRow { manageServers = true }
-                        GlassSettingRow(ui(R.string.theme), ui(preset.title)) { openSettings("theme") }
-                    }
-                    !panel.ready || editServer -> Setup(panel, model, editServer) { editServer = false }
-                    configPage == "journal" -> Journal(panel, { description, action -> confirm = description to action }, model) {
-                        exportDoc = it; output.launch("horizon-journal.json")
-                    }
-                    configPage == "sources" -> Sources(panel, model)
-                    configPage == "control" -> Control(panel, model, { description, action -> confirm = description to action },
-                        { backupDialog = "export" }, { fileAction = "backup"; input.launch(arrayOf("*/*")) }, ::openSettings)
-                    configPage.isNotEmpty() -> SettingsForm(panel, model, configPage, { configPage = "" })
-                    tab == ARCHIVE && openedIssue != null -> News(panel, model, openedIssue, { openSettings("ai") }, { openSettings("sources") })
-                    tab == ARCHIVE -> Archive(issues.archive, panel.collectionHours, panel.hasMoreDigests, panel.busy, panel.manuallyArchived.isNotEmpty(), { issue ->
-                        archiveIssue = issue.getString("id")
-                        model.openArchive(issue)
-                    }, model::loadMoreDigests)
-                    tab == FEED -> News(panel, model, issues.feed, { openSettings("ai") }, { openSettings("sources") }, feedFilters)
-                    else -> {
-                        ServerSettingsRow { manageServers = true }
-                        GlassSettingRow(ui(R.string.theme), ui(preset.title)) { openSettings("theme") }
-                        Settings(panel, model, ::openSettings, { editServer = true },
-                        { toImport -> fileAction = toImport; input.launch(arrayOf("*/*")) },
-                        { filename, content -> exportDoc = content; output.launch(filename) },
-                        { if (Build.VERSION.SDK_INT >= 33) permission.launch(Manifest.permission.POST_NOTIFICATIONS) },
+                        "theme" -> ThemeSettings(preset, selectTheme)
+                        "setup", "ssh" -> Setup(panel, model, forceEdit = screen.page == "ssh")
+                        "journal" -> Journal(panel, { description, action -> confirm = description to action }, model) {
+                            exportDoc = it; output.launch("horizon-journal.json")
+                        }
+                        "sources" -> Sources(panel, model)
+                        "control" -> Control(panel, model, { description, action -> confirm = description to action }, ::openSettings)
+                        "connection" -> ConnectionSettings(panel, model) {
+                            editVerification = panel.sshVerification
+                            editServer = true
+                        }
+                        "alerts" -> NotificationSettings(panel, model,
+                            { if (Build.VERSION.SDK_INT >= 33) permission.launch(Manifest.permission.POST_NOTIFICATIONS) },
+                            { openSettings("delivery") })
+                        "maintenance" -> ServerMaintenance(panel, model, ::openSettings)
+                        "transfer" -> TransferSettings(panel, model,
+                            { backupDialog = "export" }, { fileAction = "backup"; input.launch(arrayOf("*/*")) },
+                            { toImport -> fileAction = toImport; input.launch(arrayOf("*/*")) },
+                            { filename, content -> exportDoc = content; output.launch(filename) },
                             { description, action -> confirm = description to action })
+                        "archive" -> Archive(issues.archive, panel.collectionHours, panel.hasMoreDigests, panel.busy,
+                            panel.manuallyArchived.isNotEmpty(), { issue ->
+                                archiveIssue = issue.getString("id")
+                            }, model::loadMoreDigests)
+                        "archived", "feed" -> {
+                            if (!archived || displayedIssue != null) News(panel, model, displayedIssue,
+                                { openSettings("ai") }, { openSettings("sources") }, filters, archived)
+                        }
+                        "settings" -> SettingsHome(panel, preset, ::openSettings) { manageServers = true }
+                        else -> SettingsForm(panel, model, screen.page)
                     }
+                    if (showTabs) Spacer(Modifier.height(79.dp))
+                    Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
                 }
-                if (showTabs) Spacer(Modifier.height(79.dp))
-                Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
             }
+        }
+        SnackbarHost(errors, modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
+            .padding(horizontal = 16.dp, vertical = if (showTabs) 84.dp else 18.dp)) { data ->
+            val theme = LocalHorizonPalette.current
+            Snackbar(data, containerColor = theme.panel(0.40f), contentColor = theme.text)
         }
     }
 }
@@ -323,49 +399,30 @@ private suspend fun androidx.lifecycle.LifecycleOwner.repeatAt(
 ) = this.lifecycle.repeatOnLifecycle(minimum, block)
 
 @Composable
-private fun ServerSettingsRow(open: () -> Unit) {
-    GlassSettingRow(ui(R.string.ui_servers), ui(R.string.servers_description), open = open)
-}
-
-@Composable
-private fun Header(heading: String, server: String, actions: (@Composable () -> Unit)?, feedToolbar: Boolean) {
-    val title: @Composable () -> Unit = {
-        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            if (server.isNotEmpty()) Text(server, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelLarge)
-            Text(heading, style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.onBackground)
-        }
-    }
+private fun Header(heading: String, server: String, action: (@Composable () -> Unit)?, toolbar: (@Composable () -> Unit)?) {
     BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 8.dp)) {
-        val fontScale = LocalConfiguration.current.fontScale
-        if (feedToolbar && maxWidth < (250 + 101 * fontScale).dp) {
-            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                title()
-                Box(Modifier.align(Alignment.End)) { actions?.invoke() }
-            }
-        } else {
+        val minToolbarWidth = if (action == null) 250 else 342
+        val split = toolbar != null && maxWidth < (minToolbarWidth + 101 * LocalConfiguration.current.fontScale).dp
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.weight(1f)) { title() }
-                actions?.invoke()
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    if (server.isNotEmpty()) Text(server, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelLarge)
+                    Text(heading, style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.onBackground)
+                }
+                action?.invoke()
+                if (!split) toolbar?.invoke()
             }
+            if (split) Box(Modifier.align(Alignment.End)) { toolbar?.invoke() }
         }
-    }
-}
-
-@Composable
-private fun Message(text: String, code: String, error: Boolean = false, dismiss: () -> Unit) {
-    Tile {
-        Text(text, color = if (error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
-        if (code.isNotEmpty()) Text(code, style = MaterialTheme.typography.labelSmall)
-        TextButton(onClick = dismiss) { Text(ui(R.string.ui_close)) }
     }
 }
 
 @Composable
 internal fun PasswordDialog(title: String, detail: String, minimum: Int = 0, close: () -> Unit, proceed: (String) -> Unit) {
     var password by remember { mutableStateOf("") }
-    AlertDialog(onDismissRequest = close, title = { Text(title) }, text = {
+    HorizonAlertDialog(onDismissRequest = close, title = { Text(title) }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
             Text(detail)
             PasswordField(ui(R.string.ui_password), password) { password = it }
@@ -382,7 +439,7 @@ internal fun PasswordField(title: String, value: String, change: (String) -> Uni
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Setup(panel: Panel, model: ManagerModel, forceEdit: Boolean, done: () -> Unit) {
+private fun Setup(panel: Panel, model: ManagerModel, forceEdit: Boolean) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val server = panel.server
@@ -406,11 +463,8 @@ private fun Setup(panel: Panel, model: ManagerModel, forceEdit: Boolean, done: (
             keyError = credential.isEmpty()
         }
     }
-    LaunchedEffect(panel.ready, panel.notice) {
-        if (panel.ready && (!forceEdit || panel.notice == ui(R.string.ui_ssh_settings_verified))) done()
-    }
     panel.hostConfirmation?.let { key ->
-        AlertDialog(onDismissRequest = { model.confirmHost(false) },
+        HorizonAlertDialog(onDismissRequest = { model.confirmHost(false) },
             title = { Text(if (key.previous.isBlank()) ui(R.string.ui_verify_the_vps_key) else ui(R.string.ui_the_vps_key_has_changed)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -434,7 +488,7 @@ private fun Setup(panel: Panel, model: ManagerModel, forceEdit: Boolean, done: (
             PasswordDialog(ui(R.string.ui_install_horizon), ui(R.string.ui_enter_the_sudo_password_leave_the, text),
                 close = { approveInstall = false }) { password -> approveInstall = false; model.install(password) }
         } else {
-            AlertDialog(onDismissRequest = { approveInstall = false }, title = { Text(ui(R.string.ui_install_horizon)) },
+            HorizonAlertDialog(onDismissRequest = { approveInstall = false }, title = { Text(ui(R.string.ui_install_horizon)) },
                 text = { Text(text) }, confirmButton = {
                     Button(onClick = { approveInstall = false; model.install("") }) { Text(ui(R.string.ui_install)) }
                 }, dismissButton = { TextButton(onClick = { approveInstall = false }) { Text(ui(R.string.ui_cancel)) } })
@@ -453,13 +507,14 @@ private fun Setup(panel: Panel, model: ManagerModel, forceEdit: Boolean, done: (
                 FilterChip(!keyMode, { keyMode = false; credential = ""; keyError = false }, { Text(ui(R.string.ui_password)) })
                 FilterChip(keyMode, { keyMode = true; credential = ""; keyError = false }, { Text(ui(R.string.ui_ssh_key)) })
             }
-            if (keyMode) {
+            Reveal(keyMode) {
                 OutlinedButton(onClick = { pick.launch(arrayOf("*/*")) }) {
                     Text(if (credential.isNotEmpty()) ui(R.string.ui_replace_selected_key) else ui(R.string.ui_select_private_key))
                 }
                 if (keyError) Text(ui(R.string.ui_could_not_read_the_key_file), color = MaterialTheme.colorScheme.error)
                 PasswordField(ui(R.string.ui_key_passphrase_if_set), passphrase) { passphrase = it }
-            } else PasswordField(ui(R.string.ui_ssh_password), credential) { credential = it }
+            }
+            Reveal(!keyMode) { PasswordField(ui(R.string.ui_ssh_password), credential) { credential = it } }
             Button(onClick = { model.connect(name, host, port, user, keyMode, credential, passphrase, server) },
                 enabled = !panel.busy && credential.isNotBlank()) { Text(ui(R.string.ui_connect)) }
         }

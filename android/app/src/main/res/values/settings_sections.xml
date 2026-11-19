@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_digest_group">Digest</string>
+    <string name="settings_app_group">App</string>
+    <string name="settings_server_group">Server</string>
+    <string name="settings_digest_rules">Digest settings</string>
+    <string name="settings_digest_rules_detail">Collection window, limits and grouping</string>
+    <string name="settings_ai_model">AI model</string>
+    <string name="settings_notifications">Notifications</string>
+    <string name="settings_notifications_detail">Background checks, push and delivery</string>
+    <string name="settings_server_delivery">Email and webhooks</string>
+    <string name="settings_connection_detail">SSH access and optional HTTPS</string>
+    <string name="settings_maintenance_detail">Agent tools, journal and backup</string>
+    <string name="settings_agent_tools">Agent tools</string>
+    <string name="settings_journal_detail">Errors and activity history</string>
+    <string name="settings_transfer">Backup and migration</string>
+    <string name="settings_transfer_detail">Import, export and restore Horizon settings</string>
+</resources>

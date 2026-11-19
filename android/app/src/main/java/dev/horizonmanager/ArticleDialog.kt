@@ -31,6 +31,7 @@ internal fun ArticleDialog(article: JSONObject, close: () -> Unit) {
     var comments by remember(article.optString("id")) { mutableStateOf(false) }
 
     Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        DialogMotion()
         BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
             Column(Modifier.widthIn(max = 670.dp).fillMaxWidth().heightIn(max = maxHeight * 0.88f)
                 .glassPanel(MaterialTheme.shapes.extraLarge, raised = true)) {
@@ -51,7 +52,7 @@ internal fun ArticleDialog(article: JSONObject, close: () -> Unit) {
                             Text(if (comments) ui(R.string.ui_hide_horizon_commentary) else ui(R.string.ui_horizon_commentary))
                         }
                     }
-                    if (comments) {
+                    Reveal(comments) {
                         if (reason.isNotBlank()) {
                             Text(ui(R.string.ui_horizon_assessment), style = MaterialTheme.typography.titleMedium)
                             Markdown(reason)

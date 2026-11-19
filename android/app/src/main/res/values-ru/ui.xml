@@ -1,5 +1,4 @@
 <resources>
-    <string name="ui_file_saved">"Файл сохранён"</string>
     <string name="ui_could_not_write_the_file">"Не удалось записать файл"</string>
     <string name="ui_the_file_is_damaged_too_large">"Файл повреждён, слишком большой или имеет другой формат"</string>
     <string name="ui_confirm_action">"Подтвердите действие"</string>
@@ -15,7 +14,6 @@
     <string name="ui_close">"Закрыть"</string>
     <string name="ui_password">"Пароль"</string>
     <string name="ui_continue">"Продолжить"</string>
-    <string name="ui_ssh_settings_verified">"Параметры SSH проверены"</string>
     <string name="ui_verify_the_vps_key">"Проверьте ключ VPS"</string>
     <string name="ui_the_vps_key_has_changed">"Ключ VPS изменился"</string>
     <string name="ui_compare_the_fingerprint_with_the_one">"Сверьте отпечаток с данными из панели VPS. Доверяйте ключу только после сверки."</string>
@@ -118,27 +116,12 @@
     <string name="ui_the_response_was_in_an_unexpected">"Получен ответ в неожиданном формате."</string>
     <string name="ui_operation_details">"Сведения об операции"</string>
     <string name="ui_horizon_manager_installed">"Horizon Manager установлен"</string>
-    <string name="ui_installation_job_sent_to_the_vps">"Задание установки отправлено на VPS"</string>
-    <string name="ui_agent_update_started">"Обновление агента запущено"</string>
-    <string name="ui_agent_updated">"Агент обновлён"</string>
-    <string name="ui_job_queued">"Задание добавлено в очередь"</string>
-    <string name="ui_digest_translation_queued">"Перевод выпуска добавлен в очередь"</string>
-    <string name="ui_stop_requested">"Запрошена остановка"</string>
     <string name="ui_settings_saved_on_the_vps_the">"Настройки сохранены на VPS. Ключ каталога не удалось сохранить на телефоне"</string>
-    <string name="ui_settings_saved_add_the_following_secrets">"Настройки сохранены. Добавьте секреты %1$s"</string>
-    <string name="ui_settings_saved">"Настройки сохранены"</string>
-    <string name="ui_configuration_copied">"Конфигурация скопирована"</string>
-    <string name="ui_previous_configuration_restored">"Предыдущая конфигурация восстановлена"</string>
     <string name="ui_enabled_sources">"Источников включено %1$s"</string>
     <string name="ui_select_an_ai_model">" · укажите модель AI"</string>
     <string name="ui_add">" · добавьте %1$s"</string>
     <string name="ui_the_installed_revision_matches_the_main">"Установленная ревизия совпадает с текущей main на GitHub"</string>
     <string name="ui_github_revision_verified_for_this_build">"GitHub · %1$s. Проверенная для этой сборки ревизия · %2$s"</string>
-    <string name="ui_schedule_saved_on_the_vps">"Расписание сохранено на VPS"</string>
-    <string name="ui_encrypted_backup_ready_to_save">"Зашифрованная копия готова к сохранению"</string>
-    <string name="ui_backup_restored">"Резервная копия восстановлена"</string>
-    <string name="ui_connection_settings_saved">"Параметры соединения сохранены"</string>
-    <string name="ui_agent_restarted">"Агент перезапущен"</string>
     <string name="ui_by_score">"По оценке"</string>
     <string name="ui_your_first_digest">"Первый дайджест"</string>
     <string name="ui_news_will_appear_here_after_horizon">"Здесь появятся новости после того, как Horizon обработает источники."</string>
@@ -154,7 +137,6 @@
     <string name="ui_back_to_articles">"К карточкам"</string>
     <string name="ui_full_digest">"Дайджест целиком"</string>
     <string name="ui_this_issue_is_shown_in_an">"Этот выпуск пока открыт на доступном языке."</string>
-    <string name="ui_the_markdown_digest_has_not_been">"Markdown ещё не загружен на телефон."</string>
     <string name="ui_search_downloaded_articles">"Поиск по загруженным новостям"</string>
     <string name="ui_saved">"Избранное"</string>
     <string name="ui_unread">"Непрочитанное"</string>
@@ -165,7 +147,6 @@
     <string name="ui_by_title">"По названию"</string>
     <string name="ui_no_items_passed_the_horizon_filters">"В этом выпуске нет материалов, прошедших фильтры Horizon."</string>
     <string name="ui_no_downloaded_articles_match_your_filters">"Среди загруженных карточек совпадений нет."</string>
-    <string name="ui_saved_2e21e4">"★ В избранном"</string>
     <string name="ui_save">"☆ В избранное"</string>
     <string name="ui_read">"Прочитано"</string>
     <string name="ui_mark_as_read">"Отметить прочитанным"</string>
@@ -253,11 +234,8 @@
     <string name="ui_settings_and_the_archive_will_stay">"Настройки и архив сохранятся. Если sudo требует отдельный пароль, введите его."</string>
     <string name="ui_push_notification_service">"Служба push-уведомлений"</string>
     <string name="ui_install_ntfy_and_enable_unifiedpush_in">"Установите ntfy и включите UnifiedPush в его настройках."</string>
-    <string name="ui_notification_registration_requested">"Запрошена регистрация уведомлений"</string>
     <string name="ui_model_api_address_and_request_limits">"Модель, адрес API и ограничения запросов"</string>
     <string name="ui_prompts_scoring_criteria_and_output_blocks">"Промпты, критерии оценки и блоки результата"</string>
-    <string name="ui_quotas_order_and_grouping">"Квоты, порядок и группировка"</string>
-    <string name="ui_collection_time_window">"Временное окно сбора"</string>
     <string name="ui_email_and_webhook">"Почта и Webhook"</string>
     <string name="ui_days_intervals_and_time_zone">"Дни, интервалы и часовой пояс"</string>
     <string name="ui_ai_keys_and_integration_tokens">"Ключи AI и токены интеграций"</string>
@@ -272,7 +250,6 @@
     <string name="ui_for_faster_alerts_connect_ntfy_through">"Для быстрых уведомлений подключите ntfy через UnifiedPush. Без него Android проверяет VPS примерно раз в 30 минут."</string>
     <string name="ui_connect_push_notifications">"Подключить push-уведомления"</string>
     <string name="ui_push_notifications_connected">"Push-уведомления подключены"</string>
-    <string name="ui_push_notifications_disconnected">"Push-уведомления отключены"</string>
     <string name="ui_disconnect_push_notifications">"Отключить push-уведомления"</string>
     <string name="ui_save_connection">"Сохранить соединение"</string>
     <string name="ui_ssh_settings">"Параметры SSH"</string>

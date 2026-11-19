@@ -2,6 +2,11 @@ package dev.horizonmanager
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -26,7 +31,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.json.JSONArray
 import org.json.JSONObject
-import org.unifiedpush.android.connector.UnifiedPush
 import java.util.Locale
 
 @Composable
@@ -51,14 +55,11 @@ internal fun Archive(issues: List<JSONObject>, hours: Int, hasMore: Boolean, bus
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun News(panel: Panel, model: ManagerModel, issue: JSONObject?, ai: () -> Unit, sources: () -> Unit,
-                  feedFilters: NewsFilters? = null) {
-    val filters = feedFilters ?: remember { NewsFilters() }
-    val isFeed = feedFilters != null
-    val preparing = isFeed && digestIsPreparing(panel.jobs)
+                  filters: NewsFilters, archived: Boolean = false) {
+    val preparing = !archived && digestIsPreparing(panel.jobs)
     val palette = LocalHorizonPalette.current
-    var open by remember(panel.selectedRun, panel.language) { mutableStateOf<JSONObject?>(null) }
-    var markdown by remember(panel.selectedRun) { mutableStateOf(false) }
-    if (preparing) {
+    var markdown by remember(issue?.optString("id")) { mutableStateOf(false) }
+    Reveal(preparing) {
         Tile {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 CircularProgressIndicator(Modifier.size(28.dp), color = palette.link, strokeWidth = 2.5.dp)
@@ -95,102 +96,85 @@ internal fun News(panel: Panel, model: ManagerModel, issue: JSONObject?, ai: () 
     val languages = issue.getJSONArray("languages").strings()
     val loaded = panel.selectedRun == run && panel.markdown.isNotEmpty()
     val needsTranslation = languages.isNotEmpty() && digestLocale() !in languages
-    val flags = panel.flags.associateBy { it.article }
-    Tile(accented = isFeed) {
+    Tile(accented = true) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(ui(R.string.ui_digest), style = MaterialTheme.typography.titleMedium)
                 Text(localTime(digestTime(issue)), style = MaterialTheme.typography.bodyMedium, color = palette.muted)
             }
-            if (isFeed) {
-                GlassIconAction(Icons.Default.Refresh, ui(R.string.ui_sync), enabled = !panel.busy) {
-                    model.refresh()
-                }
-                val issueIcon = if (markdown) Icons.AutoMirrored.Filled.List else ImageVector.vectorResource(R.drawable.ic_issue)
-                GlassIconAction(issueIcon, ui(if (markdown) R.string.ui_back_to_articles else R.string.ui_full_digest),
-                    enabled = loaded, active = markdown) { markdown = !markdown }
-                GlassIconAction(ImageVector.vectorResource(R.drawable.ic_archive_down), ui(R.string.archive_early)) {
-                    model.archiveDigest(run)
-                }
+            GlassIconAction(Icons.Default.Refresh, ui(R.string.ui_sync), enabled = !panel.busy) { model.refresh() }
+            val issueIcon = if (markdown) Icons.AutoMirrored.Filled.List else ImageVector.vectorResource(R.drawable.ic_issue)
+            GlassIconAction(issueIcon, ui(if (markdown) R.string.ui_back_to_articles else R.string.ui_full_digest),
+                enabled = loaded, active = markdown) { markdown = !markdown }
+            if (!archived) GlassIconAction(ImageVector.vectorResource(R.drawable.ic_archive_down), ui(R.string.archive_early)) {
+                model.archiveDigest(run)
             }
         }
-        if (!loaded) {
+        Reveal(!loaded) {
             if (panel.busy || panel.problem.isEmpty()) LinearProgressIndicator(Modifier.fillMaxWidth())
             Text(ui(R.string.issue_not_loaded))
         }
-        if (!isFeed || (loaded && needsTranslation)) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (loaded && needsTranslation) {
-                TextButton(onClick = { model.translateDigest(panel.selectedRun) },
-                    enabled = !panel.busy && panel.jobs.none { it.optString("state") in setOf("queued", "running") }) {
-                    Text(ui(R.string.ui_translate_issue))
-                }
-            }
-            if (!isFeed) {
-                TextButton(onClick = { model.refresh() }, enabled = !panel.busy) { Text(ui(R.string.ui_sync)) }
-                if (loaded) TextButton(onClick = { markdown = !markdown }) {
-                    Text(ui(if (markdown) R.string.ui_back_to_articles else R.string.ui_full_digest))
-                }
+        Reveal(loaded && needsTranslation) {
+            TextButton(onClick = { model.translateDigest(run) },
+                enabled = !panel.busy && panel.jobs.none { it.optString("state") in setOf("queued", "running") }) {
+                Text(ui(R.string.ui_translate_issue))
             }
         }
     }
-    if (!loaded) return
-    if (needsTranslation) {
+    Reveal(loaded && needsTranslation) {
         Text(ui(R.string.ui_this_issue_is_shown_in_an), style = MaterialTheme.typography.bodySmall)
     }
-    if (markdown) {
-        if (panel.markdown.isNotEmpty()) Tile { Markdown(panel.markdown) }
-        else Tile { Text(ui(R.string.ui_the_markdown_digest_has_not_been)) }
-        return
+    if (!loaded) return
+    AnimatedContent(markdown, transitionSpec = { fadeIn(tween(220, delayMillis = 70)) togetherWith fadeOut(tween(100)) },
+        label = "digest reading mode") { full ->
+        if (full) Tile { Markdown(panel.markdown) }
+        else DigestArticles(panel, model, run, filters)
     }
-    if (!isFeed) {
-        ValueField(ui(R.string.ui_search_downloaded_articles), filters.query, { filters.query = it })
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(filters.saved, { filters.saved = !filters.saved }, { Text(ui(R.string.ui_saved)) })
-            FilterChip(filters.unread, { filters.unread = !filters.unread }, { Text(ui(R.string.ui_unread)) })
-            Choice(ui(R.string.ui_profile), listOf("") + articleProfiles(panel.articles),
-                filters.profile, { filters.profile = it }, { it.ifBlank { ui(R.string.ui_all) } })
-            Choice(ui(R.string.ui_sort), NewsOrder.entries.map { it.name }, filters.order.name,
-                { filters.order = NewsOrder.valueOf(it) }, { ui(NewsOrder.valueOf(it).label) })
+}
+
+@Composable
+private fun DigestArticles(panel: Panel, model: ManagerModel, run: String, filters: NewsFilters) {
+    val palette = LocalHorizonPalette.current
+    val flags = panel.flags.associateBy { it.article }
+    var open by remember(run, panel.language) { mutableStateOf<JSONObject?>(null) }
+    Column(verticalArrangement = Arrangement.spacedBy(13.dp)) {
+        val needsChronologyPages = filters.order == NewsOrder.Oldest && panel.articles.size < panel.total
+        LaunchedEffect(run, panel.language, filters.order) {
+            if (needsChronologyPages) model.loadChronology(run, panel.language)
         }
-    }
-    val needsChronologyPages = filters.order == NewsOrder.Oldest && panel.articles.size < panel.total
-    LaunchedEffect(run, panel.language, filters.order) {
-        if (needsChronologyPages) model.loadChronology(run, panel.language)
-    }
-    if (needsChronologyPages) {
-        Tile {
-            if (panel.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-            Text(ui(R.string.chronology_progress, panel.articles.size, panel.total))
-            if (!panel.busy && panel.problem.isNotEmpty()) {
-                TextButton(onClick = { model.loadChronology(run, panel.language) }) { Text(ui(R.string.ui_retry)) }
+        if (needsChronologyPages) {
+            Tile {
+                if (panel.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                Text(ui(R.string.chronology_progress, panel.articles.size, panel.total))
+                if (!panel.busy && panel.problem.isNotEmpty()) {
+                    TextButton(onClick = { model.loadChronology(run, panel.language) }) { Text(ui(R.string.ui_retry)) }
+                }
             }
+            return@Column
         }
-        return
-    }
-    val shown = panel.articles.asSequence().filter { row ->
-        val flag = flags[row.getString("id")]
-        (!filters.saved || flag?.saved == true) && (!filters.unread || flag?.read != true) &&
-            (filters.profile.isEmpty() || row.optString("profile") == filters.profile) &&
-            (filters.query.isBlank() || listOf("title", "summary", "source", "category").any { row.optString(it).contains(filters.query.trim(), true) })
-    }.let { filtered ->
-        when (filters.order) {
-            NewsOrder.Oldest -> filtered.sortedBy(::chronologicalTime)
-            NewsOrder.Title -> filtered.sortedBy { it.optString("title").lowercase() }
-            NewsOrder.Score -> filtered.sortedByDescending { it.optDouble("score", -1.0) }
+        val shown = panel.articles.asSequence().filter { row ->
+            val flag = flags[row.getString("id")]
+            (!filters.saved || flag?.saved == true) && (!filters.unread || flag?.read != true) &&
+                (filters.profile.isEmpty() || row.optString("profile") == filters.profile) &&
+                (filters.query.isBlank() || listOf("title", "summary", "source", "category").any { row.optString(it).contains(filters.query.trim(), true) })
+        }.let { filtered ->
+            when (filters.order) {
+                NewsOrder.Oldest -> filtered.sortedBy(::chronologicalTime)
+                NewsOrder.Title -> filtered.sortedBy { it.optString("title").lowercase() }
+                NewsOrder.Score -> filtered.sortedByDescending { it.optDouble("score", -1.0) }
+            }
+        }.toList()
+        if (shown.isEmpty()) Tile {
+            Text(if (panel.total == 0) ui(R.string.ui_no_items_passed_the_horizon_filters) else ui(R.string.ui_no_downloaded_articles_match_your_filters))
         }
-    }.toList()
-    if (shown.isEmpty()) Tile {
-        Text(if (panel.total == 0) ui(R.string.ui_no_items_passed_the_horizon_filters) else ui(R.string.ui_no_downloaded_articles_match_your_filters))
-    }
-    for (article in shown) key(article.getString("id")) {
-        val id = article.getString("id")
-        val flag = flags[id]
-        val source = article.optString("source")
-        val category = article.optString("category").takeUnless { it == "null" }.orEmpty()
-        val sourceLabel = listOf(source, category, article.optString("profile").takeUnless { it == "null" }.orEmpty())
-            .filter { it.isNotBlank() }.joinToString(" · ")
-        Tile(Modifier.clickable { open = article; model.flag(id, read = true) }) {
-            if (isFeed) {
+        for (article in shown) key(article.getString("id")) {
+            val id = article.getString("id")
+            val flag = flags[id]
+            val source = article.optString("source")
+            val category = article.optString("category").takeUnless { it == "null" }.orEmpty()
+            val sourceLabel = listOf(source, category, article.optString("profile").takeUnless { it == "null" }.orEmpty())
+                .filter { it.isNotBlank() }.joinToString(" · ")
+            Tile(Modifier.clickable { open = article; model.flag(id, read = true) }) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(sourceLabel, Modifier.weight(1f), style = MaterialTheme.typography.labelLarge,
                         color = palette.muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -205,26 +189,20 @@ internal fun News(panel: Panel, model: ManagerModel, issue: JSONObject?, ai: () 
                         model.flag(id, read = !read)
                     }
                 }
-            } else {
-                Text(sourceLabel, style = MaterialTheme.typography.labelLarge, color = palette.muted)
-            }
-            Text(article.optString("title"), style = MaterialTheme.typography.titleLarge)
-            val summary = article.optString("summary")
-            if (summary.isNotBlank()) Text(summary, maxLines = if (isFeed) 3 else 5, overflow = TextOverflow.Ellipsis,
-                color = if (isFeed) palette.muted else palette.text)
-            Text(localTime(article.optString("time")) +
-                article.optDouble("score").takeIf { it.isFinite() }?.let { " · %.1f / 10".format(Locale.ROOT, it) }.orEmpty(),
-                style = MaterialTheme.typography.bodySmall,
-                color = if (isFeed) lerp(palette.muted, Color(0xFF969696), 0.55f) else palette.text)
-            if (!isFeed) FlowRow {
-                TextButton(onClick = { model.flag(id, save = flag?.saved != true) }) { Text(if (flag?.saved == true) ui(R.string.ui_saved_2e21e4) else ui(R.string.ui_save)) }
-                TextButton(onClick = { model.flag(id, read = flag?.read != true) }) { Text(if (flag?.read == true) ui(R.string.ui_read) else ui(R.string.ui_mark_as_read)) }
+                Text(article.optString("title"), style = MaterialTheme.typography.titleLarge)
+                val summary = article.optString("summary")
+                if (summary.isNotBlank()) Text(summary, maxLines = 3, overflow = TextOverflow.Ellipsis,
+                    color = palette.muted)
+                Text(localTime(article.optString("time")) +
+                    article.optDouble("score").takeIf { it.isFinite() }?.let { " · %.1f / 10".format(Locale.ROOT, it) }.orEmpty(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = lerp(palette.muted, Color(0xFF969696), 0.55f))
             }
         }
-    }
-    if (panel.articles.size < panel.total) {
-        OutlinedButton(onClick = { model.openDigest(panel.selectedRun, panel.language, panel.articles.size) }) {
-            Text(ui(R.string.ui_load_more_of, panel.articles.size, panel.total))
+        if (panel.articles.size < panel.total) {
+            OutlinedButton(onClick = { model.openDigest(panel.selectedRun, panel.language, panel.articles.size) }) {
+                Text(ui(R.string.ui_load_more_of, panel.articles.size, panel.total))
+            }
         }
     }
     open?.let { article -> ArticleDialog(article) { open = null } }
@@ -321,15 +299,11 @@ private fun phaseName(value: String) = mapOf("fetch" to ui(R.string.ui_collectin
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun Control(panel: Panel, model: ManagerModel, confirm: (String, () -> Unit) -> Unit,
-                     backup: () -> Unit, restore: () -> Unit, configure: (String) -> Unit) {
+                     configure: (String) -> Unit) {
     val status = panel.status
     val active = panel.jobs.firstOrNull { it.optString("state") in listOf("queued", "running") }
     val latest = panel.jobs.firstOrNull { it.optString("kind") == "run" && it.optString("state") == "success" }
     val issue = panel.events.firstOrNull { it.optString("level") in listOf("ERROR", "CRITICAL") }
-    var restart by remember { mutableStateOf(false) }
-    if (restart) PasswordDialog(ui(R.string.ui_restart_agent),
-        ui(R.string.ui_the_current_job_may_be_interrupted),
-        close = { restart = false }) { password -> restart = false; model.restart(password) }
     Tile {
         Text(ui(R.string.ui_horizon_on_the_vps), style = MaterialTheme.typography.titleLarge)
         if (status.length() == 0) Text(ui(R.string.ui_monitoring_data_has_not_loaded_yet))
@@ -356,17 +330,7 @@ internal fun Control(panel: Panel, model: ManagerModel, confirm: (String, () -> 
         Text(job.getString("id"), style = MaterialTheme.typography.labelSmall)
         TextButton(onClick = { confirm(ui(R.string.ui_stop_this_job_the_provider_may)) { model.stop(job.getString("id")) } }) { Text(ui(R.string.ui_stop)) }
     } }
-    Tile {
-        Text(ui(R.string.ui_maintenance), style = MaterialTheme.typography.titleMedium)
-        FlowRow {
-            TextButton(onClick = { model.check() }) { Text(ui(R.string.ui_check_configuration)) }
-            TextButton(onClick = { configure("schedule") }) { Text(ui(R.string.ui_schedule)) }
-            TextButton(onClick = { restart = true }) { Text(ui(R.string.ui_restart_agent)) }
-            TextButton(onClick = { model.checkVersions() }) { Text(ui(R.string.ui_check_horizon_version)) }
-            TextButton(onClick = backup) { Text(ui(R.string.ui_backup)) }
-            TextButton(onClick = restore) { Text(ui(R.string.ui_restore_backup_4afed2)) }
-        }
-    }
+    GlassSettingRow(ui(R.string.ui_schedule), ui(R.string.ui_days_intervals_and_time_zone)) { configure("schedule") }
     if (panel.jobs.isNotEmpty()) Tile {
         Text(ui(R.string.ui_job_history), style = MaterialTheme.typography.titleMedium)
         panel.jobs.take(25).forEach { job ->
@@ -438,7 +402,7 @@ internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model:
     if (events.size > page) TextButton(onClick = { page += 80 }) { Text(ui(R.string.ui_more_entries)) }
     detail?.let { row ->
         val code = row.optString("code")
-        AlertDialog(onDismissRequest = { detail = null }, title = { Text(code) },
+        HorizonAlertDialog(onDismissRequest = { detail = null }, title = { Text(code) },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(localTime(row.optString("time")) + " · ${row.optString("component")}")
@@ -460,108 +424,7 @@ private fun profileIds(profiles: JSONArray) = profiles.objects().mapNotNull { it
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun Settings(panel: Panel, model: ManagerModel, open: (String) -> Unit, ssh: () -> Unit,
-                      import: (String) -> Unit, export: (String, String) -> Unit, permission: () -> Unit,
-                      confirm: (String, () -> Unit) -> Unit) {
-    val server = requireNotNull(panel.server)
-    val config = panel.config.optJSONObject("config")
-    val context = LocalContext.current
-    val registration by remember(context, server.id) { DigestNotifications.observeRegistration(context, server.id) }
-        .collectAsState(initial = DigestNotifications.registration(context, server.id))
-    var upgrade by remember { mutableStateOf(false) }
-    var chooseDistributor by remember { mutableStateOf(false) }
-    var pushMessage by remember { mutableStateOf("") }
-    if (upgrade) PasswordDialog(ui(R.string.ui_update_vps_agent),
-        ui(R.string.ui_settings_and_the_archive_will_stay),
-        close = { upgrade = false }) { password -> upgrade = false; model.updateAgent(password) }
-    if (chooseDistributor) {
-        val distributors = UnifiedPush.getDistributors(context)
-        AlertDialog(onDismissRequest = { chooseDistributor = false },
-            title = { Text(ui(R.string.ui_push_notification_service)) },
-            text = {
-                Column {
-                    if (distributors.isEmpty()) Text(ui(R.string.ui_install_ntfy_and_enable_unifiedpush_in))
-                    distributors.forEach { distributor ->
-                        val name = runCatching {
-                            context.packageManager.getApplicationLabel(context.packageManager.getApplicationInfo(distributor, 0)).toString()
-                        }.getOrDefault(distributor)
-                        TextButton(onClick = {
-                            chooseDistributor = false
-                            permission()
-                            DigestNotifications.register(context, distributor, server.id)
-                            pushMessage = ui(R.string.ui_notification_registration_requested)
-                        }) { Text(name) }
-                    }
-                }
-            }, confirmButton = { TextButton(onClick = { chooseDistributor = false }) { Text(ui(R.string.ui_close)) } })
-    }
-    val pages = if (config != null) listOf("ai" to ui(R.string.ui_model_api_address_and_request_limits),
-        "profiles" to ui(R.string.ui_prompts_scoring_criteria_and_output_blocks), "digest" to ui(R.string.ui_quotas_order_and_grouping),
-        "collection" to ui(R.string.ui_collection_time_window), "delivery" to ui(R.string.ui_email_and_webhook), "schedule" to ui(R.string.ui_days_intervals_and_time_zone),
-        "secrets" to ui(R.string.ui_ai_keys_and_integration_tokens), "advanced" to ui(R.string.ui_extractors_and_display)) else emptyList()
-    GlassSettingRow(ui(R.string.sources), ui(R.string.sources_description)) { open("sources") }
-    GlassSettingRow(ui(R.string.control), ui(R.string.control_description)) { open("control") }
-    pages.forEach { (page, subtitle) ->
-        val title = when (page) { "profiles" -> ui(R.string.ui_processing_profiles); "delivery" -> ui(R.string.ui_delivery); "schedule" -> ui(R.string.ui_schedule)
-            "secrets" -> ui(R.string.ui_secrets); "advanced" -> ui(R.string.ui_advanced_settings); else -> label(page) }
-        GlassSettingRow(title, subtitle) { open(page) }
-    }
-    Tile {
-        Text(ui(R.string.ui_connection), style = MaterialTheme.typography.titleMedium)
-        var url by remember(server.id, server.https) { mutableStateOf(server.https) }
-        var background by remember(server.id, server.background) { mutableStateOf(server.background) }
-        ValueField(ui(R.string.ui_https_domain_optional), url, { url = it })
-        Text(ui(R.string.ui_leave_blank_to_use_ssh_https))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(ui(R.string.ui_background_news_checks), Modifier.weight(1f))
-            Switch(background, { background = it; if (it) permission() })
-        }
-        Text(ui(R.string.ui_for_faster_alerts_connect_ntfy_through))
-        if (server.background) {
-            TextButton(onClick = { chooseDistributor = true }) { Text(ui(R.string.ui_connect_push_notifications)) }
-            if (registration.isNotEmpty()) {
-                Text(ui(R.string.ui_push_notifications_connected))
-                TextButton(onClick = {
-                    DigestNotifications.unregister(context, server.id)
-                    DigestWorker.sync(context, server.id)
-                    pushMessage = ui(R.string.ui_push_notifications_disconnected)
-                }) { Text(ui(R.string.ui_disconnect_push_notifications)) }
-            }
-        }
-        if (pushMessage.isNotEmpty()) Text(pushMessage, style = MaterialTheme.typography.bodySmall)
-        FlowRow {
-            Button(onClick = { model.settings(url, background) }) { Text(ui(R.string.ui_save_connection)) }
-            TextButton(onClick = ssh) { Text(ui(R.string.ui_ssh_settings)) }
-        }
-    }
-    Tile {
-        TextButton(onClick = { open("journal") }) { Text(ui(R.string.ui_journal)) }
-        if (agentUpdateAvailable(panel.status.optString("agent")) || panel.updatingAgent) {
-            TextButton(onClick = { upgrade = true }, enabled = !panel.busy && !panel.updatingAgent &&
-                panel.jobs.none { it.optString("state") in setOf("queued", "running") }) { Text(ui(R.string.ui_update_vps_agent)) }
-            if (panel.updatingAgent) LinearProgressIndicator(Modifier.fillMaxWidth())
-        }
-    }
-    if (config != null) Tile {
-        Text(ui(R.string.ui_transfer_settings), style = MaterialTheme.typography.titleMedium)
-        FlowRow {
-            TextButton(onClick = { import("config") }) { Text(ui(R.string.ui_import_horizon_config)) }
-            TextButton(onClick = { export("horizon-settings.json", config.toString(2)) }) { Text(ui(R.string.ui_export_settings)) }
-            TextButton(onClick = { import("profiles") }) { Text(ui(R.string.ui_import_manager_profiles)) }
-            TextButton(onClick = { export("horizon-profiles.json", panel.config.getJSONArray("profiles").toString(2)) }) { Text(ui(R.string.ui_export_profiles)) }
-            TextButton(onClick = { confirm(ui(R.string.ui_restore_the_previous_configuration_and_its)) { model.revert() } }) { Text(ui(R.string.ui_roll_back_settings)) }
-        }
-        var path by remember { mutableStateOf(panel.probe["existing"].orEmpty()) }
-        ValueField(ui(R.string.ui_existing_horizon_folder_on_the_vps), path, { path = it })
-        TextButton(enabled = path.startsWith("/"), onClick = {
-            confirm(ui(R.string.ui_copy_settings_from_this_folder_into)) { model.copyExisting(path) }
-        }) { Text(ui(R.string.ui_copy_configuration_from_vps)) }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, back: () -> Unit) {
+internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String) {
     val stored = panel.config.optJSONObject("config") ?: return
     val serverId = panel.server?.id ?: return
     val schema = panel.schema.optJSONObject("config") ?: return
@@ -596,7 +459,7 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, back:
                     value = ""
                 }) { Text(ui(R.string.ui_save_secret)) }
                 if (name in configured) TextButton(onClick = { remove = true }) { Text(ui(R.string.ui_delete_secret)) }
-                if (remove) AlertDialog(onDismissRequest = { remove = false }, title = { Text(ui(R.string.ui_delete, name)) },
+                if (remove) HorizonAlertDialog(onDismissRequest = { remove = false }, title = { Text(ui(R.string.ui_delete, name)) },
                     text = { Text(ui(R.string.ui_sources_apis_or_delivery_that_rely)) },
                     confirmButton = { Button(onClick = { remove = false; model.saveConfig(stored, storedProfiles, JSONObject().put(name, JSONObject.NULL)) }) { Text(ui(R.string.ui_delete_86ea33)) } },
                     dismissButton = { TextButton(onClick = { remove = false }) { Text(ui(R.string.ui_cancel)) } })
@@ -669,7 +532,9 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, back:
                                 Text(ui(R.string.ui_replace_api_key))
                             }
                         }
-                        if (showGenericKey) PasswordField(ui(R.string.ui_api_key, provider), genericKey) { genericKey = it }
+                        Reveal(showGenericKey) {
+                            PasswordField(ui(R.string.ui_api_key, provider), genericKey) { genericKey = it }
+                        }
                     }
                     Text(ui(R.string.ui_enter_the_model_id_from_your))
                     val advanced = definition(schema, fields.getJSONObject("ai")).copyObject()
@@ -707,24 +572,29 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, back:
                 TextButton(onClick = { model.submit("ai") }, enabled = !panel.busy && canTest) { Text(ui(R.string.ui_test_saved_model)) }
             }
             else -> {
-                val names = when (page) { "delivery" -> listOf("email", "webhook"); "advanced" -> listOf("extractors", "display"); else -> listOf(page) }
+                val names = when (page) {
+                    "delivery" -> listOf("email", "webhook")
+                    "advanced" -> listOf("extractors", "display")
+                    "digest" -> listOf("collection", "digest")
+                    else -> listOf(page)
+                }
                 for (name in names) {
                     Text(label(name), style = MaterialTheme.typography.titleLarge)
-                    EditValue(schema, fields.getJSONObject(name), name, working.opt(name),
-                        { working = working.copyObject().put(name, it) }, ids, expandedByDefault = true)
+                    key(name) {
+                        EditValue(schema, fields.getJSONObject(name), name, working.opt(name),
+                            { working = working.copyObject().put(name, it) }, ids, showHeader = false)
+                    }
                 }
             }
         }
-        if (page !in listOf("schedule", "secrets")) Row {
-            if (page != "ai" || AiRouter.configured(working.getJSONObject("ai")) == null) {
-                Button(onClick = {
-                    val keys = JSONObject()
-                    if (page == "ai" && genericKey.isNotBlank() && aiDraft?.optString("provider") != "ollama")
-                        keys.put(secretAlias, genericKey.trim())
-                    model.saveConfig(working, profiles, keys)
-                }, enabled = !panel.busy) { Text(ui(R.string.ui_save_settings)) }
-            }
-            TextButton(onClick = back) { Text(ui(R.string.ui_back)) }
+        if (page != "schedule" && page != "secrets" &&
+            (page != "ai" || AiRouter.configured(working.getJSONObject("ai")) == null)) {
+            Button(onClick = {
+                val keys = JSONObject()
+                if (page == "ai" && genericKey.isNotBlank() && aiDraft?.optString("provider") != "ollama")
+                    keys.put(secretAlias, genericKey.trim())
+                model.saveConfig(working, profiles, keys)
+            }, enabled = !panel.busy) { Text(ui(R.string.ui_save_settings)) }
         }
     }
 }
@@ -744,8 +614,10 @@ private fun ScheduleForm(panel: Panel, model: ManagerModel) {
     Text(ui(R.string.ui_vps_schedule), style = MaterialTheme.typography.titleLarge)
     Choice(ui(R.string.ui_mode), listOf("off", "calendar", "interval"), mode, { mode = it },
         { mapOf("off" to ui(R.string.ui_off), "calendar" to ui(R.string.ui_by_day_of_the_week), "interval" to ui(R.string.ui_at_regular_intervals))[it] ?: it })
-    if (mode == "interval") ValueField(ui(R.string.ui_interval_from_1_to_168_hours), hours, { hours = it }, numeric = true)
-    if (mode == "calendar") {
+    Reveal(mode == "interval") {
+        ValueField(ui(R.string.ui_interval_from_1_to_168_hours), hours, { hours = it }, numeric = true)
+    }
+    Reveal(mode == "calendar") {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             listOf(ui(R.string.ui_mon), ui(R.string.ui_tue), ui(R.string.ui_wed), ui(R.string.ui_thu), ui(R.string.ui_fri), ui(R.string.ui_sat), ui(R.string.ui_sun)).forEachIndexed { day, title ->
                 FilterChip(day in days, { days = if (day in days) days - day else days + day }, { Text(title) })

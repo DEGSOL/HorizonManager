@@ -26,7 +26,9 @@ internal data class Panel(
     val probe: Map<String, String> = emptyMap(),
     val hostConfirmation: HostConfirmation? = null,
     val problem: String = "",
-    val notice: String = "",
+    val userProblem: String = "",
+    val sshVerification: String = "",
+    val maintenanceResult: String = "",
     val status: JSONObject = JSONObject(),
     val config: JSONObject = JSONObject(),
     val schema: JSONObject = JSONObject(),
@@ -80,18 +82,18 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                 pendingNotification = ""
                 servers.find { it.id == id }?.let(::select)
             } catch (_: Exception) {
-                mutable.update { it.copy(problem = "VAULT_READ") }
+                mutable.update { it.copy(problem = "VAULT_READ", userProblem = "VAULT_READ") }
             }
         }
     }
 
-    private fun record(error: Throwable, server: Server?) {
+    private fun record(error: Throwable, server: Server?, announce: Boolean = true) {
         val problem = when (error) {
             is Problem -> error.code + error.detail.takeIf { it.isNotEmpty() }?.let { " · $it" }.orEmpty()
             is HostConfirmation -> "SSH_HOST_CHANGED"
             else -> "ANDROID_" + error.javaClass.simpleName.uppercase()
         }
-        mutable.update { it.copy(problem = problem) }
+        mutable.update { it.copy(problem = problem, userProblem = if (announce) problem else it.userProblem) }
         val now = android.os.SystemClock.elapsedRealtime()
         if (problem == lastError && now - lastErrorTime < 60_000) return
         lastError = problem
@@ -111,7 +113,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         val previous = active?.takeIf { it.isActive }
         if (previous != null && (quiet || !activeIsQuiet)) return
         activeIsQuiet = quiet
-        if (!quiet) mutable.update { it.copy(busy = true, problem = "", notice = "") }
+        if (!quiet) mutable.update { it.copy(busy = true, problem = "", userProblem = "") }
         active = viewModelScope.launch {
             try {
                 previous?.join()
@@ -120,9 +122,9 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                 throw error
             } catch (error: HostConfirmation) {
                 if (candidate != null) mutable.update { it.copy(hostConfirmation = error) }
-                else record(error, state.value.server)
+                else record(error, state.value.server, announce = !quiet)
             } catch (error: Exception) {
-                record(error, state.value.server)
+                record(error, state.value.server, announce = !quiet)
             } finally {
                 if (!quiet) mutable.update { it.copy(busy = false) }
             }
@@ -205,7 +207,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         if (host.isEmpty() || !host.matches(Regex("[A-Za-z0-9:._%\\-]+")) ||
             port == null || port !in 1..65535 || !user.matches(Regex("[A-Za-z0-9._-]{1,64}")) ||
             credential.isBlank() || credential.length > 65536) {
-            mutable.update { it.copy(problem = "SERVER_FIELDS") }
+            mutable.update { it.copy(problem = "SERVER_FIELDS", userProblem = "SERVER_FIELDS") }
             return
         }
         val matching = previous?.takeIf {
@@ -251,7 +253,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             candidate = null
         }
         if (state.value.ready) synchronize(requireNotNull(state.value.server), everything = true)
-        if (explicit) mutable.update { it.copy(notice = ui(R.string.ui_ssh_settings_verified)) }
+        if (explicit) mutable.update { it.copy(sshVerification = UUID.randomUUID().toString()) }
     }
 
     fun install(password: String) {
@@ -263,7 +265,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                     password.ifEmpty { if (!server.keyMode) server.credential else "" })
                 Ssh.probe(app, session)
             }
-            mutable.update { it.copy(probe = stage, notice = ui(R.string.ui_installation_job_sent_to_the_vps)) }
+            mutable.update { it.copy(probe = stage) }
         }
     }
 
@@ -298,7 +300,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                     password.ifEmpty { if (!server.keyMode) server.credential else "" })
                 Ssh.probe(app, session)
             }
-            mutable.update { it.copy(probe = stage, updatingAgent = true, notice = ui(R.string.ui_agent_update_started)) }
+            mutable.update { it.copy(probe = stage, updatingAgent = true) }
         }
     }
 
@@ -312,8 +314,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         }
         val version = runCatching { withAgent(server) { (it.get("health") as JSONObject).optString("agent") } }.getOrNull()
         if (version == BuildConfig.AGENT_VERSION && (fresh && report["install"] == "success" || !fresh && report["install"] != "running")) {
-            mutable.update { it.copy(probe = report, updatingAgent = false, schema = JSONObject(),
-                notice = ui(R.string.ui_agent_updated)) }
+            mutable.update { it.copy(probe = report, updatingAgent = false, schema = JSONObject()) }
             synchronize(server, everything = true)
             if (server.background) DigestWorker.sync(app, server.id)
         } else {
@@ -548,16 +549,14 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         mutate { api ->
             api.post("jobs", JSONObject().put("id", UUID.randomUUID().toString()).put("kind", kind)
                 .apply { source?.let { put("source", it) }; bucket?.let { put("bucket", it) }; index?.let { put("index", it) } })
-            ui(R.string.ui_job_queued)
         }
 
     fun translateDigest(run: String) = mutate { api ->
         api.post("jobs", JSONObject().put("id", UUID.randomUUID().toString())
             .put("kind", "localize").put("run", run))
-        ui(R.string.ui_digest_translation_queued)
     }
 
-    fun stop(id: String) = mutate { it.post("jobs/$id/stop"); ui(R.string.ui_stop_requested) }
+    fun stop(id: String) = mutate { it.post("jobs/$id/stop") }
 
     suspend fun loadRouterCatalog(serverId: String, router: AiRouter, enteredKey: String?): List<RouterModel>? =
         withContext(Dispatchers.IO) {
@@ -579,11 +578,8 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
 
     fun saveConfig(config: JSONObject, profiles: JSONArray, secrets: JSONObject = JSONObject()) {
         mutate(true) { api ->
-            val response = api.put("config", JSONObject().put("revision", state.value.config.getInt("revision"))
-                .put("config", config).put("profiles", profiles).put("secrets", secrets)) as JSONObject
-            val missing = response.optJSONArray("missing")?.strings().orEmpty().joinToString()
-            if (missing.isNotBlank()) ui(R.string.ui_settings_saved_add_the_following_secrets, missing)
-            else ui(R.string.ui_settings_saved)
+            api.put("config", JSONObject().put("revision", state.value.config.getInt("revision"))
+                .put("config", config).put("profiles", profiles).put("secrets", secrets))
         }
     }
 
@@ -606,16 +602,14 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                     .put("config", config).put("profiles", current.getJSONArray("profiles")))
             }
             synchronize(server, everything = true)
-            mutable.update { it.copy(notice = ui(R.string.ui_configuration_copied)) }
         }
     }
 
     fun revert() = mutate(true) {
         it.post("config/revert", JSONObject().put("revision", state.value.config.getInt("revision")))
-        ui(R.string.ui_previous_configuration_restored)
     }
 
-    fun check() = mutate {
+    fun check() = inspect {
         val result = it.post("config/check") as JSONObject
         val missing = result.getJSONArray("missing").strings()
         val enabled = result.getJSONArray("enabled_sources").length()
@@ -624,7 +618,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             (if (missing.isEmpty()) "" else ui(R.string.ui_add, missing.joinToString()))
     }
 
-    fun checkVersions() = mutate {
+    fun checkVersions() = inspect {
         val remote = it.get("upstream") as JSONObject
         val head = remote.getString("upstream_head")
         val installed = remote.getString("installed")
@@ -632,18 +626,16 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         else ui(R.string.ui_github_revision_verified_for_this_build, head.take(12), installed.take(12))
     }
 
-    fun schedule(spec: JSONObject) = mutate(true) { it.put("schedule", spec); ui(R.string.ui_schedule_saved_on_the_vps) }
+    fun schedule(spec: JSONObject) = mutate(true) { it.put("schedule", spec) }
 
     fun export(password: String) = mutate {
         val result = it.post("backup", JSONObject().put("password", password)) as JSONObject
         mutable.update { panel -> panel.copy(file = result.getString("archive")) }
-        ui(R.string.ui_encrypted_backup_ready_to_save)
     }
 
     fun restore(file: String, password: String) = mutate(true) {
         it.post("restore", JSONObject().put("password", password).put("archive", file)
             .put("revision", state.value.config.getInt("revision")))
-        ui(R.string.ui_backup_restored)
     }
 
     fun clearEvents(before: Long) {
@@ -668,7 +660,6 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             if (!background && server.background) DigestNotifications.unregister(app, server.id)
             DigestWorker.schedule(app, state.value.servers)
             if (background || server.background) DigestWorker.sync(app, server.id)
-            mutable.update { it.copy(notice = ui(R.string.ui_connection_settings_saved)) }
         }
     }
 
@@ -689,19 +680,25 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                 }
             }
             synchronize(server, everything = true)
-            mutable.update { it.copy(notice = ui(R.string.ui_agent_restarted)) }
         }
     }
 
-    private fun mutate(full: Boolean = false, action: (AgentApi) -> String) {
+    private fun mutate(full: Boolean = false, action: (AgentApi) -> Unit) {
         val server = state.value.server ?: return
         operation {
-            val notice = withAgent(server, action)
-            mutable.update { it.copy(notice = notice) }
+            withAgent(server, action)
             synchronize(server, everything = full)
         }
     }
 
     fun clearFile() = mutable.update { it.copy(file = null) }
-    fun dismissMessage() = mutable.update { it.copy(problem = "", notice = "") }
+    fun consumeProblem(problem: String) = mutable.update {
+        if (it.userProblem == problem) it.copy(userProblem = "") else it
+    }
+
+    private fun inspect(action: (AgentApi) -> String) = mutate { api ->
+        mutable.update { it.copy(maintenanceResult = "") }
+        val result = action(api)
+        mutable.update { it.copy(maintenanceResult = result) }
+    }
 }

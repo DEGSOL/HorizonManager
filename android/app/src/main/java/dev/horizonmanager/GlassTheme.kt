@@ -2,11 +2,17 @@ package dev.horizonmanager
 
 import android.os.Build
 import androidx.annotation.StringRes
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -52,6 +58,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -162,8 +169,12 @@ internal fun GlassLayout(tabs: List<HorizonTab>, selection: Int, showTabs: Boole
             ))
             drawContent()
         }, content = content)
-        if (showTabs) {
-            Box(Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
+        AnimatedVisibility(showTabs,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            enter = fadeIn(tween(200)) + slideInVertically(tween(230)) { it / 3 },
+            exit = fadeOut(tween(160)) + slideOutVertically(tween(190)) { it / 3 },
+        ) {
+            Box(Modifier.navigationBarsPadding()
                 .padding(start = 20.dp, end = 20.dp, bottom = 12.dp)
                 .widthIn(max = 300.dp).fillMaxWidth()) {
                 GlassTabs(tabs, selection, scene, contentOrigin, select)
@@ -204,7 +215,7 @@ private fun GlassTabs(tabs: List<HorizonTab>, selection: Int, scene: GraphicsLay
             val position by animateDpAsState(slot * selection,
                 animationSpec = spring(dampingRatio = 0.78f, stiffness = Spring.StiffnessMediumLow),
                 label = "tab selection")
-            Box(Modifier.align(Alignment.CenterStart).offset(x = position)
+            Box(Modifier.align(Alignment.CenterStart).offset { IntOffset(position.roundToPx(), 0) }
                 .width(slot).height(51.dp).padding(horizontal = 3.dp)
                 .clip(CircleShape)
                 .background(Brush.verticalGradient(listOf(

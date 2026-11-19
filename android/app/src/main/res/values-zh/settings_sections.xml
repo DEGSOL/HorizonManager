@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_digest_group">简报</string>
+    <string name="settings_app_group">应用</string>
+    <string name="settings_server_group">服务器</string>
+    <string name="settings_digest_rules">简报设置</string>
+    <string name="settings_digest_rules_detail">采集时限、数量限制和分组</string>
+    <string name="settings_ai_model">AI 模型</string>
+    <string name="settings_notifications">通知</string>
+    <string name="settings_notifications_detail">后台检查、推送和投递</string>
+    <string name="settings_server_delivery">电子邮件与 Webhook</string>
+    <string name="settings_connection_detail">SSH 访问和可选的 HTTPS</string>
+    <string name="settings_maintenance_detail">代理工具、日志和备份</string>
+    <string name="settings_agent_tools">代理工具</string>
+    <string name="settings_journal_detail">错误与活动记录</string>
+    <string name="settings_transfer">备份与迁移</string>
+    <string name="settings_transfer_detail">导入、导出和恢复 Horizon 设置</string>
+</resources>

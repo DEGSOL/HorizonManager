@@ -1,6 +1,8 @@
 package dev.horizonmanager
 
 import androidx.annotation.StringRes
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -53,15 +55,17 @@ internal fun chronologicalTime(article: JSONObject): Instant =
 internal fun GlassIconAction(icon: ImageVector, description: String, enabled: Boolean = true,
                             active: Boolean? = null, onClick: () -> Unit) {
     val palette = LocalHorizonPalette.current
-    val indicator = if (active == true) palette.tint.copy(alpha = 0.27f) else Color.Transparent
+    val indicator by animateColorAsState(if (active == true) palette.tint.copy(alpha = 0.27f) else Color.Transparent,
+        tween(180), label = "icon highlight")
+    val tint by animateColorAsState(when {
+        !enabled -> palette.muted.copy(alpha = 0.53f)
+        active == true -> palette.link
+        else -> palette.text
+    }, tween(180), label = "icon tint")
     val glyph: @Composable () -> Unit = {
         Icon(icon, description,
             Modifier.size(36.dp).background(indicator, CircleShape).padding(8.dp),
-            tint = when {
-                !enabled -> palette.muted.copy(alpha = 0.53f)
-                active == true -> palette.link
-                else -> palette.text
-            })
+            tint = tint)
     }
     if (active != null) IconToggleButton(active, { onClick() }, Modifier.size(48.dp), enabled, content = glyph)
     else IconButton(onClick, Modifier.size(48.dp), enabled, content = glyph)
@@ -107,7 +111,7 @@ internal fun NewsToolbar(filters: NewsFilters, profiles: List<String>, enabled: 
     }
     if (showSearch) {
         val focus = remember { FocusRequester() }
-        AlertDialog(
+        HorizonAlertDialog(
             onDismissRequest = { showSearch = false },
             title = { Text(ui(R.string.news_search)) },
             text = {

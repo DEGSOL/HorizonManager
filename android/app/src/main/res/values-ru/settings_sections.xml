@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_digest_group">Выпуск</string>
+    <string name="settings_app_group">Приложение</string>
+    <string name="settings_server_group">Сервер</string>
+    <string name="settings_digest_rules">Настройки дайджеста</string>
+    <string name="settings_digest_rules_detail">Окно сбора, лимиты и группировка</string>
+    <string name="settings_ai_model">Модель AI</string>
+    <string name="settings_notifications">Уведомления</string>
+    <string name="settings_notifications_detail">Фоновая проверка, push и доставка</string>
+    <string name="settings_server_delivery">Почта и вебхуки</string>
+    <string name="settings_connection_detail">Доступ по SSH и дополнительный HTTPS</string>
+    <string name="settings_maintenance_detail">Инструменты агента, журнал и резервные копии</string>
+    <string name="settings_agent_tools">Инструменты агента</string>
+    <string name="settings_journal_detail">Ошибки и история действий</string>
+    <string name="settings_transfer">Резервные копии и перенос</string>
+    <string name="settings_transfer_detail">Импорт, экспорт и восстановление настроек Horizon</string>
+</resources>

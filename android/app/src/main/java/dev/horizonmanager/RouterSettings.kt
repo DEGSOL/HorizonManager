@@ -9,7 +9,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
@@ -148,7 +147,7 @@ private fun RouterPicker(models: List<RouterModel>, selectedId: String, close: (
         val text = query.trim()
         models.filter { it.id.contains(text, ignoreCase = true) || it.name.contains(text, ignoreCase = true) }
     }
-    AlertDialog(
+    HorizonAlertDialog(
         onDismissRequest = close,
         title = { Text(ui(R.string.ui_choose_a_model)) },
         text = {

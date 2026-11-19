@@ -1,5 +1,4 @@
 <resources>
-    <string name="ui_file_saved">"File saved"</string>
     <string name="ui_could_not_write_the_file">"Could not write the file"</string>
     <string name="ui_the_file_is_damaged_too_large">"The file is damaged, too large or has an unsupported format"</string>
     <string name="ui_confirm_action">"Confirm action"</string>
@@ -15,7 +14,6 @@
     <string name="ui_close">"Close"</string>
     <string name="ui_password">"Password"</string>
     <string name="ui_continue">"Continue"</string>
-    <string name="ui_ssh_settings_verified">"SSH settings verified"</string>
     <string name="ui_verify_the_vps_key">"Verify the VPS key"</string>
     <string name="ui_the_vps_key_has_changed">"The VPS key has changed"</string>
     <string name="ui_compare_the_fingerprint_with_the_one">"Compare the fingerprint with the one in your VPS console before trusting the key."</string>
@@ -118,27 +116,12 @@
     <string name="ui_the_response_was_in_an_unexpected">"The response was in an unexpected format."</string>
     <string name="ui_operation_details">"Operation details"</string>
     <string name="ui_horizon_manager_installed">"Horizon Manager installed"</string>
-    <string name="ui_installation_job_sent_to_the_vps">"Installation job sent to the VPS"</string>
-    <string name="ui_agent_update_started">"Agent update started"</string>
-    <string name="ui_agent_updated">"Agent updated"</string>
-    <string name="ui_job_queued">"Job queued"</string>
-    <string name="ui_digest_translation_queued">"Digest translation queued"</string>
-    <string name="ui_stop_requested">"Stop requested"</string>
     <string name="ui_settings_saved_on_the_vps_the">"Settings saved on the VPS. The catalog key could not be saved on the phone."</string>
-    <string name="ui_settings_saved_add_the_following_secrets">"Settings saved. Add the following secrets: %1$s"</string>
-    <string name="ui_settings_saved">"Settings saved"</string>
-    <string name="ui_configuration_copied">"Configuration copied"</string>
-    <string name="ui_previous_configuration_restored">"Previous configuration restored"</string>
     <string name="ui_enabled_sources">"Enabled sources: %1$s"</string>
     <string name="ui_select_an_ai_model">" · select an AI model"</string>
     <string name="ui_add">" · add %1$s"</string>
     <string name="ui_the_installed_revision_matches_the_main">"The installed revision matches the main branch on GitHub"</string>
     <string name="ui_github_revision_verified_for_this_build">"GitHub · %1$s. Revision verified for this build · %2$s"</string>
-    <string name="ui_schedule_saved_on_the_vps">"Schedule saved on the VPS"</string>
-    <string name="ui_encrypted_backup_ready_to_save">"Encrypted backup ready to save"</string>
-    <string name="ui_backup_restored">"Backup restored"</string>
-    <string name="ui_connection_settings_saved">"Connection settings saved"</string>
-    <string name="ui_agent_restarted">"Agent restarted"</string>
     <string name="ui_by_score">"By score"</string>
     <string name="ui_your_first_digest">"Your first digest"</string>
     <string name="ui_news_will_appear_here_after_horizon">"News will appear here after Horizon processes your sources."</string>
@@ -154,7 +137,6 @@
     <string name="ui_back_to_articles">"Back to articles"</string>
     <string name="ui_full_digest">"Full digest"</string>
     <string name="ui_this_issue_is_shown_in_an">"This issue is shown in an available language."</string>
-    <string name="ui_the_markdown_digest_has_not_been">"The Markdown digest has not been downloaded yet."</string>
     <string name="ui_search_downloaded_articles">"Search downloaded articles"</string>
     <string name="ui_saved">"Saved"</string>
     <string name="ui_unread">"Unread"</string>
@@ -165,7 +147,6 @@
     <string name="ui_by_title">"By title"</string>
     <string name="ui_no_items_passed_the_horizon_filters">"No items passed the Horizon filters for this issue."</string>
     <string name="ui_no_downloaded_articles_match_your_filters">"No downloaded articles match your filters."</string>
-    <string name="ui_saved_2e21e4">"★ Saved"</string>
     <string name="ui_save">"☆ Save"</string>
     <string name="ui_read">"Read"</string>
     <string name="ui_mark_as_read">"Mark as read"</string>
@@ -253,11 +234,8 @@
     <string name="ui_settings_and_the_archive_will_stay">"Settings and the archive will stay on the VPS. Enter a separate sudo password if required."</string>
     <string name="ui_push_notification_service">"Push notification service"</string>
     <string name="ui_install_ntfy_and_enable_unifiedpush_in">"Install ntfy and enable UnifiedPush in its settings."</string>
-    <string name="ui_notification_registration_requested">"Notification registration requested"</string>
     <string name="ui_model_api_address_and_request_limits">"Model, API address and request limits"</string>
     <string name="ui_prompts_scoring_criteria_and_output_blocks">"Prompts, scoring criteria and output blocks"</string>
-    <string name="ui_quotas_order_and_grouping">"Quotas, order and grouping"</string>
-    <string name="ui_collection_time_window">"Collection time window"</string>
     <string name="ui_email_and_webhook">"Email and webhook"</string>
     <string name="ui_days_intervals_and_time_zone">"Days, intervals and time zone"</string>
     <string name="ui_ai_keys_and_integration_tokens">"AI keys and integration tokens"</string>
@@ -272,7 +250,6 @@
     <string name="ui_for_faster_alerts_connect_ntfy_through">"For faster alerts, connect ntfy through UnifiedPush. Without it, Android checks the VPS roughly every 30 minutes."</string>
     <string name="ui_connect_push_notifications">"Connect push notifications"</string>
     <string name="ui_push_notifications_connected">"Push notifications connected"</string>
-    <string name="ui_push_notifications_disconnected">"Push notifications disconnected"</string>
     <string name="ui_disconnect_push_notifications">"Disconnect push notifications"</string>
     <string name="ui_save_connection">"Save connection"</string>
     <string name="ui_ssh_settings">"SSH settings"</string>
