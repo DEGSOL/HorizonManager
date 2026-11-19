@@ -15,9 +15,18 @@ android {
         applicationId = "dev.horizonmanager.mobile"
         minSdk = 26
         targetSdk = 36
-        versionCode = 8
-        versionName = "0.2.0"
-        buildConfigField("String", "AGENT_VERSION", "\"0.1.3\"")
+        versionCode = 9
+        versionName = "0.3.0"
+        buildConfigField("String", "AGENT_VERSION", "\"0.1.4\"")
+    }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+            for (name in listOf("https.proxyHost", "https.proxyPort", "http.proxyHost", "http.proxyPort"))
+                System.getProperty(name)?.let { value -> it.systemProperty(name, value) }
+            it.maxHeapSize = "1700m"
+        }
     }
     buildFeatures { compose = true; buildConfig = true }
     signingConfigs {
@@ -76,8 +85,12 @@ dependencies {
     implementation("org.unifiedpush.android:connector:3.3.6")
     implementation("com.github.mwiede:jsch:2.27.7")
     implementation("org.bouncycastle:bcprov-jdk18on:1.87")
+    implementation("org.jsoup:jsoup:1.18.3")
     implementation("org.commonmark:commonmark:0.27.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    testImplementation(platform("androidx.compose:compose-bom:2025.11.01"))
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("org.robolectric:robolectric:4.16.1")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20250517")
 }

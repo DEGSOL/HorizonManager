@@ -44,6 +44,7 @@ internal data class Panel(
     val events: List<JSONObject> = emptyList(),
     val flags: List<ArticleFlag> = emptyList(),
     val schedule: JSONObject = JSONObject(),
+    val syncedDigest: String = "",
     val selectedRun: String = "",
     val language: String = "",
     val markdown: String = "",
@@ -404,7 +405,12 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             val status = api.get("status") as JSONObject
             val jobs = (api.get("jobs") as JSONArray).objects()
             val events = (api.get(if (cursor == 0L) "events?limit=250&latest=true" else "events?after=$cursor&limit=1000") as JSONArray).objects()
-            Refresh(archive, hasMore, digest, config, schema, schedule, sources, status, jobs, events)
+            val media = if (!changed && selected?.optBoolean("media_ready") == true &&
+                panel.articles.any { !it.has("media") }) {
+                val id = selected.getString("id")
+                runCatching { Triple(id, requireNotNull(lang), api.get("media/$id") as JSONObject) }.getOrNull()
+            } else null
+            Refresh(archive, hasMore, digest, config, schema, schedule, sources, status, jobs, events, media)
         }
         cache.saveArchive(CachedArchive(server.id, JSONArray(remote.archive).toString()))
         val hours = collectionHours(remote.config, state.value.collectionHours)
@@ -412,6 +418,10 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         if (remote.digest != null) {
             val (run, lang) = saveDigest(server.id, remote.digest, 0)
             showCached(server.id, run, lang)
+        }
+        remote.media?.let { (id, language, media) ->
+            cache.mergeArtwork(server.id, id, language, media)
+            if (state.value.selectedRun == id) showCached(server.id, id, language)
         }
         cache.saveEvents(remote.events.map {
             LocalEvent(server.id, "remote", it.getLong("id"), it.getString("time"), it.toString())
@@ -422,6 +432,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         }
         mutable.update { panel ->
             panel.copy(archive = remote.archive, hasMoreDigests = remote.hasMore, collectionHours = hours,
+                syncedDigest = remote.digest?.optString("id") ?: panel.syncedDigest,
                 config = remote.config, schema = remote.schema,
                 schedule = remote.schedule, sourceHistory = remote.sources, status = remote.status, jobs = remote.jobs,
                 problem = if (panel.problem.startsWith("AGENT_") || panel.problem.startsWith("SSH_")) "" else panel.problem)
@@ -436,7 +447,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     private data class Refresh(
         val archive: List<JSONObject>, val hasMore: Boolean, val digest: JSONObject?, val config: JSONObject, val schema: JSONObject,
         val schedule: JSONObject, val sources: List<JSONObject>, val status: JSONObject, val jobs: List<JSONObject>,
-        val events: List<JSONObject>,
+        val events: List<JSONObject>, val media: Triple<String,String,JSONObject>?,
     )
 
     private suspend fun saveDigest(server: String, page: JSONObject, offset: Int): Pair<String, String> {
@@ -513,6 +524,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                 mutable.update { it.copy(selectedRun = run, language = language, articles = emptyList(), markdown = "", total = 0) }
             val page = withAgent(server) { it.get("digests/$run/$language?offset=$offset") as JSONObject }
             saveDigest(server.id, page, offset)
+            if (offset == 0) mutable.update { it.copy(syncedDigest = run) }
             showCached(server.id, run, language)
         }
     }
@@ -628,6 +640,10 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                 }
             }
         }
+
+    fun mediaSearch(enabled: Boolean) = mutate(false) { api ->
+        api.put("media-search", JSONObject().put("enabled", enabled))
+    }
 
     fun saveConfig(config: JSONObject, profiles: JSONArray, secrets: JSONObject = JSONObject()) {
         mutate(true) { api ->

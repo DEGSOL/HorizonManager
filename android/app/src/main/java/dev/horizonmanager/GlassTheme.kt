@@ -30,6 +30,9 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -118,31 +121,35 @@ internal data class HorizonTab(@param:StringRes val label: Int, val icon: ImageV
 
 @Composable
 internal fun GlassLayout(tabs: List<HorizonTab>, selection: Int, showTabs: Boolean, select: (Int) -> Unit,
-                         content: @Composable BoxScope.() -> Unit) {
+                         dimmed: Boolean = false, content: @Composable BoxScope.() -> Unit) {
     val palette = LocalHorizonPalette.current
-    Column(Modifier.fillMaxSize().background(palette.background).imePadding()) {
-        val bottom = if (showTabs) Modifier.consumeWindowInsets(WindowInsets.navigationBars) else Modifier
-        Box(Modifier.weight(1f).fillMaxWidth().then(bottom), content = content)
-        AnimatedVisibility(showTabs, enter = fadeIn(tween(190)) + slideInVertically(tween(230)) { it / 3 },
-            exit = fadeOut(tween(140)) + slideOutVertically(tween(190)) { it / 3 }) {
-            val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
-            Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 5.dp)
-                .glassPanel(RoundedCornerShape(22.dp)).padding(4.dp).selectableGroup(),
-                verticalAlignment = Alignment.CenterVertically) {
-                tabs.forEachIndexed { index, tab ->
-                    val selected = selection == index
-                    val highlight by animateColorAsState(if (selected) palette.tint.copy(alpha = 0.19f) else Color.Transparent,
-                        tween(160), label = "tab highlight")
-                    Column(Modifier.weight(1f).heightIn(min = 51.dp).clip(RoundedCornerShape(17.dp)).background(highlight)
-                        .selectable(selected, role = Role.Tab, onClick = {
-                            if (!selected) haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                            select(index)
-                        }).padding(vertical = 5.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                        val tint = if (selected) palette.link else palette.muted
-                        Icon(tab.icon, null, Modifier.size(21.dp), tint)
-                        Text(stringResource(tab.label), color = tint, style = MaterialTheme.typography.labelMedium,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+    val sceneLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
+    val scene = remember(sceneLayer) { GlassScene(sceneLayer) }
+    Box(Modifier.fillMaxSize().background(palette.background).drawBehind {
+        val center = androidx.compose.ui.geometry.Offset(size.width * .15f, size.height * 1.02f)
+        drawCircle(androidx.compose.ui.graphics.Brush.radialGradient(
+            listOf(palette.tint.copy(alpha=.095f), Color.Transparent), center, size.width*.64f),
+            radius=size.width*.64f, center=center)
+    }.imePadding()) {
+        Box(Modifier.fillMaxSize().recordScene(scene), content = content)
+        CompositionLocalProvider(LocalGlassScene provides scene) {
+            AnimatedVisibility(showTabs, modifier = Modifier.align(Alignment.BottomCenter)
+                .navigationBarsPadding().padding(bottom = 10.dp),
+                enter = fadeIn(tween(160)) + slideInVertically(tween(220)) { it / 2 },
+                exit = fadeOut(tween(140)) + slideOutVertically(tween(190)) { it / 2 }) {
+                val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+                Row(Modifier.selectableGroup().then(if (dimmed) Modifier.blur(3.dp).alpha(.42f) else Modifier),
+                    horizontalArrangement = Arrangement.spacedBy(22.dp)) {
+                    tabs.forEachIndexed { index, tab ->
+                        val selected = index == selection
+                        Box(Modifier.size(54.dp).frost(CircleShape, selected)
+                            .selectable(selected, enabled = !dimmed, role = Role.Tab, onClick = {
+                                if (!selected) haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                select(index)
+                            }), contentAlignment = Alignment.Center) {
+                            Icon(tab.icon, stringResource(tab.label), Modifier.size(22.dp),
+                                tint = if (selected) palette.link else palette.text)
+                        }
                     }
                 }
             }
@@ -166,16 +173,17 @@ internal fun Tile(modifier: Modifier = Modifier, accented: Boolean = false,
 
 @Composable
 internal fun GlassSettingRow(title: String, subtitle: String, enabled: Boolean = true, open: () -> Unit) {
-    Tile(Modifier.clickable(enabled = enabled, role = Role.Button, onClick = open)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(title, style = MaterialTheme.typography.titleMedium)
-                Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall)
+    val palette=LocalHorizonPalette.current
+    Column {
+        Row(Modifier.fillMaxWidth().clickable(enabled=enabled,role=Role.Button,onClick=open)
+            .heightIn(min=57.dp).padding(horizontal=4.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
+            Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)) {
+                Text(title,style=MaterialTheme.typography.titleMedium,color=if(enabled) palette.text else palette.muted)
+                if(subtitle.isNotBlank()) Text(subtitle,color=palette.muted,style=MaterialTheme.typography.bodySmall)
             }
-            Text("›", style = MaterialTheme.typography.headlineSmall, color = LocalHorizonPalette.current.link)
+            Text("›",Modifier.padding(start=10.dp),style=MaterialTheme.typography.titleLarge,color=palette.link)
         }
+        androidx.compose.material3.HorizontalDivider(color=palette.elevated.copy(alpha=.65f),thickness=.5.dp)
     }
 }
 

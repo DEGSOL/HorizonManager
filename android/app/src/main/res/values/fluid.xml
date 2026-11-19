@@ -1,0 +1,34 @@
+<resources>
+    <string name="mr_news">News &amp; sources</string>
+    <string name="mr_news_detail">Sources, digest rules and schedule</string>
+    <string name="mr_server">Connection &amp; server</string>
+    <string name="mr_interface">Interface</string>
+    <string name="mr_images">Article images</string>
+    <string name="mr_images_detail">Use the publication’s attachment or cover when available.</string>
+    <string name="mr_search_detail">For future issues, let your configured AI select a relevant public-domain photograph when the source has no image. This uses additional AI requests.</string>
+    <string name="mr_agent_images">Update the VPS agent in Maintenance to enable thematic search.</string>
+    <string name="mr_new_profile">New profile</string>
+    <string name="mr_default_profile">Default processing profile</string>
+    <string name="mr_set_default">Use as default</string>
+    <string name="mr_name">Name</string>
+    <string name="mr_structure">Classification and output</string>
+    <string name="mr_prompts">Processing prompts</string>
+    <string name="mr_profile_delete">Existing links from sources and digest rules must be reassigned before saving.</string>
+    <string name="mr_latest">Latest issue</string>
+    <string name="mr_credit">Image source</string>
+    <string name="mr_themed">Thematic illustration</string>
+    <string name="mr_art">Original image</string>
+    <string name="mr_details">Issue details</string>
+    <string name="mr_archive_issue">Archive issue</string>
+    <string name="mr_search_images">Image selection</string>
+    <string name="mr_issue_order">Digest order</string>
+    <string name="mr_offline_copy">Available offline</string>
+    <string name="mr_on_server">On the VPS</string>
+    <string name="mr_media_ready">Illustrations prepared</string>
+    <string name="mr_media_failed">Illustrations unavailable</string>
+    <string name="mr_media_changed">Illustration settings updated</string>
+    <string name="mr_creator">Research and creative work with AI</string>
+    <string name="mr_tech_news">Technology announcements and industry news</string>
+    <string name="mr_tech_blog">Technical essays and engineering experience</string>
+    <string name="mr_finance">Markets, companies and financial events</string>
+</resources>

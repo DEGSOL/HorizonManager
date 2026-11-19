@@ -42,6 +42,22 @@ class SshIntegrationTest {
     }
 
     @Test
+    fun mediaPolicyRoundTripOverPinnedSsh() {
+        val pin = assertThrows(HostConfirmation::class.java) { Ssh.withSession(server) {} }.fingerprint
+        val pinned = server.copy(pin=pin)
+        Ssh.withSession(pinned) { session ->
+            val api = AgentApi(pinned,session)
+            val old = (api.get("status") as org.json.JSONObject).getBoolean("media_search")
+            try {
+                api.put("media-search",org.json.JSONObject().put("enabled",!old))
+                assertEquals(!old,(api.get("status") as org.json.JSONObject).getBoolean("media_search"))
+            } finally {
+                api.put("media-search",org.json.JSONObject().put("enabled",old))
+            }
+        }
+    }
+
+    @Test
     fun encryptedPrivateKey() {
         val path = System.getenv("HM_TEST_SSH_KEY")
         assumeTrue(path != null)

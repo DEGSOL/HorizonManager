@@ -213,6 +213,12 @@ async def main(payload, job):
                                                 orchestrator.storage.load_subscribers())
                     if webhook:
                         await webhook.send_daily_summary(markdown, items, raw, today, language, summarizer)
+            from .media import prepare_images
+            try:
+                covers = await prepare_images(store_dir / job, items, context.config, payload.get("media_search", False))
+                send("log", level="INFO", code="MEDIA_READY", detail=str(covers or 0))
+            except Exception:
+                send("log", level="WARNING", code="MEDIA_UNAVAILABLE", detail="")
         finally:
             cfg.write_text(json.dumps(settings["config"], ensure_ascii=False), encoding="utf-8")
             if kind == "source":

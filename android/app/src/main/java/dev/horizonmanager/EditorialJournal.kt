@@ -39,7 +39,7 @@ internal fun diagnosticEvent(row: JSONObject): JSONObject {
         code.startsWith("INSTALL_") -> raw.takeIf(exitStatus::matches)
         code.startsWith("SOURCE_") -> sourceResult.matchEntire(raw)?.groupValues?.drop(1)?.filter(String::isNotBlank)?.joinToString(" · ")
         code == "JOB_QUEUED" -> raw.takeIf { it in setOf("run", "ai", "source", "localize") }
-        code in setOf("HORIZON_EXIT", "JOURNAL_CLEARED") -> raw.takeIf { it.length <= 9 && it.toIntOrNull() != null }
+        code in setOf("HORIZON_EXIT", "JOURNAL_CLEARED", "MEDIA_READY") -> raw.takeIf { it.length <= 9 && it.toIntOrNull() != null }
         else -> raw.takeIf { it in safeException || it == "src.ai.classifier · fallback" }
     }
     return JSONObject().apply {

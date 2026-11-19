@@ -7,6 +7,9 @@ import android.content.ClipboardManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.CancellationException
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -67,6 +70,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         notificationServer = notificationTarget(intent)
         enableEdgeToEdge()
+        if (Build.VERSION.SDK_INT >= 29) window.isNavigationBarContrastEnforced = false
         val preferences = getSharedPreferences("appearance", MODE_PRIVATE)
         setContent {
             var preset by remember { mutableStateOf(ThemePreset.fromId(preferences.getString("preset", null))) }
@@ -81,9 +85,15 @@ class MainActivity : ComponentActivity() {
 }
 
 private const val FEED = 0
-private const val ARCHIVE = 1
-private const val JOURNAL = 2
-private const val SETTINGS = 3
+private const val SETTINGS = 1
+private const val ARCHIVE = 2
+
+internal fun pushSettingsRoute(current: String, next: String): String = when {
+    next.isEmpty() -> ""
+    current.substringAfterLast('/') == next -> current
+    current.isEmpty() -> next
+    else -> "$current/$next"
+}
 
 private data class Screen(val page: String, val issueId: String = "") {
     val reading get() = page == "feed" || page == "archived"
@@ -92,9 +102,8 @@ private data class Screen(val page: String, val issueId: String = "") {
 @Composable
 private fun mainTabs() = listOf(
     HorizonTab(R.string.feed, ImageVector.vectorResource(R.drawable.ic_issue)),
+    HorizonTab(R.string.settings, ImageVector.vectorResource(R.drawable.ic_sliders)),
     HorizonTab(R.string.archive, ImageVector.vectorResource(R.drawable.ic_archive)),
-    HorizonTab(R.string.journal, ImageVector.vectorResource(R.drawable.ic_journal)),
-    HorizonTab(R.string.settings, Icons.Default.Settings),
 )
 
 @Composable
@@ -109,13 +118,17 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     var manageServers by remember { mutableStateOf(false) }
     var editServer by remember { mutableStateOf(false) }
     var editVerification by remember { mutableStateOf("") }
-    var configPage by rememberSaveable(currentServer?.id) { mutableStateOf("") }
+    var route by rememberSaveable(currentServer?.id) { mutableStateOf("") }
+    val configPage = route.substringAfterLast('/')
+    var previousTab by rememberSaveable { mutableIntStateOf(FEED) }
+    var navVisible by remember(tab) { mutableStateOf(true) }
+    var overlay by remember(tab, currentServer?.id) { mutableStateOf(false) }
     val feedFilters = rememberSaveable(currentServer?.id, saver = NewsFilters.Saver) { NewsFilters() }
     val screenState = rememberSaveableStateHolder()
     val readingPrefs = remember(ctx) { ctx.getSharedPreferences("reading", android.content.Context.MODE_PRIVATE) }
     var defaultOrder by remember { mutableStateOf(NewsOrder.entries.firstOrNull {
         it.name == readingPrefs.getString("default_order", null)
-    } ?: NewsOrder.Score) }
+    } ?: NewsOrder.Issue) }
     var archiveIssue by rememberSaveable(currentServer?.id) { mutableStateOf("") }
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val now by produceState(Instant.now(), lifecycle) {
@@ -151,14 +164,15 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         }
     }
     fun openSettings(page: String) {
-        tab = if (page == "journal") JOURNAL else SETTINGS
-        configPage = if (page == "journal") "" else page
+        if (tab != SETTINGS) previousTab = tab
+        tab = SETTINGS
+        route = pushSettingsRoute(route, page)
     }
     LaunchedEffect(notificationServer) {
         if (notificationServer.isNotEmpty()) {
             tab = FEED
             archiveIssue = ""
-            configPage = ""
+            route = ""
             manageServers = false
             editServer = false
             model.openNotification(notificationServer)
@@ -243,23 +257,26 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         when {
             manageServers -> manageServers = false
             editServer -> editServer = false
-            configPage.isNotEmpty() -> configPage = when (configPage) {
-                "transfer", "secrets", "advanced" -> "maintenance"
-                "delivery" -> "alerts"
-                "digest", "schedule" -> "digest_settings"
-                "ai", "profiles" -> "ai_settings"
-                else -> ""
-            }
+            tab == SETTINGS && route.isNotEmpty() -> route = route.substringBeforeLast('/', "")
             showingSetupSettings -> tab = FEED
             tab == ARCHIVE && archiveIssue.isNotEmpty() -> { archiveIssue = ""; model.leaveArchive() }
+            tab != FEED -> { tab = if (previousTab != tab) previousTab else FEED; previousTab = FEED; if (tab == FEED) model.showFeed() }
         }
     }
 
+    val editorBack = remember(configPage) { mutableStateOf<(() -> Unit)?>(null) }
     fun goBack() {
+        editorBack.value?.let { it(); return }
         if (dirtyPage) confirm = ui(R.string.editorial_discard_prompt) to ::navigateBack else navigateBack()
     }
     val canGoBack = manageServers || editServer || configPage.isNotEmpty() || showingSetupSettings || (tab == ARCHIVE && openedIssue != null)
-    BackHandler(canGoBack, ::goBack)
+    var backProgress by remember { mutableFloatStateOf(0f) }
+    PredictiveBackHandler(enabled = canGoBack || tab != FEED) { events ->
+        try {
+            events.collect { backProgress = it.progress }
+            goBack()
+        } finally { backProgress = 0f }
+    }
 
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     confirm?.let { (description, action) ->
@@ -284,30 +301,29 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         }
     }
 
-    val showTabs = panel.ready && !canGoBack
-    GlassLayout(tabs, tab, showTabs, select = { chosen ->
+    val showTabs = panel.ready && !canGoBack && (tab != FEED || navVisible || overlay)
+    GlassLayout(tabs, tab, showTabs, dimmed = overlay, select = { chosen ->
         if (chosen != tab || configPage.isNotEmpty() || openedIssue != null) {
+            previousTab = tab
             tab = chosen
-            configPage = ""
+            route = ""
             archiveIssue = ""
             if (chosen == FEED) model.showFeed()
         }
     }) {
         val destination = when {
             manageServers -> Screen("servers")
-            configPage in setOf("theme", "reading") -> Screen(configPage)
             editServer -> Screen("ssh")
+            configPage.isNotEmpty() -> Screen(configPage, route)
             showingSetupSettings -> Screen("settings")
             !panel.ready -> Screen("setup")
-            configPage.isNotEmpty() -> Screen(configPage)
             tab == ARCHIVE && openedIssue != null -> Screen("archived", archiveIssue)
             tab == ARCHIVE -> Screen("archive")
-            tab == JOURNAL -> Screen("journal")
             tab == SETTINGS -> Screen("settings")
             else -> Screen("feed")
         }
         AnimatedContent(destination,
-            modifier = Modifier.align(Alignment.TopCenter).widthIn(max = 780.dp).fillMaxSize(),
+            modifier = Modifier.align(Alignment.TopCenter).graphicsLayer { scaleX = 1f - backProgress * .035f; scaleY = scaleX }.widthIn(max = 780.dp).fillMaxSize(),
             transitionSpec = {
                 (fadeIn(tween(220, delayMillis = 40)) + slideInVertically(tween(260)) { it / 45 }) togetherWith
                     (fadeOut(tween(130)) + slideOutVertically(tween(160)) { -it / 65 })
@@ -317,14 +333,18 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
             val archived = screen.page == "archived"
             val displayedIssue = if (archived) issues.archive.find { it.optString("id") == screen.issueId } else issues.feed
             val filters = if (archived) archiveFilters else feedFilters
-            val screenBack = screen.page !in setOf("feed", "archive", "journal", "setup", "settings") ||
+            val screenBack = screen.page !in setOf("feed", "archive", "setup", "settings") ||
                 (screen.page == "settings" && showingSetupSettings)
             val heading = when (screen.page) {
                 "servers" -> ui(R.string.ui_servers)
                 "theme" -> ui(R.string.theme)
-                "setup", "ssh" -> "Horizon Manager"
+                "setup", "ssh" -> "MRizon"
                 "settings" -> ui(R.string.settings)
                 "journal" -> ui(R.string.journal)
+                "news_settings" -> ui(R.string.mr_news)
+                "server_settings" -> ui(R.string.mr_server)
+                "interface" -> ui(R.string.mr_interface)
+                "images" -> ui(R.string.mr_images)
                 "sources" -> ui(R.string.sources)
                 "control" -> ui(R.string.control)
                 "schedule" -> ui(R.string.ui_schedule)
@@ -359,7 +379,8 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
             screenState.SaveableStateProvider("${currentServer?.id.orEmpty()}/${screen.page}/${screen.issueId}") {
                 when {
                     screen.reading -> NewsScreen(panel, model, displayedIssue, filters, archived,
-                        { openSettings("ai") }, { openSettings("sources") }, header)
+                        { openSettings("ai") }, { openSettings("sources") }, ::goBack,
+                        { navVisible = it }, { overlay = it })
                     screen.page == "archive" -> ArchiveScreen(issues.archive, panel, model,
                         { archiveIssue = it.getString("id") }, header)
                     screen.page == "journal" -> Journal(panel, { description, run -> confirm = description to run }, model,
@@ -376,7 +397,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                                     val detail = if (server.id == currentServer?.id) "${ui(R.string.ui_selected)} · $endpoint" else endpoint
                                     GlassSettingRow(server.name, detail, enabled = !panel.busy) {
                                         model.select(server)
-                                        configPage = ""
+                                        route = ""
                                         archiveIssue = ""
                                         tab = FEED
                                         manageServers = false
@@ -410,9 +431,14 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                             "local" -> LocalReadingData(panel)
                             "digest_settings" -> DigestSettings(::openSettings)
                             "ai_settings" -> AiSettings(::openSettings)
-                            "settings" -> SettingsHome(panel, preset, ::openSettings) { manageServers = true }
-                            else -> SettingsForm(panel, model, screen.page) { if (configPage == screen.page) dirtyPage = it }
+                            "settings", "news_settings", "server_settings", "interface" ->
+                                SettingsHome(panel, preset, ::openSettings, screen.page) { manageServers = true }
+                            "images" -> ImageSettings(panel, model)
+                            else -> CompositionLocalProvider(LocalEditorBack provides editorBack) {
+                                SettingsForm(panel, model, screen.page) { if (configPage == screen.page) dirtyPage = it }
+                            }
                         }
+                        Spacer(Modifier.height(if (showTabs) 78.dp else 10.dp))
                     }
                 }
             }
@@ -620,6 +646,9 @@ private fun installError(code: String?, step: String) = when (code) {
 }
 
 internal fun errorText(code: String) = when (code.substringBefore(" · ")) {
+    "MEDIA_READY" -> ui(R.string.mr_media_ready)
+    "MEDIA_UNAVAILABLE" -> ui(R.string.mr_media_failed)
+    "MEDIA_SEARCH_CHANGED" -> ui(R.string.mr_media_changed)
     "SSH_HOST_CHANGED" -> ui(R.string.ui_the_ssh_fingerprint_changed_open_ssh)
     "SSH_KEY" -> ui(R.string.ui_could_not_read_the_private_key)
     "SSH_AUTH" -> ui(R.string.ui_the_vps_rejected_the_password_or)

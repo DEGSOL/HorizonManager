@@ -1,6 +1,7 @@
 package dev.horizonmanager
 
 import androidx.annotation.StringRes
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -20,30 +21,59 @@ private fun SettingsSection(@StringRes title: Int, content: @Composable ColumnSc
 }
 
 @Composable
-internal fun SettingsHome(panel: Panel, preset: ThemePreset, open: (String) -> Unit, servers: () -> Unit) {
-    val hasConfig = panel.config.optJSONObject("config") != null && panel.schema.length() > 0
-    if (panel.ready) {
-        GlassSettingRow(ui(R.string.sources), ui(R.string.sources_description)) { open("sources") }
-        if (hasConfig) {
-            GlassSettingRow(ui(R.string.ui_digest), ui(R.string.editorial_digest_settings_detail)) { open("digest_settings") }
-            GlassSettingRow(ui(R.string.editorial_ai_processing), ui(R.string.editorial_ai_settings_detail)) { open("ai_settings") }
+internal fun SettingsHome(panel: Panel, preset: ThemePreset, open: (String) -> Unit, page: String, servers: () -> Unit) {
+    val configured = panel.config.has("config") && panel.schema.length() > 0
+    fun rowPage(id: String): () -> Unit = { open(id) }
+    when (page) {
+        "settings" -> {
+            Tile(Modifier.clickable(role=androidx.compose.ui.semantics.Role.Button,onClick=rowPage("server_settings")),accented=true) {
+                Text(ui(R.string.mr_server),style=MaterialTheme.typography.labelLarge,color=LocalHorizonPalette.current.link)
+                Text(panel.server?.name ?: ui(R.string.editorial_not_configured),style=MaterialTheme.typography.headlineSmall)
+                panel.server?.let { Text(it.host,style=MaterialTheme.typography.bodySmall,color=LocalHorizonPalette.current.muted) }
+            }
+            if (panel.ready) {
+                GlassSettingRow(ui(R.string.mr_news), ui(R.string.mr_news_detail), open = rowPage("news_settings"))
+                GlassSettingRow(ui(R.string.editorial_ai_processing), ui(R.string.editorial_ai_settings_detail),
+                    enabled = configured, open = rowPage("ai_settings"))
+            }
+            GlassSettingRow(ui(R.string.ui_maintenance), ui(R.string.settings_journal_detail), open = rowPage("maintenance"))
+            GlassSettingRow(ui(R.string.mr_interface), ui(preset.title), open = rowPage("interface"))
+        }
+        "news_settings" -> {
+            GlassSettingRow(ui(R.string.sources), ui(R.string.sources_description), open = rowPage("sources"))
+            if (configured) DigestSettings(open)
+            GlassSettingRow(ui(R.string.mr_images), ui(R.string.mr_images_detail), open = rowPage("images"))
+        }
+        "server_settings" -> {
+            ServerConnectionStatus(panel, model = null)
+            GlassSettingRow(ui(R.string.ui_servers), ui(R.string.servers_description), open = servers)
+            if (panel.ready) {
+                GlassSettingRow(ui(R.string.ui_connection), ui(R.string.settings_connection_detail), open = rowPage("connection"))
+                GlassSettingRow(ui(R.string.control), ui(R.string.control_description), open = rowPage("control"))
+            }
+        }
+        "interface" -> {
+            GlassSettingRow(ui(R.string.theme), ui(preset.title), open = rowPage("theme"))
+            GlassSettingRow(ui(R.string.editorial_feed_behavior), ui(R.string.editorial_feed_behavior_detail), open = rowPage("reading"))
+            if (panel.ready) {
+                GlassSettingRow(ui(R.string.editorial_local_data), ui(R.string.editorial_local_data_detail), open = rowPage("local"))
+                GlassSettingRow(ui(R.string.settings_notifications), ui(R.string.settings_notifications_detail), open = rowPage("alerts"))
+            }
         }
     }
-    SettingsSection(R.string.settings_app_group) {
-        GlassSettingRow(ui(R.string.theme), ui(preset.title)) { open("theme") }
-        GlassSettingRow(ui(R.string.editorial_feed_behavior), ui(R.string.editorial_feed_behavior_detail)) { open("reading") }
-        if (panel.ready) GlassSettingRow(ui(R.string.editorial_local_data), ui(R.string.editorial_local_data_detail)) { open("local") }
-        if (panel.ready) {
-            GlassSettingRow(ui(R.string.settings_notifications), ui(R.string.settings_notifications_detail)) { open("alerts") }
+}
+
+@Composable
+internal fun ImageSettings(panel: Panel, model: ManagerModel) {
+    val supported = panel.status.has("media_search")
+    Tile {
+        Text(ui(R.string.mr_images_detail))
+        Text(ui(R.string.mr_search_detail), color = LocalHorizonPalette.current.muted)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Wikimedia Commons", Modifier.weight(1f))
+            Switch(panel.status.optBoolean("media_search"), { model.mediaSearch(it) }, enabled = supported && !panel.busy)
         }
-    }
-    if (panel.ready || panel.servers.isNotEmpty()) SettingsSection(R.string.settings_server_group) {
-        GlassSettingRow(ui(R.string.ui_servers), ui(R.string.servers_description), open = servers)
-        if (panel.ready) {
-            GlassSettingRow(ui(R.string.ui_connection), ui(R.string.settings_connection_detail)) { open("connection") }
-            GlassSettingRow(ui(R.string.control), ui(R.string.control_description)) { open("control") }
-            GlassSettingRow(ui(R.string.ui_maintenance), ui(R.string.settings_maintenance_detail)) { open("maintenance") }
-        }
+        if (!supported) Text(ui(R.string.mr_agent_images))
     }
 }
 
@@ -67,7 +97,7 @@ internal fun isConnectionFailure(problem: String): Boolean =
         problem.substringBefore(" · ") in setOf("AUTH_REQUIRED", "API_401", "API_403")
 
 @Composable
-internal fun ServerConnectionStatus(panel: Panel, model: ManagerModel) {
+internal fun ServerConnectionStatus(panel: Panel, model: ManagerModel?) {
     val theme = LocalHorizonPalette.current
     val problem = panel.connectionProblem
     val (title, color) = when {
@@ -83,7 +113,7 @@ internal fun ServerConnectionStatus(panel: Panel, model: ManagerModel) {
         Text(ui(title), style = MaterialTheme.typography.labelLarge, color = color)
         if (panel.lastContact.isNotBlank()) Text(ui(R.string.editorial_last_contact, localTime(panel.lastContact)),
             style = MaterialTheme.typography.bodySmall, color = theme.muted)
-        if (problem.isNotBlank() && !panel.syncing) {
+        if (problem.isNotBlank() && !panel.syncing && model != null) {
             Text(errorText(problem), style = MaterialTheme.typography.bodyMedium)
             TextButton(onClick = { model.refresh() }, enabled = !panel.busy) { Text(ui(R.string.ui_retry)) }
         }
@@ -178,6 +208,7 @@ internal fun ServerMaintenance(panel: Panel, model: ManagerModel, open: (String)
     if (upgrade) PasswordDialog(ui(R.string.ui_update_vps_agent), ui(R.string.ui_settings_and_the_archive_will_stay),
         close = { upgrade = false }) { password -> upgrade = false; model.updateAgent(password) }
     GlassSettingRow(ui(R.string.journal), ui(R.string.settings_journal_detail)) { open("journal") }
+    if (!panel.ready) return
     if (panel.config.length() > 0 && panel.schema.length() > 0) {
         GlassSettingRow(ui(R.string.settings_transfer), ui(R.string.settings_transfer_detail)) { open("transfer") }
         GlassSettingRow(ui(R.string.ui_secrets), ui(R.string.ui_ai_keys_and_integration_tokens)) { open("secrets") }

@@ -112,6 +112,22 @@ internal interface Cache {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveDigest(digest: CachedDigest)
 
+    @Query("SELECT DISTINCT run FROM CachedDigest WHERE server = :server AND offset = 0")
+    fun localIssues(server: String): Flow<List<String>>
+
+    @Transaction
+    suspend fun mergeArtwork(server: String, run: String, language: String, artwork: JSONObject) {
+        for (cached in digest(server, run, language)) {
+            val page = JSONObject(cached.data)
+            var changed = false
+            for (item in page.getJSONArray("items").objects()) if (!item.has("media")) {
+                item.put("media", artwork.optJSONObject(item.optString("id")) ?: JSONObject())
+                changed = true
+            }
+            if (changed) saveDigest(cached.copy(data=page.toString()))
+        }
+    }
+
     @Query("SELECT COUNT(DISTINCT run) FROM CachedDigest WHERE server = :server")
     fun cachedIssues(server: String): Flow<Int>
 

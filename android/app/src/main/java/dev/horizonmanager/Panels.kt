@@ -120,12 +120,12 @@ internal fun Control(panel: Panel, model: ManagerModel, confirm: (String, () -> 
         Text(ui(R.string.ui_horizon_on_the_vps), style = MaterialTheme.typography.titleLarge)
         if (status.length() == 0) Text(ui(R.string.ui_monitoring_data_has_not_loaded_yet))
         else {
-            Text(ui(R.string.ui_agent_horizon, status.optString("agent"), status.optString("horizon").take(12)))
+            if (status.has("agent") && status.has("horizon")) Text(ui(R.string.ui_agent_horizon, status.optString("agent"), status.optString("horizon").take(12)))
             val mem = status.optJSONObject("memory")
             val total = mem?.optLong("MemTotal") ?: 0
             val available = mem?.optLong("MemAvailable") ?: 0
-            Text(ui(R.string.ui_ram_mib_free_disk_mib, (total - available) / 1_048_576, total / 1_048_576, status.optLong("disk_free") / 1_048_576))
-            Text(ui(R.string.ui_cpu_1_minute_load_average, status.optInt("cpu"), status.optDouble("load")))
+            if (mem?.has("MemAvailable") == true && total > 0 && status.has("disk_free")) Text(ui(R.string.ui_ram_mib_free_disk_mib, (total - available) / 1_048_576, total / 1_048_576, status.optLong("disk_free") / 1_048_576))
+            if (status.has("cpu") && status.optDouble("load").isFinite()) Text(ui(R.string.ui_cpu_1_minute_load_average, status.optInt("cpu"), status.optDouble("load")))
             Text(ui(R.string.ui_next_run, localEpoch(status.optDouble("next"))))
         }
         latest?.let { Text(ui(R.string.ui_last_success_517d5d, localTime(it.optString("updated")))) }
@@ -182,7 +182,11 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, dirty
     var genericKey by remember(secretAlias, aiDraft?.optString("provider"), panel.config.optInt("revision")) { mutableStateOf("") }
     var showGenericKey by remember(secretAlias, panel.config.optInt("revision")) { mutableStateOf(!configuredSecret) }
     val dirty = working.toString() != stored.toString() || profiles.toString() != storedProfiles.toString() || genericKey.isNotBlank()
-    if (page != "schedule") SideEffect { dirtyChange(dirty) }
+    if (page != "schedule" && page != "profiles") SideEffect { dirtyChange(dirty) }
+    if (page == "profiles") {
+        ProfileManager(panel, model, dirtyChange)
+        return
+    }
     Tile {
         when (page) {
             "schedule" -> ScheduleForm(panel, model, dirtyChange)
@@ -207,37 +211,6 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, dirty
                     text = { Text(ui(R.string.ui_sources_apis_or_delivery_that_rely)) },
                     confirmButton = { Button(onClick = { remove = false; model.saveConfig(stored, storedProfiles, JSONObject().put(name, JSONObject.NULL)) }) { Text(ui(R.string.ui_delete_86ea33)) } },
                     dismissButton = { TextButton(onClick = { remove = false }) { Text(ui(R.string.ui_cancel)) } })
-            }
-            "profiles" -> {
-                Text(ui(R.string.ui_processing_profiles), style = MaterialTheme.typography.titleLarge)
-                val root = panel.schema.getJSONObject("profile")
-                var index by remember { mutableIntStateOf(0) }
-                val current = profiles.optJSONObject(index)
-                val choices = profiles.objects().mapIndexed { position, item -> "$position · ${item.getJSONObject("definition").optString("name")}" }
-                if (choices.isNotEmpty()) Choice(ui(R.string.ui_profile_to_edit), choices, choices.getOrElse(index) { choices[0] },
-                    { index = it.substringBefore(' ').toInt() }, { it.substringAfter(" · ") })
-                current?.let {
-                    val display = it.getJSONObject("definition")
-                    key(index) {
-                        EditValue(root, root, "profile_doc", it, { updated -> profiles = JSONArray(profiles.toString()).put(index, updated) },
-                            ids, display.optString("id"), expandedByDefault = true)
-                    }
-                    FlowRow {
-                        TextButton(onClick = {
-                            val copy = it.copyObject()
-                            val suffix = java.lang.Long.toString(System.currentTimeMillis(), 36)
-                            copy.getJSONObject("definition").put("id", "profile-$suffix").put("name", ui(R.string.ui_copy_a40f6e, display.optString("name")))
-                            profiles = JSONArray(profiles.toString()).put(copy)
-                            index = profiles.length() - 1
-                        }) { Text(ui(R.string.ui_duplicate_and_edit)) }
-                        TextButton(enabled = profiles.length() > 1, onClick = {
-                            profiles = JSONArray(profiles.toString()).apply { remove(index) }
-                            index = (index - 1).coerceAtLeast(0)
-                        }) { Text(ui(R.string.ui_remove)) }
-                    }
-                }
-                EditValue(schema, fields.getJSONObject("processing"), "processing", working.getJSONObject("processing"),
-                    { working = working.copyObject().put("processing", it) }, ids)
             }
             "ai" -> {
                 val ai = working.getJSONObject("ai")

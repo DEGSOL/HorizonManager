@@ -31,8 +31,8 @@ internal enum class ThemePreset(
     val card: Color,
     val elevated: Color,
 ) {
-    Graphite("graphite", R.string.theme_graphite, Color(0xFF13171C), Color(0xFFD6A06B), Color(0xFFE8B884),
-        Color(0xFFF1F3F5), Color(0xFFAEB8C2), Color(0xFF1B2025), Color(0xFF232A31), Color(0xFF303943)),
+    Graphite("graphite", R.string.theme_graphite, Color(0xFF0A0C10), Color(0xFFF6A15A), Color(0xFFE8B884),
+        Color(0xFFF5F5F3), Color(0xFFA5A8B0), Color(0xFF14171D), Color(0xFF20242B), Color(0xFF30353D)),
     Amber("amber", R.string.theme_amber, Color(0xFF181310), Color(0xFFDAA45D), Color(0xFFF0BF81),
         Color(0xFFF7EFE7), Color(0xFFCDC0B4), Color(0xFF211A16), Color(0xFF2A211B), Color(0xFF382D25)),
     Ocean("ocean", R.string.theme_ocean, Color(0xFF111820), Color(0xFF75ADE1), Color(0xFF9ED1FC),

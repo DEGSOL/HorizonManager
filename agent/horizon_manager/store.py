@@ -40,6 +40,7 @@ class Store:
                 CREATE TABLE IF NOT EXISTS push_outbox (
                     run TEXT NOT NULL, device TEXT NOT NULL, created INTEGER NOT NULL,
                     next INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(run,device));
+                CREATE TABLE IF NOT EXISTS media_options (id INTEGER PRIMARY KEY CHECK(id=1), enabled INTEGER NOT NULL);
                 CREATE TABLE IF NOT EXISTS schedule (
                     id INTEGER PRIMARY KEY CHECK (id=1), spec TEXT NOT NULL, next REAL);
                 CREATE TABLE IF NOT EXISTS source_history (
@@ -59,6 +60,11 @@ class Store:
                 yield con
         finally:
             con.close()
+
+    @staticmethod
+    def media_search(db):
+        row = db.execute("SELECT enabled FROM media_options WHERE id=1").fetchone()
+        return bool(row and row[0])
 
     def settings(self, db):
         row = db.execute("SELECT * FROM configuration WHERE id=1").fetchone()

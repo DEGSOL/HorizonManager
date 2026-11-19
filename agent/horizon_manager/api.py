@@ -55,6 +55,10 @@ class JobInput(Body):
     run: str | None = Field(default=None, max_length=32)
 
 
+class MediaSearch(Body):
+    enabled: bool
+
+
 class CatalogKey(Body):
     key: str = Field(min_length=8, max_length=512)
 
@@ -184,7 +188,15 @@ def create_app(root, token):
         with store.db() as db:
             next_at = db.execute("SELECT next FROM schedule WHERE id=1").fetchone()[0]
             return {**health(), "disk_free": disk.free, "disk_total": disk.total,
+                    "media_search": store.media_search(db),
                     "load": os.getloadavg()[0], "cpu": os.cpu_count(), "memory": mem, "next": next_at}
+
+    @app.put("/v1/media-search")
+    def set_media_search(body: MediaSearch):
+        with store.db() as db:
+            db.execute("INSERT OR REPLACE INTO media_options VALUES (1, ?)", (int(body.enabled),))
+            Store.event(db, "MEDIA_SEARCH_CHANGED")
+            return {"enabled": store.media_search(db)}
 
     @app.get("/v1/config")
     def get_config():
@@ -352,7 +364,7 @@ def create_app(root, token):
         with store.db() as db:
             rows = db.execute("SELECT id,result FROM jobs WHERE kind='run' AND result IS NOT NULL")
             results = {row["id"]: json.loads(row["result"]) for row in rows}
-        return {run: result.get("ready_at") for run, result in results.items() if result.get("languages")}
+        return {run: result for run, result in results.items() if result.get("languages")}
 
     def artifacts(run):
         if not ID.fullmatch(run) or (not run.startswith("run-") and run not in completed_digests()):
@@ -370,9 +382,13 @@ def create_app(root, token):
         try:
             metadata = json.loads((path / "meta.json").read_text(encoding="utf-8"))
             created = metadata["created_at"]
-            ready = completed.get(path.name) or datetime.fromtimestamp(
+            result = completed.get(path.name, {})
+            ready = result.get("ready_at") or datetime.fromtimestamp(
                 min(summaries[lang].stat().st_mtime for lang in languages), timezone.utc).isoformat()
-            return {"id": path.name, "created": created, "ready_at": ready, "languages": languages}
+            total = result.get("kept", metadata.get("filtered_count", metadata.get("kept_count")))
+            return {"id": path.name, "created": created, "ready_at": ready, "languages": languages,
+                    **({"total": total} if type(total) is int and total >= 0 else {}),
+                    "media_ready": (path / "media.json").is_file()}
         except (OSError, ValueError, KeyError):
             return None
 
@@ -428,6 +444,13 @@ def create_app(root, token):
             db.execute("DELETE FROM push_outbox WHERE device=?", (device.hex,))
         return {"registered": False}
 
+    @app.get("/v1/media/{run}")
+    def media_manifest(run: str):
+        path = artifacts(run) / "media.json"
+        if not path.is_file():
+            fail(404, "MEDIA_UNAVAILABLE")
+        return json.loads(path.read_text(encoding="utf-8"))
+
     @app.get("/v1/digests/{run}/{language}")
     def digest(run: str, language: Literal["en", "zh", "ru"], offset: int = Query(0, ge=0), limit: int = Query(40, ge=1, le=80)):
         path = artifacts(run)
@@ -439,6 +462,8 @@ def create_app(root, token):
             items = json.loads(stage.read_text(encoding="utf-8"))
         except FileNotFoundError:
             fail(404, "DIGEST_UNKNOWN")
+        media_file = path / "media.json"
+        media = json.loads(media_file.read_text()) if media_file.is_file() else None
         cards = []
         has_localized_items = stage.name == "localized_items.json"
         for item in items[offset:offset + limit]:
@@ -450,12 +475,13 @@ def create_app(root, token):
             original = split_content(item.get("content")).main
             body = primary or original or analysis.get("summary", "")
             cards.append({
-                "id": item["id"], "title": (artifact.get("title") or item["title"])[:600], "url": item["url"],
+                "id": item["id"], "title": artifact.get("title") or item["title"], "url": item["url"],
+                **({"media": media.get(item["id"], {})} if media is not None else {}),
                 "source": item["source_type"], "time": item["published_at"],
                 "category": (item.get("metadata") or {}).get("category"),
                 "profile": (process.get("classification") or {}).get("profile"),
                 "score": analysis.get("score"), "summary": body[:8000],
-                "body": body[:24000], "body_is_plain": not bool(primary),
+                "body": body, "body_is_plain": not bool(primary),
                 "reason": (analysis.get("reason") or "")[:8000] if not has_localized_items else "",
                 "blocks": blocks[:30], "citations": artifact.get("sources", [])[:50],
             })
@@ -466,8 +492,9 @@ def create_app(root, token):
         with store.db() as db:
             settings = store.settings(db)
             schedule = json.loads(db.execute("SELECT spec FROM schedule WHERE id=1").fetchone()[0])
+            media_search = store.media_search(db)
             Store.event(db, "BACKUP_EXPORTED")
-        return {"archive": backup.pack({"horizon": REVISION, "settings": settings, "schedule": schedule}, body.password)}
+        return {"archive": backup.pack({"horizon": REVISION, "settings": settings, "schedule": schedule, "media_search": media_search}, body.password)}
 
     @app.post("/v1/restore")
     def restore(body: ImportBackup):
@@ -492,6 +519,8 @@ def create_app(root, token):
             store.put_settings(db, current, updated)
             db.execute("UPDATE schedule SET spec=?,next=? WHERE id=1",
                        (restored_schedule.model_dump_json(), next_run(restored_schedule, time.time())))
+            if isinstance(payload.get("media_search"), bool):
+                db.execute("INSERT OR REPLACE INTO media_options VALUES (1, ?)", (int(payload["media_search"]),))
             Store.event(db, "BACKUP_RESTORED")
             return public(store.settings(db))
 

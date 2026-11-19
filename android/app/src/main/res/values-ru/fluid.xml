@@ -1,0 +1,34 @@
+<resources>
+    <string name="mr_news">Новости и источники</string>
+    <string name="mr_news_detail">Источники, правила дайджеста и расписание</string>
+    <string name="mr_server">Подключение и сервер</string>
+    <string name="mr_interface">Интерфейс</string>
+    <string name="mr_images">Изображения новостей</string>
+    <string name="mr_images_detail">Если у публикации есть вложение или обложка, используется изображение из первоисточника.</string>
+    <string name="mr_search_detail">Для новых выпусков настроенная модель может подобрать тематическую фотографию из общественного достояния, если у источника нет изображения. Это дополнительные запросы к AI.</string>
+    <string name="mr_agent_images">Для тематического поиска обновите агент VPS в разделе «Обслуживание».</string>
+    <string name="mr_new_profile">Новый профиль</string>
+    <string name="mr_default_profile">Профиль по умолчанию</string>
+    <string name="mr_set_default">Использовать по умолчанию</string>
+    <string name="mr_name">Название</string>
+    <string name="mr_structure">Классификация и формат результата</string>
+    <string name="mr_prompts">Промпты обработки</string>
+    <string name="mr_profile_delete">Перед сохранением измените ссылки на этот профиль в источниках и правилах дайджеста.</string>
+    <string name="mr_latest">Последний дайджест</string>
+    <string name="mr_credit">Источник изображения</string>
+    <string name="mr_themed">Тематическая иллюстрация</string>
+    <string name="mr_art">Изображение публикации</string>
+    <string name="mr_details">Подробности выпуска</string>
+    <string name="mr_archive_issue">Архивный выпуск</string>
+    <string name="mr_search_images">Подбор изображений</string>
+    <string name="mr_issue_order">Порядок дайджеста</string>
+    <string name="mr_offline_copy">Доступен офлайн</string>
+    <string name="mr_on_server">На VPS</string>
+    <string name="mr_media_ready">Подбор изображений завершён</string>
+    <string name="mr_media_failed">Изображения недоступны</string>
+    <string name="mr_media_changed">Настройки изображений обновлены</string>
+    <string name="mr_creator">Творческие проекты и практика применения AI</string>
+    <string name="mr_tech_news">Технологические анонсы и события отрасли</string>
+    <string name="mr_tech_blog">Технические статьи и опыт разработки</string>
+    <string name="mr_finance">Рынки, компании и финансовые события</string>
+</resources>

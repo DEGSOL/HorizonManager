@@ -21,7 +21,7 @@ import org.json.JSONObject
 import java.time.Instant
 
 internal enum class NewsOrder(@param:StringRes val label: Int) {
-    Score(R.string.editorial_score_high), ScoreLow(R.string.editorial_score_low),
+    Issue(R.string.mr_issue_order), Score(R.string.editorial_score_high), ScoreLow(R.string.editorial_score_low),
     Newest(R.string.editorial_newest), Oldest(R.string.oldest_first), Title(R.string.ui_by_title),
 }
 
@@ -62,6 +62,7 @@ internal fun chronologicalTime(article: JSONObject): Instant =
     runCatching { Instant.parse(article.optString("time")) }.getOrDefault(Instant.MAX)
 
 internal fun orderArticles(articles: List<JSONObject>, order: NewsOrder): List<JSONObject> = when (order) {
+    NewsOrder.Issue -> articles
     NewsOrder.Oldest -> articles.sortedBy(::chronologicalTime)
     NewsOrder.Newest -> articles.sortedByDescending { chronologicalTime(it).takeUnless { date -> date == Instant.MAX } ?: Instant.MIN }
     NewsOrder.Score -> articles.sortedByDescending { it.optDouble("score").takeIf(Double::isFinite) ?: Double.NEGATIVE_INFINITY }
@@ -91,14 +92,14 @@ internal fun GlassIconAction(icon: ImageVector, description: String, enabled: Bo
 
 @Composable
 internal fun NewsToolbar(filters: NewsFilters, enabled: Boolean) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        GlassIconAction(Icons.Default.Search, ui(R.string.news_search), enabled, active = filters.searchOpen || filters.query.isNotBlank()) {
+    Row(horizontalArrangement=Arrangement.spacedBy(4.dp),verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.frost(CircleShape)) { GlassIconAction(Icons.Default.Search, ui(R.string.news_search), enabled, active = filters.searchOpen || filters.query.isNotBlank()) {
             filters.searchOpen = !filters.searchOpen
-        }
-        GlassIconAction(ImageVector.vectorResource(R.drawable.ic_sort), ui(R.string.editorial_filters_sort), enabled,
+        } }
+        Box(Modifier.frost(CircleShape)) { GlassIconAction(ImageVector.vectorResource(R.drawable.ic_sliders), ui(R.string.editorial_filters_sort), enabled,
             active = filters.optionsOpen || filters.profile.isNotEmpty() || filters.category.isNotEmpty() || filters.explicitOrder) {
             filters.optionsOpen = !filters.optionsOpen
-        }
+        } }
     }
 }
 
@@ -106,7 +107,7 @@ internal fun NewsToolbar(filters: NewsFilters, enabled: Boolean) {
 @Composable
 internal fun NewsFilterOptions(filters: NewsFilters, articles: List<JSONObject>) {
     val scopes = listOf(NewsScope.All to R.string.ui_all, NewsScope.Unread to R.string.ui_unread, NewsScope.Saved to R.string.ui_saved)
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    if (filters.optionsOpen) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         scopes.forEach { (mode, title) ->
             FilterChip(selected = filters.scope == mode, onClick = { filters.scope = mode }, label = { Text(ui(title)) })
         }

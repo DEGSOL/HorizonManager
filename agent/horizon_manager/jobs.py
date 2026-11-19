@@ -108,7 +108,9 @@ async def execute(store, row, settings):
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL, start_new_session=True, env=env,
         )
-        process.stdin.write(json.dumps({"settings": settings, "kind": row["kind"], "params": params}).encode())
+        with store.db() as db:
+            search = store.media_search(db)
+        process.stdin.write(json.dumps({"media_search": search, "settings": settings, "kind": row["kind"], "params": params}).encode())
         await process.stdin.drain()
         process.stdin.close()
         deadline = time.monotonic() + {"ai": 95, "source": 180, "run": 7200, "localize": 7200}[row["kind"]]

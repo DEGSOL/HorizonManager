@@ -140,6 +140,17 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(self.client.post("/v1/jobs", content=b"x",
                                          headers={"Content-Length": "12000000"}).status_code, 413)
 
+    def test_media_setting_survives_backup_without_changing_horizon_config(self):
+        before = self.client.get("/v1/config").json()
+        self.assertFalse(self.client.get("/v1/status").json()["media_search"])
+        self.assertTrue(self.client.put("/v1/media-search", json={"enabled": True}).json()["enabled"])
+        self.assertEqual(before, self.client.get("/v1/config").json())
+        backup = self.client.post("/v1/backup", json={"password": "long-password-for-tests"}).json()["archive"]
+        self.client.put("/v1/media-search", json={"enabled": False})
+        self.assertEqual(self.client.post("/v1/restore", json={"password": "long-password-for-tests",
+                         "archive": backup, "revision": before["revision"]}).status_code, 200)
+        self.assertTrue(self.client.get("/v1/status").json()["media_search"])
+
     def test_config_atomic_and_backup_integrity(self):
         expected = self.config()
         saved = self.client.put("/v1/config", json=expected)
@@ -181,6 +192,7 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(self.client.get(f"/v1/digest-info/{id.hex}").json(), digests[0])
         result = self.client.get(f"/v1/digests/{id.hex}/en").json()
         self.assertEqual(result["items"][0]["score"], 9)
+        self.assertIn("media", result["items"][0])
         self.assertEqual(digests[0]["languages"], ["en", "zh", "ru"])
         self.assertEqual(self.client.get("/v1/digest-marker").json(), {"id": id.hex})
         ru = self.client.get(f"/v1/digests/{id.hex}/ru").json()

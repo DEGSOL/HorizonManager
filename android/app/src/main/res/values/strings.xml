@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name" translatable="false">Horizon Manager</string>
+    <string name="app_name" translatable="false">MRizon</string>
     <string name="news">News</string>
     <string name="sources">Sources</string>
     <string name="control">Control</string>
@@ -8,7 +8,7 @@
     <string name="digest_ready">New digest is ready</string>
     <style name="BaseTheme" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowBackground">#080C16</item>
-        <item name="android:navigationBarColor">#080C16</item>
+        <item name="android:windowBackground">#0A0C10</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 </resources>

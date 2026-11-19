@@ -6,6 +6,20 @@ import org.junit.Test
 
 class EditorialBehaviorTest {
     @Test
+    fun profileRenamePreservesLinkedRoutesAndUnrelatedText() {
+        val raw=JSONObject("""{"sources":{"rss":[{"profile":["old","other"],"name":"old"}]},
+            "processing":{"default_profile":"old","profile_settings":{"old":{"weight":2}}},
+            "digest":{"group_by":"profile","profile_order":["old"],"category_groups":{"one":{"categories":["old"]}}}}""")
+        val actual=renameProfileReferences(raw,"old","custom")
+        assertEquals("custom",actual.getJSONObject("processing").getString("default_profile"))
+        assertTrue(actual.getJSONObject("processing").getJSONObject("profile_settings").has("custom"))
+        val source=actual.getJSONObject("sources").getJSONArray("rss").getJSONObject(0)
+        assertEquals("custom",source.getJSONArray("profile").getString(0))
+        assertEquals("old",source.getString("name"))
+        assertEquals("old",raw.getJSONObject("processing").getString("default_profile"))
+    }
+
+    @Test
     fun normalizesPublicTelegramHandlesAndRejectsInviteLinks() {
         for (input in listOf("  @myChannel ", "myChannel", "https://t.me/myChannel/")) {
             assertEquals("myChannel", normalizeTelegramChannel(input))
