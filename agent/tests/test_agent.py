@@ -1,0 +1,318 @@
+"""Run with the pinned Horizon environment. The OpenAI-compatible server is a local fixture."""
+import base64
+import json
+import os
+import threading
+import time
+import unittest
+from datetime import datetime, timezone
+from email.utils import format_datetime
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from uuid import uuid4
+
+from fastapi.testclient import TestClient
+
+from horizon_manager.api import REVISION, create_app
+from horizon_manager.backup import pack, unpack
+from horizon_manager.configuration import only_source
+from horizon_manager.push import enqueue_digest, signed_message, valid_endpoint
+from horizon_manager.scheduler import Schedule, next_run
+from horizon_manager.store import Store
+
+TOKEN = "1" * 64
+AUTH = {"Authorization": "Bearer " + TOKEN}
+SECRET = "test-key-this-string-must-not-leak"
+
+
+class Fixture(BaseHTTPRequestHandler):
+    def log_message(self, *args):
+        pass
+
+    def do_GET(self):
+        if self.path != "/feed":
+            self.send_error(404)
+            return
+        date = format_datetime(datetime.now(timezone.utc), usegmt=True)
+        data = f'''<?xml version="1.0"?>
+        <rss version="2.0"><channel><title>Fixture</title><link>https://example.org/</link>
+        <description>Local integration test feed</description><item><title>Fixture engineering article</title>
+        <link>https://example.org/fixture-news</link><description>Fixture article content</description>
+        <guid>fixture-id</guid><pubDate>{date}</pubDate></item></channel></rss>'''.encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/rss+xml")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def do_POST(self):
+        request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        if self.headers.get("Authorization") != "Bearer " + SECRET:
+            self.send_response(401)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": {"message": "invalid api key " + SECRET}}).encode())
+            return
+        if request.get("model") == "slow":
+            time.sleep(3)
+        instructions = request["messages"][0]["content"]
+        if "Return OK as plain text." in instructions:
+            content = "OK"
+        elif "Artifact" in instructions or "blocks" in instructions:
+            title, article = "Fixture engineering article", "A fixture summary."
+            if "language `ru`" in instructions:
+                title, article = "Тестовая инженерная статья", "Текст новости на русском языке."
+            elif "Simplified Chinese" in instructions:
+                title, article = "工程测试文章", "简体中文新闻正文。"
+            content = json.dumps({"title": title, "blocks": [
+                {"id": "summary", "title": "Summary", "content": article, "source_refs": []}
+            ]})
+        elif "factual news text" in instructions:
+            title, article = ("Тестовая инженерная статья", "Текст новости на русском языке.") if "Russian" in instructions else (
+                "工程测试文章", "简体中文新闻正文。")
+            content = json.dumps({"title": title, "text": article})
+        else:
+            content = json.dumps({"score": 9, "summary": "Fixture AI summary", "reason": "Fixture rubric", "tags": ["test"]})
+        body = json.dumps({"id": "fixture", "object": "chat.completion", "created": 0, "model": "fixture",
+                           "choices": [{"index": 0, "message": {"role": "assistant", "content": content},
+                                        "finish_reason": "stop"}]}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        try:
+            self.wfile.write(body)
+        except BrokenPipeError:
+            pass
+
+
+class AgentTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.fixture = ThreadingHTTPServer(("127.0.0.1", 0), Fixture)
+        cls.thread = threading.Thread(target=cls.fixture.serve_forever, daemon=True)
+        cls.thread.start()
+        cls.url = "http://127.0.0.1:" + str(cls.fixture.server_port)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.fixture.shutdown()
+        cls.fixture.server_close()
+        cls.thread.join()
+
+    def setUp(self):
+        self.temp = TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.client = TestClient(create_app(self.root, TOKEN), headers=AUTH)
+        self.client.__enter__()
+        self.addCleanup(self.client.__exit__, None, None, None)
+
+    def config(self, model="fixture-model", secret=SECRET, with_rss=True):
+        incoming = self.client.get("/v1/config").json()
+        incoming["config"]["ai"].update({"base_url": self.url + "/v1", "model": model})
+        if with_rss:
+            incoming["config"]["sources"]["rss"] = [
+                {"name": "Working fixture", "url": self.url + "/feed", "profile": "tech-news"},
+                {"name": "Broken fixture", "url": self.url + "/broken", "profile": "tech-news"},
+            ]
+        item = next(p for p in incoming["profiles"] if p["definition"]["id"] == "tech-news")
+        item["definition"]["enrichment"]["blocks"] = [{"id": "summary", "primary": True}]
+        incoming["secrets"] = {"OPENAI_API_KEY": secret}
+        return incoming
+
+    def wait(self, id, final=True):
+        deadline = time.monotonic() + 35
+        while time.monotonic() < deadline:
+            jobs = self.client.get("/v1/jobs").json()
+            job = next((job for job in jobs if job["id"] == id), None)
+            if job and ((job["state"] not in ("queued", "running")) if final else job["state"] == "running"):
+                return job
+            time.sleep(0.1)
+        raise AssertionError(jobs)
+
+    def test_auth_health_and_body_limit(self):
+        response = self.client.get("/v1/health")
+        self.assertEqual(response.json()["horizon"], REVISION)
+        self.assertEqual(self.client.get("/v1/health", headers={"Authorization": "Bearer wrong"}).status_code, 401)
+        self.assertEqual(self.client.post("/v1/jobs", content=b"x",
+                                         headers={"Content-Length": "12000000"}).status_code, 413)
+
+    def test_config_atomic_and_backup_integrity(self):
+        expected = self.config()
+        saved = self.client.put("/v1/config", json=expected)
+        self.assertEqual(saved.status_code, 200, saved.text)
+        self.assertNotIn(SECRET, saved.text)
+        self.assertEqual(self.client.put("/v1/config", json=expected).status_code, 409)
+        invalid = self.config("updated")
+        invalid["config"]["processing"]["profiles_dir"] = "../../elsewhere"
+        self.assertEqual(self.client.put("/v1/config", json=invalid).status_code, 422)
+        self.assertEqual(self.client.get("/v1/config").json()["config"]["ai"]["model"], "fixture-model")
+        archive = self.client.post("/v1/backup", json={"password": "backup-password"}).json()["archive"]
+        self.assertNotIn(SECRET.encode(), base64.b64decode(archive))
+        self.assertEqual(self.client.post("/v1/restore", json={"password": "incorrect-password", "archive": archive,
+                                                             "revision": 2}).status_code, 422)
+        reverted = self.client.post("/v1/config/revert", json={"revision": 2})
+        self.assertEqual(reverted.status_code, 200, reverted.text)
+        self.assertEqual(reverted.json()["config"]["ai"]["model"], "")
+        response = self.client.post("/v1/restore", json={"password": "backup-password", "archive": archive, "revision": 3})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["config"]["ai"]["model"], "fixture-model")
+
+    def test_pipeline_partial_rss_failure_digest_and_logs(self):
+        response = self.client.put("/v1/config", json=self.config())
+        self.assertEqual(response.status_code, 200, response.text)
+        id = uuid4()
+        submitted = self.client.post("/v1/jobs", json={"id": str(id)})
+        self.assertEqual(submitted.json(), {"id": id.hex})
+        self.assertEqual(self.client.post("/v1/jobs", json={"id": str(id)}).json(), submitted.json())
+        self.assertEqual(self.client.post("/v1/jobs", json={"id": str(uuid4())}).status_code, 409)
+        job = self.wait(id.hex)
+        events = self.client.get("/v1/events").json()
+        self.assertEqual(job["state"], "success", events)
+        self.assertEqual(job["result"]["fetch_status"], "partial_failure")
+        self.assertEqual(job["result"]["raw"], 1)
+        self.assertEqual(job["result"]["kept"], 1)
+        digests = self.client.get("/v1/digests").json()
+        self.assertEqual([d["id"] for d in digests], [id.hex])
+        result = self.client.get(f"/v1/digests/{id.hex}/en").json()
+        self.assertEqual(result["items"][0]["score"], 9)
+        self.assertEqual(digests[0]["languages"], ["en", "zh", "ru"])
+        self.assertEqual(self.client.get("/v1/digest-marker").json(), {"id": id.hex})
+        ru = self.client.get(f"/v1/digests/{id.hex}/ru").json()
+        zh = self.client.get(f"/v1/digests/{id.hex}/zh").json()
+        self.assertIn("Ежедневный дайджест Horizon", ru["markdown"])
+        self.assertEqual(ru["items"][0]["body"], "Текст новости на русском языке.")
+        self.assertEqual(ru["items"][0]["reason"], "")
+        self.assertEqual(zh["items"][0]["body"], "简体中文新闻正文。")
+        self.assertIn("Fixture engineering article", result["markdown"])
+        self.assertTrue(any("Broken fixture" in str(event) and "HTTP_NOT_FOUND" in str(event) for event in events))
+        self.assertNotIn(SECRET, json.dumps(events))
+        with Store(self.root).db() as db:
+            self.assertEqual(db.execute("SELECT state FROM jobs WHERE id=?", (id.hex,)).fetchone()[0], "success")
+
+    def test_translate_an_existing_digest(self):
+        self.assertEqual(self.client.put("/v1/config", json=self.config()).status_code, 200)
+        run = uuid4()
+        self.client.post("/v1/jobs", json={"id": str(run)})
+        self.assertEqual(self.wait(run.hex)["state"], "success")
+        directory = self.root / "runs" / run.hex
+        for lang in ("ru", "zh"):
+            (directory / f"summary-{lang}.md").unlink()
+        (directory / "localized_items.json").unlink()
+        enriched = directory / "enriched_items.json"
+        raw = json.loads(enriched.read_text())
+        raw[0]["processing"]["artifacts"] = {"en": raw[0]["processing"]["artifacts"]["en"]}
+        enriched.write_text(json.dumps(raw))
+        self.assertEqual(self.client.get("/v1/digests").json()[0]["languages"], ["en"])
+
+        translation = uuid4()
+        response = self.client.post("/v1/jobs", json={
+            "id": str(translation), "kind": "localize", "run": run.hex})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(self.wait(translation.hex)["state"], "success")
+        self.assertEqual(self.client.get("/v1/digest-marker").json()["id"], run.hex)
+        result = self.client.get(f"/v1/digests/{run.hex}/ru").json()
+        self.assertEqual(result["items"][0]["body"], "Текст новости на русском языке.")
+        self.assertEqual(result["total"], 1)
+
+    def test_ai_preflight_and_push_registration(self):
+        response = self.client.post("/v1/jobs", json={"id": str(uuid4()), "kind": "ai"})
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["detail"]["fields"], ["ai.model", "OPENAI_API_KEY"])
+        self.assertEqual(self.client.get("/v1/jobs").json(), [])
+        device = "/v1/push/" + str(uuid4())
+        data = {"endpoint": "https://ntfy.sh/upFixtureDevice", "secret": "2" * 64}
+        response = self.client.put(device, json=data)
+        self.assertEqual(response.json(), {"registered": True, "id": ""})
+        self.assertNotIn(data["secret"], response.text)
+        invalid = dict(data, endpoint="https://ntfy.sh@localhost/upFixtureDevice")
+        self.assertEqual(self.client.put(device, json=invalid).status_code, 422)
+        self.assertEqual(self.client.delete(device).json(), {"registered": False})
+
+    def test_ai_wrong_secret_and_cancel(self):
+        self.assertEqual(self.client.put("/v1/config", json=self.config(secret="wrong")).status_code, 200)
+        first = uuid4()
+        self.client.post("/v1/jobs", json={"id": str(first), "kind": "ai"})
+        self.assertEqual(self.wait(first.hex)["state"], "failed")
+        events = self.client.get("/v1/events").text
+        self.assertIn("HTTP_401", events)
+        self.assertNotIn(SECRET, events)
+        self.assertEqual(self.client.put("/v1/config", json=self.config("slow")).status_code, 200)
+        second = uuid4()
+        self.client.post("/v1/jobs", json={"id": str(second), "kind": "ai"})
+        self.wait(second.hex, final=False)
+        self.assertEqual(self.client.post(f"/v1/jobs/{second.hex}/stop", json={}).status_code, 200)
+        self.assertEqual(self.wait(second.hex)["state"], "cancelled")
+
+    def test_scheduler_persists_and_runs_independently(self):
+        self.assertEqual(self.client.put("/v1/config", json=self.config()).status_code, 200)
+        response = self.client.put("/v1/schedule", json={"mode": "interval", "hours": 2})
+        self.assertGreater(response.json()["next"], time.time())
+        with Store(self.root).db() as db:
+            db.execute("UPDATE schedule SET next=? WHERE id=1", (time.time() - 1,))
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            jobs = self.client.get("/v1/jobs").json()
+            if jobs:
+                break
+            time.sleep(0.1)
+        self.assertTrue(jobs)
+        self.assertEqual(self.wait(jobs[0]["id"])["state"], "success")
+        self.assertEqual(self.client.get("/v1/schedule").json()["spec"]["hours"], 2)
+
+    def test_restart_marks_inflight_without_resubmission(self):
+        id = uuid4().hex
+        with Store(self.root).db() as db:
+            Store.queue(db, id, "run", {})
+            db.execute("UPDATE jobs SET state='running' WHERE id=?", (id,))
+        with TestClient(create_app(self.root, TOKEN), headers=AUTH) as fresh:
+            self.assertEqual(fresh.get("/v1/jobs").json()[0]["state"], "interrupted")
+
+
+class UnitTests(unittest.TestCase):
+    def test_push_queue_is_idempotent_and_uses_a_signed_marker(self):
+        with TemporaryDirectory() as folder:
+            store = Store(Path(folder))
+            with store.db() as db:
+                db.execute("INSERT INTO push_devices VALUES (?,?,?)",
+                           ("fixture", "https://ntfy.sh/upFixtureDevice", "2" * 64))
+                enqueue_digest(db, "a" * 32)
+                enqueue_digest(db, "a" * 32)
+                self.assertEqual(db.execute("SELECT count(*) FROM push_outbox").fetchone()[0], 1)
+        self.assertEqual(
+            signed_message("a" * 32, 1700000000, "2" * 64),
+            "a" * 32 + ".1700000000." + "ca999f48e9c0bf0987f0de510c159599bca466905b6a08f28b29c1bb6443c704",
+        )
+        self.assertIsNone(valid_endpoint("http://ntfy.sh/upFixtureDevice"))
+        self.assertIsNone(valid_endpoint("https://ntfy.sh/upFixtureDevice?attach=https://x.example"))
+
+    def test_weekly_calendar_skips_spring_gap_and_duplicate_fall_time(self):
+        spec = Schedule(mode="calendar", zone="Europe/Amsterdam", hour=2, minute=30, days=[6])
+        stamp = datetime(2026, 3, 28, tzinfo=timezone.utc).timestamp()
+        result = datetime.fromtimestamp(next_run(spec, stamp), timezone.utc)
+        self.assertEqual(result, datetime(2026, 4, 5, 0, 30, tzinfo=timezone.utc))
+        stamp = datetime(2026, 10, 25, 0, 45, tzinfo=timezone.utc).timestamp()
+        result = datetime.fromtimestamp(next_run(spec, stamp), timezone.utc)
+        self.assertEqual(result, datetime(2026, 11, 1, 1, 30, tzinfo=timezone.utc))
+
+    def test_backup_rejects_tampered_data(self):
+        data = bytearray(base64.b64decode(pack({"value": "secret"}, "backup-password")))
+        data[-1] ^= 1
+        with self.assertRaisesRegex(ValueError, "BACKUP_INVALID"):
+            unpack(base64.b64encode(data).decode(), "backup-password")
+
+    def test_source_selection_isolated(self):
+        original = {"sources": {"telegram": {"enabled": False, "channels": [
+            {"channel": "one", "enabled": True}, {"channel": "two", "enabled": False}
+        ]}}}
+        selected = only_source(original, "telegram", "channels", 1)
+        self.assertEqual(len(selected["sources"]["telegram"]["channels"]), 1)
+        self.assertEqual(len(original["sources"]["telegram"]["channels"]), 2)
+        self.assertTrue(selected["sources"]["telegram"]["channels"][0]["enabled"])
+        self.assertFalse(original["sources"]["telegram"]["channels"][1]["enabled"])
+
+
+if __name__ == "__main__":
+    unittest.main()

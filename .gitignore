@@ -1,0 +1,10 @@
+*.apk
+__pycache__/
+*.py[cod]
+.venv/
+.gradle/
+.kotlin/
+**/build/
+android/local.properties
+*.keystore
+*.jks

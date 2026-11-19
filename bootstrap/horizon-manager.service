@@ -1,0 +1,35 @@
+[Unit]
+Description=Horizon Manager
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/horizon-manager/agent
+DynamicUser=yes
+User=horizon-manager-runtime
+StateDirectory=horizon-manager-runtime
+StateDirectoryMode=0700
+LoadCredential=api-token:/etc/horizon-manager/api-token
+Environment=HM_STATE=/var/lib/horizon-manager-runtime
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/var/lib/horizon-manager-runtime/venv/bin/python -m horizon_manager.api
+Restart=on-failure
+RestartSec=4s
+TimeoutStopSec=15
+UMask=0077
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectHome=yes
+ProtectSystem=strict
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+StandardOutput=null
+StandardError=null
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name" translatable="false">Horizon Manager</string>
+    <string name="news">News</string>
+    <string name="sources">Sources</string>
+    <string name="control">Control</string>
+    <string name="journal">Journal</string>
+    <string name="settings">Settings</string>
+    <string name="digest_ready">New digest is ready</string>
+    <style name="BaseTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowBackground">#101417</item>
+        <item name="android:navigationBarColor">#101417</item>
+    </style>
+</resources>

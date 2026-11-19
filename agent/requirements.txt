@@ -1,0 +1,3 @@
+# Added to the pinned upstream uv environment without changing its locked dependencies.
+fastapi==0.141.1
+annotated-doc==0.0.4

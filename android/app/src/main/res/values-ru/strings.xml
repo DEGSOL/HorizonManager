@@ -1,0 +1,8 @@
+<resources>
+    <string name="news">Новости</string>
+    <string name="sources">Источники</string>
+    <string name="control">Управление</string>
+    <string name="journal">Журнал</string>
+    <string name="settings">Настройки</string>
+    <string name="digest_ready">Новый дайджест готов</string>
+</resources>
