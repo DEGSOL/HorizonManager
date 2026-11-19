@@ -12,4 +12,9 @@
     <string name="article_context_rate_limit">已达到 AI 服务的请求上限，请稍后重试。</string>
     <string name="article_context_unavailable">找不到这条新闻或其处理配置。</string>
     <string name="article_context_failed">无法加载背景资料，请重试。</string>
+    <string name="digest_output_language">简报语言</string>
+    <string name="digest_language_english">English</string>
+    <string name="digest_language_russian">Русский</string>
+    <string name="digest_language_chinese">简体中文</string>
+    <string name="digest_language_detail">手动及计划生成的简报与文章均使用同一种语言。</string>
 </resources>

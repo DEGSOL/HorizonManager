@@ -64,6 +64,11 @@ class EnrichmentMode(Body):
     mode: Literal["on_demand", "automatic"]
 
 
+class DigestLanguage(Body):
+    language: Literal["en", "zh", "ru"]
+    initialize: bool = False
+
+
 class CatalogKey(Body):
     key: str = Field(min_length=8, max_length=512)
 
@@ -193,7 +198,8 @@ def create_app(root, token):
                 mem[key.rstrip(":")] = int(value) * 1024
         with store.db() as db:
             next_at = db.execute("SELECT next FROM schedule WHERE id=1").fetchone()[0]
-            return {**health(), "disk_free": disk.free, "disk_total": disk.total,
+            language, chosen = store.digest_language(db)
+            return {**health(), "digest_language": language, "digest_language_chosen": chosen, "disk_free": disk.free, "disk_total": disk.total,
                     "media_search": store.media_search(db), "enrichment_mode": store.enrichment_mode(db),
                     "load": os.getloadavg()[0], "cpu": os.cpu_count(), "memory": mem, "next": next_at}
 
@@ -211,6 +217,17 @@ def create_app(root, token):
             Store.set_enrichment_mode(db, body.mode)
             Store.event(db, "ENRICHMENT_MODE_CHANGED", detail=body.mode)
             return {"mode": store.enrichment_mode(db)}
+
+    @app.put("/v1/digest-language")
+    def set_digest_language(body: DigestLanguage):
+        with store.db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            language, chosen = store.digest_language(db)
+            if not body.initialize or not chosen:
+                language = body.language
+                Store.set_digest_language(db, language)
+                Store.event(db, "DIGEST_LANGUAGE_CHANGED", detail=language)
+            return {"language": language}
 
     @app.get("/v1/config")
     def get_config():
@@ -295,6 +312,8 @@ def create_app(root, token):
             if body.run is None:
                 fail(422, "REQUEST_INVALID")
             artifacts(body.run)
+            if completed_digests().get(body.run, {}).get("output_language"):
+                fail(409, "DIGEST_LANGUAGE_FIXED")
         elif body.run is not None:
             fail(422, "REQUEST_INVALID")
         with store.db() as db:
@@ -406,7 +425,8 @@ def create_app(root, token):
             total = result.get("kept", metadata.get("filtered_count", metadata.get("kept_count")))
             return {"id": path.name, "created": created, "ready_at": ready, "languages": languages,
                     **({"total": total} if type(total) is int and total >= 0 else {}),
-                    "media_ready": (path / "media.json").is_file()}
+                    "media_ready": (path / "media.json").is_file(),
+                    **({"output_language": result["output_language"]} if result.get("output_language") else {})}
         except (OSError, ValueError, KeyError):
             return None
 
@@ -490,8 +510,12 @@ def create_app(root, token):
         with store.db() as db:
             saved = stored_context(db, run, key, language)
         if saved and (saved["state"] != "failed" or not submit):
+            if not (root / "runs" / run / f"summary-{language}.md").is_file():
+                fail(404, "DIGEST_UNKNOWN")
             return saved
         path = artifacts(run)
+        if not (path / f"summary-{language}.md").is_file():
+            fail(404, "DIGEST_UNKNOWN")
         previous = localized_context(previous_context(path, key), language)
         if previous:
             return previous
@@ -505,7 +529,7 @@ def create_app(root, token):
             if refreshed and refreshed["state"] != "failed":
                 return refreshed
             job = uuid4().hex
-            Store.queue(db, job, "article_context", {"run": run, "article": key})
+            Store.queue(db, job, "article_context", {"run": run, "article": key, "language": language})
             db.execute("INSERT OR REPLACE INTO article_context_jobs VALUES (?,?,?)", (run, key, job))
             return {"state": "queued", "job": job}
 
@@ -562,9 +586,11 @@ def create_app(root, token):
             schedule = json.loads(db.execute("SELECT spec FROM schedule WHERE id=1").fetchone()[0])
             media_search = store.media_search(db)
             enrichment_mode = store.enrichment_mode(db)
+            language, chosen = store.digest_language(db)
             Store.event(db, "BACKUP_EXPORTED")
         return {"archive": backup.pack({"horizon": REVISION, "settings": settings, "schedule": schedule,
-                                        "media_search": media_search, "enrichment_mode": enrichment_mode}, body.password)}
+                                        "media_search": media_search, "enrichment_mode": enrichment_mode,
+                                        **({"digest_language": language} if chosen else {})}, body.password)}
 
     @app.post("/v1/restore")
     def restore(body: ImportBackup):
@@ -594,6 +620,8 @@ def create_app(root, token):
             mode = payload.get("enrichment_mode")
             if mode in ("on_demand", "automatic"):
                 Store.set_enrichment_mode(db, mode)
+            if payload.get("digest_language") in DIGEST_LANGUAGES:
+                Store.set_digest_language(db, payload["digest_language"])
             Store.event(db, "BACKUP_RESTORED")
             return public(store.settings(db))
 

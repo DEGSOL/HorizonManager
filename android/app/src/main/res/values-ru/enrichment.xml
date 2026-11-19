@@ -12,4 +12,9 @@
     <string name="article_context_rate_limit">Достигнут лимит запросов к AI. Попробуйте позже.</string>
     <string name="article_context_unavailable">Новость или её профиль обработки недоступны.</string>
     <string name="article_context_failed">Не удалось загрузить контекст. Попробуйте ещё раз.</string>
+    <string name="digest_output_language">Язык дайджеста</string>
+    <string name="digest_language_english">English</string>
+    <string name="digest_language_russian">Русский</string>
+    <string name="digest_language_chinese">简体中文</string>
+    <string name="digest_language_detail">Один язык для статей и новых дайджестов, включая выпуски по расписанию.</string>
 </resources>

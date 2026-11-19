@@ -75,10 +75,16 @@ class Fixture(BaseHTTPRequestHandler):
             content = json.dumps({"title": title, "blocks": [
                 {"id": "summary", "title": "Summary", "content": article, "source_refs": []}
             ]})
-        elif "factual news text" in instructions:
-            title, article = ("Тестовая инженерная статья", "Текст новости на русском языке.") if "Russian" in instructions else (
-                "工程测试文章", "简体中文新闻正文。")
-            content = json.dumps({"title": title, "text": article})
+        elif "brief summaries into" in instructions:
+            self.server.translation_requests.append(instructions)
+            texts = {
+                "Russian": ("Тестовая инженерная статья", "Краткое описание новости на русском."),
+                "Simplified Chinese": ("工程测试文章", "简体中文新闻摘要。"),
+                "English": ("Fixture engineering article", "Fixture AI summary"),
+            }
+            title, article = next(value for language, value in texts.items() if language in instructions)
+            entries = json.loads(request["messages"][1]["content"])
+            content = json.dumps({"items": [{"id": row["id"], "title": title, "text": article} for row in entries]})
         else:
             content = json.dumps({"score": 9, "summary": "Fixture AI summary", "reason": "Fixture rubric", "tags": ["test"]})
         body = json.dumps({"id": "fixture", "object": "chat.completion", "created": 0, "model": "fixture",
@@ -110,6 +116,7 @@ class AgentTests(unittest.TestCase):
 
     def setUp(self):
         self.fixture.enrichment_requests = []
+        self.fixture.translation_requests = []
         self.temp = TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
@@ -147,16 +154,20 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(self.client.post("/v1/jobs", content=b"x",
                                          headers={"Content-Length": "12000000"}).status_code, 413)
 
-    def test_media_setting_survives_backup_without_changing_horizon_config(self):
+    def test_media_and_language_settings_survive_backup_without_changing_horizon_config(self):
         before = self.client.get("/v1/config").json()
         self.assertFalse(self.client.get("/v1/status").json()["media_search"])
         self.assertTrue(self.client.put("/v1/media-search", json={"enabled": True}).json()["enabled"])
+        self.assertEqual(self.client.put("/v1/digest-language", json={"language": "ru"}).json(), {"language": "ru"})
         self.assertEqual(before, self.client.get("/v1/config").json())
         backup = self.client.post("/v1/backup", json={"password": "long-password-for-tests"}).json()["archive"]
         self.client.put("/v1/media-search", json={"enabled": False})
+        self.client.put("/v1/digest-language", json={"language": "en"})
         self.assertEqual(self.client.post("/v1/restore", json={"password": "long-password-for-tests",
                          "archive": backup, "revision": before["revision"]}).status_code, 200)
-        self.assertTrue(self.client.get("/v1/status").json()["media_search"])
+        status = self.client.get("/v1/status").json()
+        self.assertTrue(status["media_search"])
+        self.assertEqual(status["digest_language"], "ru")
 
     def test_config_atomic_and_backup_integrity(self):
         expected = self.config()
@@ -180,6 +191,7 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(response.json()["config"]["ai"]["model"], "fixture-model")
 
     def test_pipeline_partial_rss_failure_digest_and_logs(self):
+        self.client.put("/v1/digest-language", json={"language": "ru"})
         self.assertEqual(self.client.put("/v1/enrichment-mode", json={"mode": "automatic"}).status_code, 200)
         response = self.client.put("/v1/config", json=self.config())
         self.assertEqual(response.status_code, 200, response.text)
@@ -195,27 +207,29 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(job["result"]["raw"], 1)
         self.assertEqual(job["result"]["kept"], 1)
         self.assertEqual(job["result"]["enriched"], 1)
-        self.assertEqual(len(self.fixture.enrichment_requests), 3)
+        self.assertEqual(len(self.fixture.enrichment_requests), 1)
+        self.assertEqual(self.fixture.translation_requests, [])
         digests = self.client.get("/v1/digests").json()
         self.assertEqual([d["id"] for d in digests], [id.hex])
         self.assertEqual(digests[0]["ready_at"], job["result"]["ready_at"])
         self.assertEqual(self.client.get(f"/v1/digest-info/{id.hex}").json(), digests[0])
-        result = self.client.get(f"/v1/digests/{id.hex}/en").json()
-        self.assertEqual(result["items"][0]["score"], 9)
-        self.assertIn("media", result["items"][0])
-        self.assertEqual(digests[0]["languages"], ["en", "zh", "ru"])
+        self.assertEqual(digests[0]["languages"], ["ru"])
+        self.assertEqual(digests[0]["output_language"], "ru")
         self.assertEqual(self.client.get("/v1/digest-marker").json(), {"id": id.hex})
+        self.assertEqual(self.client.get(f"/v1/digests/{id.hex}/en").status_code, 404)
+        self.assertEqual(self.client.get(f"/v1/digests/{id.hex}/zh").status_code, 404)
         ru = self.client.get(f"/v1/digests/{id.hex}/ru").json()
-        zh = self.client.get(f"/v1/digests/{id.hex}/zh").json()
         self.assertIn("Ежедневный дайджест Horizon", ru["markdown"])
         self.assertEqual(ru["items"][0]["body"], "Текст новости на русском языке.")
+        self.assertEqual(ru["items"][0]["score"], 9)
+        self.assertIn("media", ru["items"][0])
         self.assertEqual(ru["items"][0]["reason"], "")
-        self.assertEqual(zh["items"][0]["body"], "简体中文新闻正文。")
-        self.assertIn("Fixture engineering article", result["markdown"])
-        article_key = key_for(result["items"][0]["id"])
+        article_key = key_for(ru["items"][0]["id"])
         path = f"/v1/article-context/{id.hex}/{article_key}/ru"
         self.assertEqual(self.client.post(path, json={}).json()["state"], "ready")
-        self.assertEqual(len(self.fixture.enrichment_requests), 3)
+        self.assertEqual(len(self.fixture.enrichment_requests), 1)
+        self.assertEqual(self.client.post("/v1/jobs", json={"id": str(uuid4()), "kind": "localize",
+                                                          "run": id.hex}).status_code, 409)
         self.assertTrue(any("Broken fixture" in str(event) and "HTTP_NOT_FOUND" in str(event) for event in events))
         self.assertNotIn(SECRET, json.dumps(events))
         with Store(self.root).db() as db:
@@ -223,6 +237,11 @@ class AgentTests(unittest.TestCase):
 
     def test_on_demand_selected_article_is_deduplicated_and_does_not_rebuild_digest(self):
         self.assertEqual(self.client.get("/v1/status").json()["enrichment_mode"], "on_demand")
+        self.assertFalse(self.client.get("/v1/status").json()["digest_language_chosen"])
+        self.assertEqual(self.client.put("/v1/digest-language", json={"language": "ru", "initialize": True}).json(),
+                         {"language": "ru"})
+        self.assertEqual(self.client.put("/v1/digest-language", json={"language": "en", "initialize": True}).json(),
+                         {"language": "ru"})
         self.assertEqual(self.client.put("/v1/config", json=self.config()).status_code, 200)
         run = uuid4()
         self.client.post("/v1/jobs", json={"id": str(run)})
@@ -231,13 +250,16 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(digest_job["result"]["stage"], "filtered")
         self.assertEqual(digest_job["result"]["enriched"], 0)
         self.assertEqual(self.fixture.enrichment_requests, [])
+        self.assertEqual(len(self.fixture.translation_requests), 1)
+        self.assertIn("into Russian", self.fixture.translation_requests[0])
+        self.assertEqual(digest_job["result"]["languages"], ["ru"])
         directory = self.root / "runs" / run.hex
         self.assertFalse((directory / "enriched_items.json").exists())
-        digest_path = f"/v1/digests/{run.hex}/en"
+        digest_path = f"/v1/digests/{run.hex}/ru"
         digest = self.client.get(digest_path).json()
-        self.assertEqual(digest["items"][0]["body"], "Fixture AI summary")
+        self.assertEqual(digest["items"][0]["body"], "Краткое описание новости на русском.")
         self.assertEqual(digest["items"][0]["url"], "https://example.org/fixture-news")
-        self.assertIn("Fixture AI summary", digest["markdown"])
+        self.assertIn("Краткое описание новости на русском.", digest["markdown"])
 
         # A second candidate in the saved stage must not be sent to Horizon.
         filtered = directory / "filtered_items.json"
@@ -245,25 +267,31 @@ class AgentTests(unittest.TestCase):
         other = {**items[0], "id": "other-saved-id", "title": "Unselected sentinel"}
         filtered.write_text(json.dumps([*items, other]))
         article = f"/v1/article-context/{run.hex}/{key_for(items[0]['id'])}"
-        self.assertEqual(self.client.get(f"{article}/en").json(), {"state": "idle"})
-        self.assertEqual(self.client.post(f"{article}/en", json={},
+        self.assertEqual(self.client.get(f"{article}/ru").json(), {"state": "idle"})
+        self.assertEqual(self.client.post(f"{article}/ru", json={},
                                          headers={"Authorization": "Bearer wrong"}).status_code, 401)
-        choice = lambda language: self.client.post(f"{article}/{language}", json={}).json()
+        self.client.put("/v1/digest-language", json={"language": "zh"})
+
+        def choose():
+            return self.client.post(f"{article}/ru", json={}).json()
+
         with ThreadPoolExecutor(max_workers=2) as pool:
-            replies = list(pool.map(choice, ("en", "ru")))
+            requests = [pool.submit(choose), pool.submit(choose)]
+            replies = [request.result() for request in requests]
         self.assertEqual(replies[0]["job"], replies[1]["job"])
         self.assertEqual(self.wait(replies[0]["job"])["state"], "success")
-        replies = [self.client.get(f"{article}/{lang}").json() for lang in ("en", "ru", "zh")]
-        self.assertEqual([reply["state"] for reply in replies], ["ready"] * 3)
-        self.assertEqual(replies[1]["blocks"][0]["content"], "Текст новости на русском языке.")
-        self.assertEqual(len(self.fixture.enrichment_requests), 3)
+        ready = self.client.get(f"{article}/ru").json()
+        self.assertEqual(ready["state"], "ready")
+        self.assertEqual(ready["blocks"][0]["content"], "Текст новости на русском языке.")
+        self.assertEqual(self.client.get(f"{article}/zh").status_code, 404)
+        self.assertEqual(len(self.fixture.enrichment_requests), 1)
         self.assertNotIn("Unselected sentinel", json.dumps(self.fixture.enrichment_requests))
         self.assertEqual(self.client.get(digest_path).json(), digest)
         self.assertEqual(self.client.get("/v1/digest-marker").json(), {"id": run.hex})
         # Fetch through a separately created agent instance with the same state.
         restarted = TestClient(create_app(self.root, TOKEN), headers=AUTH)
-        self.assertEqual(restarted.post(f"{article}/ru", json={}).json(), replies[1])
-        self.assertEqual(len(self.fixture.enrichment_requests), 3)
+        self.assertEqual(restarted.post(f"{article}/ru", json={}).json(), ready)
+        self.assertEqual(len(self.fixture.enrichment_requests), 1)
         journal = self.client.get("/v1/events").json()
         self.assertTrue(any(x["code"] == "ARTICLE_CONTEXT_STARTED" for x in journal))
         self.assertTrue(any(x["code"] == "ARTICLE_CONTEXT_SUCCESS" and x["detail"].endswith(" ms") for x in journal))
@@ -298,14 +326,10 @@ class AgentTests(unittest.TestCase):
         run = uuid4()
         self.client.post("/v1/jobs", json={"id": str(run)})
         self.assertEqual(self.wait(run.hex)["state"], "success")
-        directory = self.root / "runs" / run.hex
-        for lang in ("ru", "zh"):
-            (directory / f"summary-{lang}.md").unlink()
-        (directory / "localized_items.json").unlink()
-        enriched = directory / "enriched_items.json"
-        raw = json.loads(enriched.read_text())
-        raw[0]["processing"]["artifacts"] = {"en": raw[0]["processing"]["artifacts"]["en"]}
-        enriched.write_text(json.dumps(raw))
+        # Simulate a pre-0.1.6 issue with metadata lacking an immutable language.
+        with Store(self.root).db() as db:
+            db.execute("UPDATE jobs SET result=json_remove(result, '$.output_language') WHERE id=?", (run.hex,))
+        self.client.put("/v1/digest-language", json={"language": "ru"})
         self.assertEqual(self.client.get("/v1/digests").json()[0]["languages"], ["en"])
 
         translation = uuid4()
@@ -315,8 +339,10 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(self.wait(translation.hex)["state"], "success")
         self.assertEqual(self.client.get("/v1/digest-marker").json()["id"], run.hex)
         result = self.client.get(f"/v1/digests/{run.hex}/ru").json()
-        self.assertEqual(result["items"][0]["body"], "Текст новости на русском языке.")
+        self.assertEqual(result["items"][0]["body"], "Краткое описание новости на русском.")
         self.assertEqual(result["total"], 1)
+        self.assertEqual(set(self.client.get("/v1/digests").json()[0]["languages"]), {"en", "ru"})
+        self.assertEqual(self.client.get(f"/v1/digests/{run.hex}/zh").status_code, 404)
 
     def test_ai_preflight_and_push_registration(self):
         response = self.client.post("/v1/jobs", json={"id": str(uuid4()), "kind": "ai"})
@@ -384,6 +410,7 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(self.wait(second.hex)["state"], "cancelled")
 
     def test_scheduler_persists_and_runs_independently(self):
+        self.client.put("/v1/digest-language", json={"language": "zh"})
         self.assertEqual(self.client.put("/v1/config", json=self.config()).status_code, 200)
         response = self.client.put("/v1/schedule", json={"mode": "interval", "hours": 2})
         self.assertGreater(response.json()["next"], time.time())
@@ -400,6 +427,9 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(job["state"], "success")
         self.assertEqual(job["result"]["stage"], "filtered")
         self.assertEqual(job["result"]["enrichment_mode"], "on_demand")
+        self.assertEqual(job["result"]["languages"], ["zh"])
+        self.assertEqual(self.client.get(f"/v1/digests/{job['id']}/zh").json()["items"][0]["body"], "简体中文新闻摘要。")
+        self.assertEqual(len(self.fixture.translation_requests), 1)
         self.assertEqual(self.fixture.enrichment_requests, [])
         self.assertFalse(any(event["code"] == "enrich" for event in self.client.get("/v1/events").json()))
         self.assertEqual(self.client.get("/v1/schedule").json()["spec"]["hours"], 2)

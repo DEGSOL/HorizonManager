@@ -5,7 +5,7 @@ from pathlib import Path
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
-from .configuration import builtin_profiles, initial_config
+from .configuration import DIGEST_LANGUAGES, builtin_profiles, initial_config
 
 
 def utc():
@@ -38,6 +38,8 @@ class Store:
                 CREATE TABLE IF NOT EXISTS enrichment_options (
                     id INTEGER PRIMARY KEY CHECK(id=1), mode TEXT NOT NULL
                         CHECK(mode IN ('on_demand', 'automatic')));
+                CREATE TABLE IF NOT EXISTS digest_options (
+                    id INTEGER PRIMARY KEY CHECK(id=1), language TEXT NOT NULL CHECK(language IN ('en', 'ru', 'zh')));
                 CREATE TABLE IF NOT EXISTS events (
                     id INTEGER PRIMARY KEY AUTOINCREMENT, time TEXT NOT NULL,
                     component TEXT NOT NULL, level TEXT NOT NULL,
@@ -83,6 +85,21 @@ class Store:
     @staticmethod
     def set_enrichment_mode(db, mode):
         db.execute("INSERT OR REPLACE INTO enrichment_options VALUES (1, ?)", (mode,))
+
+    @staticmethod
+    def digest_language(db):
+        row = db.execute("SELECT language FROM digest_options WHERE id=1").fetchone()
+        if row:
+            return row[0], True
+        row = db.execute("SELECT json_extract(config, '$.ai.languages') FROM configuration WHERE id=1").fetchone()
+        existing = json.loads(row[0]) if row and row[0] else []
+        if len(existing) == 1 and existing[0] in DIGEST_LANGUAGES:
+            return existing[0], True
+        return "en", False
+
+    @staticmethod
+    def set_digest_language(db, language):
+        db.execute("INSERT OR REPLACE INTO digest_options VALUES (1, ?)", (language,))
 
     def settings(self, db):
         row = db.execute("SELECT * FROM configuration WHERE id=1").fetchone()

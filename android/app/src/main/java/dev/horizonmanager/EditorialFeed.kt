@@ -351,11 +351,8 @@ internal fun NewsScreen(
                                 bubble = false
                                 model.archiveDigest(run)
                             },
-                            loaded &&
-                                issue
-                                    ?.optJSONArray("languages")
-                                    ?.strings()
-                                    ?.contains(digestLocale()) == false,
+                            loaded && issue?.has("output_language") == false &&
+                                issue.optJSONArray("languages")?.strings()?.contains(panel.preferredDigestLanguage()) == false,
                             { model.translateDigest(run) },
                             if (panel.archive.isEmpty()) ai else null,
                             sources,

@@ -17,8 +17,8 @@ from src.mcp.service import HorizonPipelineService
 from src.models import Config
 
 from .article_context import context_artifacts, find_item, read_json
-from .configuration import DIGEST_LANGUAGES, only_source, write_profiles
-from .localized_digest import atomic_text, base_artifacts, complete_artifacts, save_localized
+from .configuration import only_source, write_profiles
+from .localized_digest import atomic_text, complete_artifacts, save_localized
 
 STATE = Path(os.environ["HM_STATE"])
 WIRE = sys.stdout
@@ -97,7 +97,7 @@ def fetch_report(result, secrets):
             send("source", source=redact_source(name, secrets), status="failure", count=0, reason=category(reason))
 
 
-async def enrich_article(work, data, settings, params):
+async def enrich_article(work, data, settings, params, language):
     runs = STATE / "runs"
     path = runs / params["run"]
     raw = find_item(path, params["article"], ("filtered", "enriched", "localized"))
@@ -118,7 +118,7 @@ async def enrich_article(work, data, settings, params):
         write_profiles(Path(profiles), [profile])
         config = settings["config"]
         effective = {**config,
-                     "ai": {**config["ai"], "languages": list(DIGEST_LANGUAGES)},
+                     "ai": {**config["ai"], "languages": [language]},
                      "processing": {"profiles_dir": profiles, "default_profile": profile_id}}
         # Preserve the account selected by the original Horizon pipeline,
         # without writing back to the immutable run's metadata.
@@ -143,6 +143,7 @@ async def enrich_article(work, data, settings, params):
 async def main(payload, job):
     settings, params, kind = payload["settings"], payload["params"], payload["kind"]
     config = settings["config"]
+    language = params.get("language") or payload["language"]
     if kind == "ai":
         model = Config.model_validate(config)
         response = await asyncio.wait_for(
@@ -159,13 +160,13 @@ async def main(payload, job):
     data = work / "data"
     data.mkdir(parents=True, exist_ok=True)
     if kind == "article_context":
-        await enrich_article(work, data, settings, params)
+        await enrich_article(work, data, settings, params, language)
         return
     cfg = data / "config.json"
     if kind == "source":
         config = only_source(config, params["source"], params.get("bucket"), params.get("index"))
     if kind in {"run", "localize"}:
-        config = {**config, "ai": {**config["ai"], "languages": list(DIGEST_LANGUAGES)}}
+        config = {**config, "ai": {**config["ai"], "languages": [language]}}
     cfg.write_text(json.dumps(config, ensure_ascii=False), encoding="utf-8")
     with TemporaryDirectory(prefix="profiles-", dir=STATE) as folder:
         profiles = Path(folder) / "profiles"
@@ -189,14 +190,16 @@ async def main(payload, job):
                 items = dicts_to_items(service.run_store.load_items(run, stage))
                 if (path / "localized_items.json").is_file():
                     items = dicts_to_items(json.loads((path / "localized_items.json").read_text(encoding="utf-8")))
-                missing = [lang for lang in DIGEST_LANGUAGES if not (path / f"summary-{lang}.md").is_file()]
+                missing = not (path / f"summary-{language}.md").is_file()
                 if missing:
                     context, _, _ = service._build_context(**common, sources=None)
-                    await complete_artifacts(items, missing, context.config.ai)
-                    await save_localized(path, items, missing, checked_raw=meta.get("raw_count", len(items)),
+                    if await complete_artifacts(items, language, context.config.ai):
+                        # Keep the existing legacy edition intact and let the user retry.
+                        raise ValueError("LOCALIZATION_INVALID")
+                    await save_localized(path, items, [language], checked_raw=meta.get("raw_count", len(items)),
                                          date=meta["created_at"][:10], config=context.config,
                                          names=service._profiles(context).names)
-                send("result", data={"localized_run": run, "languages": missing})
+                send("result", data={"localized_run": run, "languages": [language] if missing else []})
                 return
             phase("fetch")
             fetched = await service.fetch_items(
@@ -232,10 +235,11 @@ async def main(payload, job):
             orchestrator = service._orchestrator(context)
             today = datetime.now(timezone.utc).date().isoformat()
             items = dicts_to_items(service.run_store.load_items(job, stage))
-            if mode == "automatic":
-                await complete_artifacts(items, DIGEST_LANGUAGES, context.config.ai)
-            else:
-                base_artifacts(items, DIGEST_LANGUAGES)
+            unavailable = await complete_artifacts(items, language, context.config.ai)
+            for item in items:
+                item.processing.artifacts = {language: item.processing.artifacts[language]}
+            if unavailable:
+                send("log", level="WARNING", code="LOCALIZATION_PARTIAL", detail=str(unavailable))
             run_path = store_dir / job
             assigned = {item.processing.classification.profile for item in items if item.processing.classification}
             atomic_text(run_path / "enrichment_profiles.json", json.dumps({
@@ -243,15 +247,15 @@ async def main(payload, job):
                 if profile["definition"]["id"] in assigned
             }, ensure_ascii=False))
             summaries = await save_localized(
-                run_path, items, DIGEST_LANGUAGES, checked_raw=raw, date=today,
+                run_path, items, [language], checked_raw=raw, date=today,
                 config=context.config, names=service._profiles(context).names,
             )
             phase("save")
-            for language, markdown in summaries.items():
-                orchestrator.storage.save_daily_summary(today, markdown, language=language)
+            orchestrator.storage.save_daily_summary(today, summaries[language], language=language)
             send("result", data={
                 "raw": raw, "scored": scored["scored"], "kept": kept, "enriched": enriched_count,
-                "languages": list(summaries), "stage": stage, "fetch_status": status, "enrichment_mode": mode,
+                "languages": list(summaries), "output_language": language, "translation_unavailable": unavailable,
+                "stage": stage, "fetch_status": status, "enrichment_mode": mode,
             })
             email = orchestrator.email_manager if context.config.email and context.config.email.enabled else None
             webhook = orchestrator.webhook_notifier
@@ -261,15 +265,15 @@ async def main(payload, job):
                 summarizer = DailySummarizer(
                     profile_names=orchestrator.profiles.names, profile_order=context.config.digest.profile_order,
                 )
-                for language, markdown in summaries.items():
-                    if email:
-                        if context.config.email.imap_enabled:
-                            await asyncio.to_thread(email.check_subscriptions, orchestrator.storage)
-                        await asyncio.to_thread(email.send_daily_summary, markdown,
-                                                f"Horizon Summary ({language.upper()}) - {today}",
-                                                orchestrator.storage.load_subscribers())
-                    if webhook:
-                        await webhook.send_daily_summary(markdown, items, raw, today, language, summarizer)
+                markdown = summaries[language]
+                if email:
+                    if context.config.email.imap_enabled:
+                        await asyncio.to_thread(email.check_subscriptions, orchestrator.storage)
+                    await asyncio.to_thread(email.send_daily_summary, markdown,
+                                            f"Horizon Summary ({language.upper()}) - {today}",
+                                            orchestrator.storage.load_subscribers())
+                if webhook:
+                    await webhook.send_daily_summary(markdown, items, raw, today, language, summarizer)
             from .media import prepare_images
             try:
                 covers = await prepare_images(store_dir / job, items, context.config, payload.get("media_search", False))

@@ -12,4 +12,9 @@
     <string name="article_context_rate_limit">The AI provider rate limit was reached. Try again later.</string>
     <string name="article_context_unavailable">The article or its processing profile is unavailable.</string>
     <string name="article_context_failed">Could not load context. You can try again.</string>
+    <string name="digest_output_language">Digest language</string>
+    <string name="digest_language_english">English</string>
+    <string name="digest_language_russian">Russian</string>
+    <string name="digest_language_chinese">Simplified Chinese</string>
+    <string name="digest_language_detail">One language for articles and future manual or scheduled digests.</string>
 </resources>

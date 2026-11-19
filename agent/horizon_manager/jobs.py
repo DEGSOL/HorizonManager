@@ -49,7 +49,7 @@ def claim(store, article=False):
         row = db.execute(f"SELECT * FROM jobs WHERE state='queued' AND {predicate} ORDER BY rowid").fetchone()
         if row is not None:
             db.execute("UPDATE jobs SET state='running',updated=? WHERE id=?", (utc(), row["id"]))
-            return dict(row), store.settings(db), store.enrichment_mode(db)
+            return dict(row), store.settings(db), store.enrichment_mode(db), store.digest_language(db)[0]
     return None
 
 
@@ -92,7 +92,7 @@ async def terminate(process):
         await process.wait()
 
 
-async def execute(store, row, settings, enrichment_mode):
+async def execute(store, row, settings, enrichment_mode, digest_language):
     job = row["id"]
     article = row["kind"] == "article_context"
     start = time.monotonic()
@@ -127,7 +127,7 @@ async def execute(store, row, settings, enrichment_mode):
         )
         with store.db() as db:
             search = store.media_search(db)
-        process.stdin.write(json.dumps({"media_search": search, "enrichment_mode": enrichment_mode,
+        process.stdin.write(json.dumps({"media_search": search, "enrichment_mode": enrichment_mode, "language": digest_language,
                                         "settings": settings, "kind": row["kind"], "params": params}).encode())
         await process.stdin.drain()
         process.stdin.close()

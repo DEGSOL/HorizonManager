@@ -88,7 +88,9 @@ private class ArtworkCache(context: Context) {
         }
     private val slots = Semaphore(3)
 
-    private fun bytes(url: String, html: Boolean): ByteArray? {
+    private data class MediaResponse(val bytes: ByteArray, val url: String)
+
+    private fun bytes(url: String, html: Boolean): MediaResponse? {
         var u = url.toHttpUrlOrNull() ?: return null
         repeat(4) {
             if (!u.isHttps || u.port != 443 || u.username.isNotEmpty() || u.password.isNotEmpty())
@@ -124,36 +126,62 @@ private class ArtworkCache(context: Context) {
                         return null
                     val input = body.source()
                     if (input.request(limit + 1)) return null
-                    return input.readByteArray()
+                    return MediaResponse(input.readByteArray(), u.toString())
                 }
             }
         }
         return null
     }
 
-    private fun original(page: String): String {
-        val u = page.toHttpUrlOrNull() ?: return ""
-        val telegram = u.host == "t.me"
-        val html =
-            bytes(
-                if (telegram) u.newBuilder().setQueryParameter("embed", "1").build().toString()
-                else page,
-                true,
-            ) ?: return ""
-        val doc = Jsoup.parse(html.decodeToString(), page)
+    private fun originals(page: String): List<String> {
+        val u = page.toHttpUrlOrNull() ?: return emptyList()
+        val telegram = u.host in setOf("t.me", "telegram.me")
+        val html = bytes(
+            if (telegram) u.newBuilder().setQueryParameter("embed", "1").fragment(null).build().toString()
+            else page,
+            true,
+        ) ?: return emptyList()
+        val doc = Jsoup.parse(html.bytes.decodeToString(), html.url)
         if (telegram) {
             val post = u.encodedPath.trim('/').removePrefix("s/")
             val node = doc.select("[data-post]").firstOrNull { it.attr("data-post") == post }
-            return Regex("""url\(['"]?(https://[^)'"]+)""")
-                .find(node?.selectFirst(".tgme_widget_message_photo_wrap")?.attr("style").orEmpty())
-                ?.groupValues
-                ?.get(1)
-                .orEmpty()
+            val pattern = Regex("""url\(['"]?(https://[^)'"]+)""")
+            return node?.select(".tgme_widget_message_photo_wrap").orEmpty()
+                .mapNotNull { pattern.find(it.attr("style"))?.groupValues?.get(1) }
         }
-        val tag =
-            doc.selectFirst("meta[property=og:image], meta[name=twitter:image], article img[src]")
-                ?: return ""
-        return tag.absUrl(if (tag.hasAttr("content")) "content" else "src")
+        return listOf("meta[property=og:image:secure_url]", "meta[property=og:image]",
+            "meta[name=twitter:image]", "article img[src]").flatMap { selector ->
+            doc.select(selector).map { it.absUrl(if (it.hasAttr("content")) "content" else "src") }
+        }.filter(String::isNotEmpty)
+    }
+
+    private fun loadCover(url: String): Cover? =
+        try {
+            if (url.isEmpty()) null else bytes(url, false)?.bytes?.let(::decodeCover)
+        } catch (_: java.io.IOException) {
+            null
+        } catch (_: IllegalArgumentException) {
+            null
+        }
+
+    private fun fallback(page: String, failed: String): Cover? {
+        if (page.isBlank()) return null
+        val key = contextHash(page)
+        val cached = lookup.getString(key, null)
+        if (cached != null && System.currentTimeMillis() < lookup.getLong("$key.until", 0)) {
+            if (cached.isEmpty()) return null
+            if (cached != failed) loadCover(cached)?.let { return it }
+        }
+        val candidates = originals(page).asSequence().filter { it != cached && it != failed }.distinct().take(4)
+        var resolved = ""
+        val cover = candidates.firstNotNullOfOrNull { url ->
+            loadCover(url)?.also { resolved = url }
+        }
+        val ttl = if (cover == null) 1_800_000L else 259_200_000L
+        lookup.edit().putString(key, resolved)
+            .putLong("$key.until", System.currentTimeMillis() + ttl)
+            .apply()
+        return cover
     }
 
     suspend fun load(article: JSONObject): Cover? =
@@ -169,34 +197,9 @@ private class ArtworkCache(context: Context) {
                     return@withPermit it
                 }
                 try {
-                    val url =
-                        if (media != null) media.optString("url")
-                        else {
-                            val key =
-                                java.security.MessageDigest.getInstance("SHA-256")
-                                    .digest(page.toByteArray())
-                                    .joinToString("") { "%02x".format(it) }
-                            val cached = lookup.getString(key, null)
-                            if (
-                                cached != null &&
-                                    System.currentTimeMillis() < lookup.getLong("$key.until", 0)
-                            )
-                                cached
-                            else
-                                original(page).also {
-                                    lookup
-                                        .edit()
-                                        .putString(key, it)
-                                        .putLong(
-                                            "$key.until",
-                                            System.currentTimeMillis() +
-                                                (if (it.isBlank()) 6L else 72L) * 3_600_000,
-                                        )
-                                        .apply()
-                                }
-                        }
-                    if (url.isEmpty()) null
-                    else bytes(url, false)?.let(::decodeCover)?.also { memory.put(id, it) }
+                    val provided = media?.optString("url").orEmpty()
+                    val cover = loadCover(provided) ?: fallback(page, provided)
+                    cover?.also { memory.put(id, it) }
                 } catch (_: java.io.IOException) {
                     null
                 } catch (_: IllegalArgumentException) {

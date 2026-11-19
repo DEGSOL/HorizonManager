@@ -56,6 +56,8 @@ internal data class Panel(
     val updatingAgent: Boolean = false,
 )
 
+internal fun Panel.preferredDigestLanguage() = status.optString("digest_language", digestLocale())
+
 internal class ManagerModel(private val app: Application) : AndroidViewModel(app) {
     private val vault = Vault(app)
     private val cache = ManagerDb.get(app).cache()
@@ -383,6 +385,12 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     private suspend fun fetchPanel(server: Server, everything: Boolean) {
         val cursor = cache.eventCursor(server.id)
         val remote = withAgent(server) { api ->
+            val status = api.get("status") as JSONObject
+            if (status.has("digest_language") && !status.optBoolean("digest_language_chosen")) {
+                val selected = api.put("digest-language", JSONObject()
+                    .put("language", digestLocale()).put("initialize", true)) as JSONObject
+                status.put("digest_language", selected.getString("language")).put("digest_language_chosen", true)
+            }
             val head = (api.get("digests?limit=$DIGEST_PAGE_SIZE") as JSONArray).objects()
             val panel = state.value
             val run = archiveRun
@@ -396,7 +404,9 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                 } else null
             val archive = (head + listOfNotNull(selected) + older).distinctBy { it.optString("id") }
             val hasMore = if (older.isNotEmpty()) panel.hasMoreDigests else head.size == DIGEST_PAGE_SIZE
-            val lang = selected?.getJSONArray("languages")?.strings()?.let(::digestLanguage)
+            val lang = selected?.getJSONArray("languages")?.strings()?.let {
+                digestLanguage(it, status.optString("digest_language", digestLocale()))
+            }
             val changed = selected?.getString("id") != panel.selectedRun || lang != panel.language
             val digest = if ((everything || changed) && selected != null && lang != null) {
                 api.get("digests/${selected.getString("id")}/$lang") as JSONObject
@@ -404,7 +414,6 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             val schema = if (panel.schema.length() == 0) api.get("schema") as JSONObject else panel.schema
             val schedule = if (everything || panel.schedule.length() == 0) api.get("schedule") as JSONObject else panel.schedule
             val sources = (api.get("sources") as JSONArray).objects()
-            val status = api.get("status") as JSONObject
             val jobs = (api.get("jobs") as JSONArray).objects()
             val events = (api.get(if (cursor == 0L) "events?limit=250&latest=true" else "events?after=$cursor&limit=1000") as JSONArray).objects()
             val media = if (!changed && selected?.optBoolean("media_ready") == true &&
@@ -496,7 +505,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         if (latest?.optString("id") == state.value.selectedRun && state.value.markdown.isNotEmpty()) return
         operation {
             val run = latest?.optString("id")
-            val lang = latest?.optJSONArray("languages")?.strings()?.let(::digestLanguage)
+            val lang = latest?.optJSONArray("languages")?.strings()?.let { digestLanguage(it, state.value.preferredDigestLanguage()) }
             if (run == null || lang == null || !showCached(server.id, run, lang)) synchronize(server, everything = true)
         }
     }
@@ -513,7 +522,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
 
     fun openArchive(issue: JSONObject) {
         val run = issue.getString("id")
-        val lang = issue.getJSONArray("languages").strings().let(::digestLanguage) ?: return
+        val lang = digestLanguage(issue.getJSONArray("languages").strings(), state.value.preferredDigestLanguage()) ?: return
         archiveRun = run
         openDigest(run, lang, offset = 0)
     }
@@ -679,6 +688,10 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             }
         }
         result
+    }
+
+    fun setDigestLanguage(language: String) = mutate { api ->
+        api.put("digest-language", JSONObject().put("language", language))
     }
 
     fun enrichmentMode(mode: String) = mutate { api ->

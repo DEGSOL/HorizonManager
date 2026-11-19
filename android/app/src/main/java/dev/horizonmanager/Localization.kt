@@ -27,8 +27,10 @@ internal fun digestLocale(locale: Locale = Locale.getDefault()): String =
         else -> "en"
     }
 
-internal fun digestLanguage(available: List<String>): String? =
-    listOf(digestLocale(), "en", "zh", "ru").firstOrNull { it in available }
+internal val digestLanguages = listOf("en", "ru", "zh")
+
+internal fun digestLanguage(available: List<String>, preferred: String = digestLocale()): String? =
+    (listOf(preferred) + digestLanguages).firstOrNull { it in available }
 
 internal fun agentUpdateAvailable(installed: String): Boolean {
     val current = installed.split('.').mapNotNull(String::toIntOrNull)

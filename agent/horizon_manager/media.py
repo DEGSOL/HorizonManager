@@ -4,7 +4,8 @@ import ipaddress
 import json
 import re
 import socket
-from urllib.parse import urljoin, urlsplit
+from itertools import islice
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 
 import aiohttp
 import feedparser
@@ -16,6 +17,8 @@ from .localized_digest import atomic_text
 
 MAX_DOCUMENT = 768 * 1024
 COMMONS = "https://commons.wikimedia.org/w/api.php"
+TELEGRAM_HOSTS = {"t.me", "telegram.me"}
+NETWORK_ERRORS = (ValueError, aiohttp.ClientError, TimeoutError, OSError, asyncio.IncompleteReadError)
 
 
 def public_address(value):
@@ -51,13 +54,15 @@ class PublicResolver(aiohttp.resolver.ThreadedResolver):
         return answers
 
 
-async def document(session, url, *, params=None):
+async def fetch_document(session, url, *, params=None):
     for _ in range(4):
         if not web_url(url):
             raise ValueError("media URL")
         async with session.get(url, params=params, allow_redirects=False) as response:
             if response.status in {301, 302, 303, 307, 308}:
-                url = urljoin(url, response.headers["Location"])
+                if not (location := response.headers.get("Location")):
+                    raise ValueError("media redirect without location")
+                url = urljoin(url, location)
                 params = None
                 continue
             response.raise_for_status()
@@ -68,33 +73,57 @@ async def document(session, url, *, params=None):
                 data.extend(part)
                 if len(data) > MAX_DOCUMENT:
                     raise ValueError("large document")
-            return bytes(data)
+            return bytes(data), str(response.url)
     raise ValueError("media redirects")
 
 
-def source_cover(html, original):
+async def document(session, url, *, params=None):
+    data, _ = await fetch_document(session, url, params=params)
+    return data
+
+
+def source_covers(html, original, base_url=None):
     soup = BeautifulSoup(html, "html.parser")
     parts = urlsplit(original)
-    if parts.hostname in {"t.me", "telegram.me"}:
+    if parts.hostname in TELEGRAM_HOSTS:
         post = parts.path.strip("/").removeprefix("s/")
         message = soup.find(attrs={"data-post": post})
-        photo = message.select_one(".tgme_widget_message_photo_wrap") if message else None
-        match = re.search(r"url\(['\"]?(https://[^)'\"]+)", photo.get("style", "")) if photo else None
-        return web_url(match[1]) if match else ""
-    tag = soup.select_one('meta[property="og:image"], meta[name="twitter:image"], article img[src]')
-    return web_url(urljoin(original, tag.get("content") or tag.get("src") or "")) if tag else ""
+        if message:
+            for photo in message.select(".tgme_widget_message_photo_wrap"):
+                match = re.search(r"url\(['\"]?(https://[^)'\"]+)", photo.get("style", ""))
+                if match and (url := web_url(match[1])):
+                    yield url
+        return
+    for selector in ('meta[property="og:image:secure_url"]', 'meta[property="og:image"]',
+                     'meta[name="twitter:image"]', "article img[src]"):
+        for tag in soup.select(selector):
+            value = tag.get("content") or tag.get("src")
+            if value and (url := web_url(urljoin(base_url or original, value))):
+                yield url
 
 
-def rss_images(xml):
+def source_cover(html, original):
+    return next(source_covers(html, original), "")
+
+
+def rss_images(xml, base_url=""):
     found = {}
     for entry in feedparser.parse(xml).entries:
-        enclosures = [*entry.get("media_thumbnail", []), *entry.get("media_content", []), *entry.enclosures]
-        for obj in enclosures:
-            url = obj.get("url") or obj.get("href", "")
-            if (obj.get("type", "").startswith("image/") or obj.get("medium") == "image"
-                    or re.search(r"\.(jpe?g|png|webp)(?:\?|$)", url, re.I)) and web_url(url):
-                found[entry.get("link", "")] = url
-                break
+        attachments = [(thumb, True) for thumb in entry.get("media_thumbnail", [])]
+        attachments += [(obj, False) for obj in (*entry.get("media_content", []), *entry.enclosures)]
+        if not (link := entry.get("link")) or not (page := web_url(urljoin(base_url, link))):
+            continue
+        for obj, thumbnail in attachments:
+            value = obj.get("url") or obj.get("href")
+            if not value:
+                continue
+            url = web_url(urljoin(base_url, value))
+            if url and (thumbnail or (obj.get("type") or "").startswith("image/")
+                                 or obj.get("medium") == "image"
+                                 or re.search(r"\.(jpe?g|png|webp)(?:\?|$)", url, re.I)):
+                options = found.setdefault(page, [])
+                if url not in options:
+                    options.append(url)
     return found
 
 
@@ -141,7 +170,9 @@ async def usable_image(session, url):
             return False
         async with session.get(url, allow_redirects=False, headers={"Range": "bytes=0-63"}) as response:
             if response.status in {301, 302, 303, 307, 308}:
-                url = urljoin(url, response.headers["Location"])
+                if not (location := response.headers.get("Location")):
+                    return False
+                url = urljoin(url, location)
                 continue
             if response.status not in {200, 206} or response.content_type not in {"image/png", "image/jpeg", "image/webp"}:
                 return False
@@ -169,8 +200,10 @@ async def prepare_images(path, items, config, allow_search):
         async def load_feed(feed):
             try:
                 async with slots:
-                    rss.update(rss_images(await document(session, str(feed.url))))
-            except (ValueError, aiohttp.ClientError, TimeoutError, OSError):
+                    xml, base = await fetch_document(session, str(feed.url))
+                    for page, urls in rss_images(xml, base).items():
+                        rss.setdefault(page, []).extend(urls)
+            except NETWORK_ERRORS:
                 pass
         enabled = getattr(config.sources, "rss", None)
         used = {i.metadata.get("feed_name") for i in items if i.metadata}
@@ -178,26 +211,42 @@ async def prepare_images(path, items, config, allow_search):
             async with slots:
                 page = str(item.url)
                 meta = item.metadata or {}
-                photo = next((web_url(meta.get(k, "")) for k in ("image_url", "thumbnail", "image") if web_url(meta.get(k, ""))), "") or rss.get(page, "")
+                checked = set()
+
+                async def first_usable(candidates):
+                    for url in candidates:
+                        if not url or url in checked:
+                            continue
+                        checked.add(url)
+                        try:
+                            if await usable_image(session, url):
+                                return url
+                        except NETWORK_ERRORS:
+                            continue
+                    return ""
+
+                photo = await first_usable(
+                    [*(web_url(meta.get(key)) for key in ("image_url", "thumbnail", "image")),
+                     *rss.get(page, [])[:3]])
                 if not photo and web_url(page):
-                    parsed = urlsplit(page)
-                    fetch = page + ("&" if parsed.query else "?") + "embed=1" if parsed.hostname == "t.me" else page
                     try:
-                        photo = source_cover(await document(session, fetch), page)
-                    except (ValueError, aiohttp.ClientError, TimeoutError, OSError):
+                        parsed = urlsplit(page)
+                        fetch = page
+                        if parsed.hostname in TELEGRAM_HOSTS:
+                            query = [(key, value) for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+                                     if key != "embed"]
+                            fetch = parsed._replace(query=urlencode([*query, ("embed", "1")]), fragment="").geturl()
+                        html, base = await fetch_document(session, fetch)
+                        candidates = islice(dict.fromkeys(source_covers(html, page, base)), 4)
+                        photo = await first_usable(candidates)
+                    except NETWORK_ERRORS:
                         pass
-                if photo:
-                    try:
-                        if not await usable_image(session, photo):
-                            photo = ""
-                    except (ValueError, aiohttp.ClientError, TimeoutError, OSError, asyncio.IncompleteReadError):
-                        photo = ""
                 if photo:
                     result[item.id] = {"kind": "original", "url": photo, "source": page}
                 elif ai:
                     try:
                         candidate = await asyncio.wait_for(commons_image(session, ai, item), 22)
-                        if candidate:
+                        if candidate and await first_usable([candidate["url"]]):
                             result[item.id] = candidate
                     except Exception:
                         pass  # Optional artwork must not fail the digest.

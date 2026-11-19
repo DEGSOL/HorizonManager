@@ -41,6 +41,8 @@ internal fun diagnosticEvent(row: JSONObject): JSONObject {
         code.startsWith("SOURCE_") -> sourceResult.matchEntire(raw)?.groupValues?.drop(1)?.filter(String::isNotBlank)?.joinToString(" · ")
         code == "JOB_QUEUED" -> raw.takeIf { it in setOf("run", "ai", "source", "localize", "article_context") }
         code.startsWith("ARTICLE_CONTEXT_") -> raw.takeIf(contextResult::matches)
+        code == "DIGEST_LANGUAGE_CHANGED" -> raw.takeIf { it in digestLanguages }
+        code == "LOCALIZATION_PARTIAL" -> raw.takeIf { it.length <= 9 && it.toIntOrNull() != null }
         code == "ENRICHMENT_MODE_CHANGED" -> raw.takeIf { it in setOf("on_demand", "automatic") }
         code in setOf("HORIZON_EXIT", "JOURNAL_CLEARED", "MEDIA_READY") -> raw.takeIf { it.length <= 9 && it.toIntOrNull() != null }
         else -> raw.takeIf { it in safeException || it == "src.ai.classifier · fallback" }

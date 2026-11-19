@@ -1,9 +1,11 @@
 import json
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from horizon_manager.media import commons_image, rss_images, source_cover, web_url
+from horizon_manager.media import commons_image, prepare_images, rss_images, source_cover, web_url
 
 
 class PublicationMediaTests(unittest.IsolatedAsyncioTestCase):
@@ -16,7 +18,41 @@ class PublicationMediaTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(source_cover(markup, "https://t.me/world/12"), "")
         xml = b"""<rss version="2.0"><channel><item><title>One</title><link>https://example.com/a</link>
             <enclosure url="https://example.com/a.png" type="image/png" length="420"/></item></channel></rss>"""
-        self.assertEqual(rss_images(xml), {"https://example.com/a": "https://example.com/a.png"})
+        self.assertEqual(rss_images(xml), {"https://example.com/a": ["https://example.com/a.png"]})
+
+    def test_rss_thumbnail_without_extension_and_relative_url(self):
+        xml = b"""<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel><item>
+            <title>One</title><link>https://example.com/a</link>
+            <media:thumbnail url="/resize/123?w=800"/>
+            <enclosure url="/other.png" type="image/png"/></item></channel></rss>"""
+        self.assertEqual(rss_images(xml, "https://example.com/feed"), {
+            "https://example.com/a": ["https://example.com/resize/123?w=800", "https://example.com/other.png"]})
+
+    async def test_invalid_metadata_falls_through_to_working_page_cover(self):
+        item = SimpleNamespace(id="news", url="https://example.com/article",
+                               metadata={"image_url": "https://example.com/expired.jpeg"})
+        config = SimpleNamespace(sources=SimpleNamespace(rss=[]))
+        response = (b'<meta name="twitter:image" content="/other.jpg">'
+                    b'<meta property="og:image" content="cover.jpg">', "https://example.com/landing/news")
+        with TemporaryDirectory() as folder, patch("horizon_manager.media.fetch_document",
+                AsyncMock(return_value=response)), patch("horizon_manager.media.usable_image",
+                AsyncMock(side_effect=[False, True])) as probe:
+            await prepare_images(Path(folder), [item], config, False)
+            artwork = json.loads((Path(folder) / "media.json").read_bytes())
+            self.assertEqual(artwork["news"]["url"], "https://example.com/landing/cover.jpg")
+            self.assertEqual(probe.await_count, 2)
+
+    async def test_unusable_wikimedia_result_is_not_published(self):
+        item = SimpleNamespace(id="news", url="https://example.com/article", metadata={})
+        config = SimpleNamespace(ai=None, sources=SimpleNamespace(rss=[]))
+        with TemporaryDirectory() as folder, patch("horizon_manager.media.fetch_document",
+                AsyncMock(return_value=(b"<html></html>", item.url))), patch("horizon_manager.media.usable_image",
+                AsyncMock(return_value=False)) as probe, patch("horizon_manager.media.commons_image",
+                AsyncMock(return_value={"url": "https://example.com/dead.jpg"})), patch(
+                "horizon_manager.media.create_ai_client"):
+            self.assertEqual(await prepare_images(Path(folder), [item], config, True), 0)
+            self.assertEqual((Path(folder) / "media.json").read_text(), "{}")
+            probe.assert_awaited_once()
 
     def test_rejects_non_public_and_credential_urls(self):
         for url in ("file:///etc/passwd", "https://127.0.0.1/a", "https://[::1]/a", "http://example.com/a",

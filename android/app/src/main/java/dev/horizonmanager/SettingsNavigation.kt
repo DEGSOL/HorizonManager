@@ -86,6 +86,19 @@ internal fun DigestSettings(open: (String) -> Unit) {
 @Composable
 internal fun AiSettings(panel: Panel, model: ManagerModel, open: (String) -> Unit) {
     val mode = panel.status.optString("enrichment_mode")
+    val supportsLanguage = panel.status.has("digest_language")
+    Tile {
+        Choice(ui(R.string.digest_output_language), digestLanguages, panel.preferredDigestLanguage(),
+            model::setDigestLanguage, {
+                ui(when (it) {
+                    "ru" -> R.string.digest_language_russian
+                    "zh" -> R.string.digest_language_chinese
+                    else -> R.string.digest_language_english
+                })
+            }, enabled = supportsLanguage && !panel.busy)
+        Text(ui(if (supportsLanguage) R.string.digest_language_detail else R.string.article_context_update),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
     Tile {
         Choice(ui(R.string.enrichment_mode), listOf("on_demand", "automatic"),
             mode.ifBlank { "on_demand" }, model::enrichmentMode, {
