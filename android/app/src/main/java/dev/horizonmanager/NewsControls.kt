@@ -6,50 +6,68 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.MailOutline
-import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import org.json.JSONObject
 import java.time.Instant
 
 internal enum class NewsOrder(@param:StringRes val label: Int) {
-    Score(R.string.ui_by_score), Oldest(R.string.oldest_first), Title(R.string.ui_by_title),
+    Score(R.string.editorial_score_high), ScoreLow(R.string.editorial_score_low),
+    Newest(R.string.editorial_newest), Oldest(R.string.oldest_first), Title(R.string.ui_by_title),
 }
+
+internal enum class NewsScope { All, Unread, Saved }
 
 @Stable
 internal class NewsFilters {
     var query by mutableStateOf("")
-    var saved by mutableStateOf(false)
-    var unread by mutableStateOf(false)
+    var scope by mutableStateOf(NewsScope.All)
     var profile by mutableStateOf("")
+    var category by mutableStateOf("")
     var order by mutableStateOf(NewsOrder.Score)
+    var explicitOrder by mutableStateOf(false)
+    var searchOpen by mutableStateOf(false)
+    var optionsOpen by mutableStateOf(false)
+
+    companion object {
+        val Saver = androidx.compose.runtime.saveable.listSaver<NewsFilters, Any>(
+            save = { listOf(it.query, it.scope.name, it.profile, it.category, it.order.name, it.explicitOrder, it.searchOpen, it.optionsOpen) },
+            restore = { saved -> NewsFilters().apply {
+                query = saved[0] as String
+                scope = NewsScope.valueOf(saved[1] as String)
+                profile = saved[2] as String
+                category = saved[3] as String
+                order = NewsOrder.valueOf(saved[4] as String)
+                explicitOrder = saved[5] as Boolean
+                searchOpen = saved[6] as Boolean
+                optionsOpen = saved[7] as Boolean
+            } }
+        )
+    }
 }
 
-internal fun articleProfiles(articles: List<JSONObject>): List<String> =
-    articles.mapNotNull { it.optString("profile").takeIf { profile -> profile.isNotBlank() && profile != "null" } }
-        .distinct().sorted()
+internal fun articleField(article: JSONObject, name: String): String =
+    article.optString(name).takeUnless { it == "null" }.orEmpty()
 
 internal fun chronologicalTime(article: JSONObject): Instant =
     runCatching { Instant.parse(article.optString("time")) }.getOrDefault(Instant.MAX)
+
+internal fun orderArticles(articles: List<JSONObject>, order: NewsOrder): List<JSONObject> = when (order) {
+    NewsOrder.Oldest -> articles.sortedBy(::chronologicalTime)
+    NewsOrder.Newest -> articles.sortedByDescending { chronologicalTime(it).takeUnless { date -> date == Instant.MAX } ?: Instant.MIN }
+    NewsOrder.Score -> articles.sortedByDescending { it.optDouble("score").takeIf(Double::isFinite) ?: Double.NEGATIVE_INFINITY }
+    NewsOrder.ScoreLow -> articles.sortedBy { it.optDouble("score").takeIf(Double::isFinite) ?: Double.POSITIVE_INFINITY }
+    NewsOrder.Title -> articles.sortedBy { it.optString("title").lowercase() }
+}
 
 @Composable
 internal fun GlassIconAction(icon: ImageVector, description: String, enabled: Boolean = true,
@@ -72,62 +90,49 @@ internal fun GlassIconAction(icon: ImageVector, description: String, enabled: Bo
 }
 
 @Composable
-internal fun NewsToolbar(filters: NewsFilters, profiles: List<String>, enabled: Boolean) {
-    var showSearch by remember { mutableStateOf(false) }
-    var showProfiles by remember { mutableStateOf(false) }
-    var showSort by remember { mutableStateOf(false) }
-    Row(Modifier.glassPanel(CircleShape), verticalAlignment = Alignment.CenterVertically) {
-        GlassIconAction(Icons.Default.Search, ui(R.string.ui_search_downloaded_articles), enabled,
-            active = filters.query.isNotBlank()) { showSearch = true }
-        GlassIconAction(if (filters.saved) Icons.Default.Star else Icons.Outlined.Star,
-            ui(R.string.ui_saved), enabled, active = filters.saved) { filters.saved = !filters.saved }
-        GlassIconAction(if (filters.unread) Icons.Default.Email else Icons.Outlined.MailOutline,
-            ui(R.string.ui_unread), enabled, active = filters.unread) { filters.unread = !filters.unread }
-        Box {
-            GlassIconAction(Icons.Default.Person, ui(R.string.ui_profile), enabled, active = filters.profile.isNotEmpty()) {
-                showProfiles = true
-            }
-            DropdownMenu(showProfiles, { showProfiles = false }) {
-                for (profile in listOf("") + profiles) {
-                    DropdownMenuItem(text = { Text(profile.ifBlank { ui(R.string.ui_all) }) }, onClick = {
-                        filters.profile = profile
-                        showProfiles = false
-                    }, trailingIcon = if (profile == filters.profile) ({ Icon(Icons.Default.Check, null) }) else null)
-                }
-            }
+internal fun NewsToolbar(filters: NewsFilters, enabled: Boolean) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        GlassIconAction(Icons.Default.Search, ui(R.string.news_search), enabled, active = filters.searchOpen || filters.query.isNotBlank()) {
+            filters.searchOpen = !filters.searchOpen
         }
-        Box {
-            GlassIconAction(ImageVector.vectorResource(R.drawable.ic_sort), ui(R.string.ui_sort), enabled,
-                active = filters.order != NewsOrder.Score) { showSort = true }
-            DropdownMenu(showSort, { showSort = false }) {
-                NewsOrder.entries.forEach { order ->
-                    DropdownMenuItem(text = { Text(ui(order.label)) }, onClick = {
-                        filters.order = order
-                        showSort = false
-                    }, trailingIcon = if (order == filters.order) ({ Icon(Icons.Default.Check, null) }) else null)
-                }
-            }
+        GlassIconAction(ImageVector.vectorResource(R.drawable.ic_sort), ui(R.string.editorial_filters_sort), enabled,
+            active = filters.optionsOpen || filters.profile.isNotEmpty() || filters.category.isNotEmpty() || filters.explicitOrder) {
+            filters.optionsOpen = !filters.optionsOpen
         }
     }
-    if (showSearch) {
-        val focus = remember { FocusRequester() }
-        HorizonAlertDialog(
-            onDismissRequest = { showSearch = false },
-            title = { Text(ui(R.string.news_search)) },
-            text = {
-                OutlinedTextField(
-                    filters.query, { filters.query = it }, Modifier.fillMaxWidth().focusRequester(focus),
-                    label = { Text(ui(R.string.ui_search_downloaded_articles)) },
-                    trailingIcon = if (filters.query.isNotEmpty()) ({
-                        GlassIconAction(Icons.Default.Close, ui(R.string.clear_search)) { filters.query = "" }
-                    }) else null,
-                    singleLine = true, colors = horizonFieldColors(),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { showSearch = false }),
-                )
-                LaunchedEffect(Unit) { focus.requestFocus() }
-            },
-            confirmButton = { TextButton(onClick = { showSearch = false }) { Text(ui(R.string.ui_close)) } },
-        )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun NewsFilterOptions(filters: NewsFilters, articles: List<JSONObject>) {
+    val scopes = listOf(NewsScope.All to R.string.ui_all, NewsScope.Unread to R.string.ui_unread, NewsScope.Saved to R.string.ui_saved)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        scopes.forEach { (mode, title) ->
+            FilterChip(selected = filters.scope == mode, onClick = { filters.scope = mode }, label = { Text(ui(title)) })
+        }
+    }
+    Reveal(filters.searchOpen) {
+        OutlinedTextField(value = filters.query, onValueChange = { filters.query = it }, modifier = Modifier.fillMaxWidth(),
+            label = { Text(ui(R.string.ui_search_downloaded_articles)) }, singleLine = true, colors = horizonFieldColors(),
+            trailingIcon = if (filters.query.isEmpty()) null else ({
+                GlassIconAction(Icons.Default.Close, ui(R.string.clear_search)) { filters.query = "" }
+            }))
+    }
+    Reveal(filters.optionsOpen) {
+        val hasScore = articles.any { it.optDouble("score").isFinite() }
+        val orders = NewsOrder.entries.filter { hasScore || it !in listOf(NewsOrder.Score, NewsOrder.ScoreLow) }
+        val effective = filters.order.takeIf { it in orders } ?: NewsOrder.Newest
+        Choice(ui(R.string.ui_sort), orders.map { it.name }, effective.name, {
+            filters.order = NewsOrder.valueOf(it)
+            filters.explicitOrder = true
+        }, { ui(NewsOrder.valueOf(it).label) })
+        for ((field, current, change) in listOf(
+            Triple("category", filters.category, { it: String -> filters.category = it }),
+            Triple("profile", filters.profile, { it: String -> filters.profile = it }),
+        )) {
+            val values = articles.map { articleField(it, field) }.filter(String::isNotBlank).distinct().sorted()
+            if (values.isNotEmpty() || current.isNotEmpty()) Choice(label(field), (listOf("") + values + current).distinct(),
+                current, change, { it.ifBlank { ui(R.string.ui_all) } })
+        }
     }
 }

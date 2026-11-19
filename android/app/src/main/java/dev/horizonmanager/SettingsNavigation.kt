@@ -22,17 +22,17 @@ private fun SettingsSection(@StringRes title: Int, content: @Composable ColumnSc
 @Composable
 internal fun SettingsHome(panel: Panel, preset: ThemePreset, open: (String) -> Unit, servers: () -> Unit) {
     val hasConfig = panel.config.optJSONObject("config") != null && panel.schema.length() > 0
-    if (panel.ready) SettingsSection(R.string.settings_digest_group) {
+    if (panel.ready) {
         GlassSettingRow(ui(R.string.sources), ui(R.string.sources_description)) { open("sources") }
         if (hasConfig) {
-            GlassSettingRow(ui(R.string.settings_digest_rules), ui(R.string.settings_digest_rules_detail)) { open("digest") }
-            GlassSettingRow(ui(R.string.ui_schedule), ui(R.string.ui_days_intervals_and_time_zone)) { open("schedule") }
-            GlassSettingRow(ui(R.string.settings_ai_model), ui(R.string.ui_model_api_address_and_request_limits)) { open("ai") }
-            GlassSettingRow(ui(R.string.ui_processing_profiles), ui(R.string.ui_prompts_scoring_criteria_and_output_blocks)) { open("profiles") }
+            GlassSettingRow(ui(R.string.ui_digest), ui(R.string.editorial_digest_settings_detail)) { open("digest_settings") }
+            GlassSettingRow(ui(R.string.editorial_ai_processing), ui(R.string.editorial_ai_settings_detail)) { open("ai_settings") }
         }
     }
     SettingsSection(R.string.settings_app_group) {
         GlassSettingRow(ui(R.string.theme), ui(preset.title)) { open("theme") }
+        GlassSettingRow(ui(R.string.editorial_feed_behavior), ui(R.string.editorial_feed_behavior_detail)) { open("reading") }
+        if (panel.ready) GlassSettingRow(ui(R.string.editorial_local_data), ui(R.string.editorial_local_data_detail)) { open("local") }
         if (panel.ready) {
             GlassSettingRow(ui(R.string.settings_notifications), ui(R.string.settings_notifications_detail)) { open("alerts") }
         }
@@ -48,16 +48,68 @@ internal fun SettingsHome(panel: Panel, preset: ThemePreset, open: (String) -> U
 }
 
 @Composable
-internal fun ConnectionSettings(panel: Panel, model: ManagerModel, editSsh: () -> Unit) {
+internal fun DigestSettings(open: (String) -> Unit) {
+    GlassSettingRow(ui(R.string.settings_digest_rules), ui(R.string.settings_digest_rules_detail)) { open("digest") }
+    GlassSettingRow(ui(R.string.ui_schedule), ui(R.string.ui_days_intervals_and_time_zone)) { open("schedule") }
+}
+
+@Composable
+internal fun AiSettings(open: (String) -> Unit) {
+    GlassSettingRow(ui(R.string.settings_ai_model), ui(R.string.ui_model_api_address_and_request_limits)) { open("ai") }
+    SettingsSection(R.string.ui_advanced_settings) {
+        GlassSettingRow(ui(R.string.ui_processing_profiles), ui(R.string.ui_prompts_scoring_criteria_and_output_blocks)) { open("profiles") }
+        GlassSettingRow(ui(R.string.ui_secrets), ui(R.string.ui_ai_keys_and_integration_tokens)) { open("secrets") }
+    }
+}
+
+internal fun isConnectionFailure(problem: String): Boolean =
+    problem.startsWith("SSH_") || problem.startsWith("HTTPS_") || problem.startsWith("AGENT_") ||
+        problem.substringBefore(" · ") in setOf("AUTH_REQUIRED", "API_401", "API_403")
+
+@Composable
+internal fun ServerConnectionStatus(panel: Panel, model: ManagerModel) {
+    val theme = LocalHorizonPalette.current
+    val problem = panel.connectionProblem
+    val (title, color) = when {
+        panel.server == null -> R.string.editorial_not_configured to theme.muted
+        panel.syncing || panel.busy && panel.lastContact.isBlank() -> R.string.editorial_connecting to theme.muted
+        problem.substringBefore(" · ") in setOf("SSH_AUTH", "AUTH_REQUIRED", "API_401", "API_403") -> R.string.editorial_auth_error to theme.danger
+        problem.isNotBlank() -> R.string.editorial_unavailable to theme.danger
+        panel.lastContact.isNotBlank() -> R.string.editorial_connected to theme.success
+        else -> R.string.editorial_not_checked to theme.muted
+    }
+    Tile {
+        Text(panel.server?.name ?: ui(R.string.ui_servers), style = MaterialTheme.typography.titleMedium)
+        Text(ui(title), style = MaterialTheme.typography.labelLarge, color = color)
+        if (panel.lastContact.isNotBlank()) Text(ui(R.string.editorial_last_contact, localTime(panel.lastContact)),
+            style = MaterialTheme.typography.bodySmall, color = theme.muted)
+        if (problem.isNotBlank() && !panel.syncing) {
+            Text(errorText(problem), style = MaterialTheme.typography.bodyMedium)
+            TextButton(onClick = { model.refresh() }, enabled = !panel.busy) { Text(ui(R.string.ui_retry)) }
+        }
+    }
+}
+
+@Composable
+internal fun ConnectionSettings(panel: Panel, model: ManagerModel, dirtyChange: (Boolean) -> Unit, editSsh: () -> Unit) {
     val server = panel.server ?: return
     var url by remember(server.id, server.https) { mutableStateOf(server.https) }
+    val changed = url.trim() != server.https
+    val valid = AgentApi.validHttps(url.trim())
+    SideEffect { dirtyChange(changed) }
+    ServerConnectionStatus(panel, model)
     Tile {
-        ValueField(ui(R.string.ui_https_domain_optional), url, { url = it })
-        Text(ui(R.string.ui_leave_blank_to_use_ssh_https), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Button(onClick = { model.settings(url, server.background) },
-            enabled = !panel.busy && url.trim() != server.https) { Text(ui(R.string.ui_save_connection)) }
+        OutlinedTextField(url, { url = it }, label = { Text(ui(R.string.ui_https_domain_optional)) },
+            modifier = Modifier.fillMaxWidth(), singleLine = true, isError = changed && !valid,
+            supportingText = { Text(if (changed && !valid) errorText("HTTPS_URL") else ui(R.string.ui_leave_blank_to_use_ssh_https)) },
+            colors = horizonFieldColors())
+        Reveal(changed) {
+            Text(ui(R.string.editorial_unsaved), color = LocalHorizonPalette.current.warning)
+            Button(onClick = { model.settings(url.trim(), server.background) },
+                enabled = !panel.busy && valid) { Text(ui(R.string.ui_save_connection)) }
+        }
     }
-    GlassSettingRow(ui(R.string.ui_ssh_settings), "${server.user} @ ${server.host} · ${server.port}", enabled = !panel.busy, open = editSsh)
+    GlassSettingRow(ui(R.string.ui_ssh_settings), "${server.user} @ ${server.host} · ${server.port}", enabled = !panel.busy && !changed, open = editSsh)
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -175,5 +227,28 @@ internal fun TransferSettings(panel: Panel, model: ManagerModel, backup: () -> U
         TextButton(enabled = !panel.busy && path.startsWith("/"), onClick = {
             confirm(ui(R.string.ui_copy_settings_from_this_folder_into)) { model.copyExisting(path) }
         }) { Text(ui(R.string.ui_copy_configuration_from_vps)) }
+    }
+}
+
+@Composable
+internal fun ReadingPreferences(order: NewsOrder, change: (NewsOrder) -> Unit) {
+    Tile {
+        Text(ui(R.string.editorial_feed_behavior_detail), color = LocalHorizonPalette.current.muted)
+        Choice(ui(R.string.ui_sort), NewsOrder.entries.map { it.name }, order.name,
+            { change(NewsOrder.valueOf(it)) }, { ui(NewsOrder.valueOf(it).label) })
+    }
+}
+
+@Composable
+internal fun LocalReadingData(panel: Panel) {
+    val server = panel.server ?: return
+    val context = LocalContext.current
+    val count by remember(context, server.id) { ManagerDb.get(context).cache().cachedIssues(server.id) }
+        .collectAsState(initial = null)
+    Tile {
+        Text(ui(R.string.editorial_local_data_detail))
+        count?.let { Text(ui(R.string.editorial_cached_issues, it)) }
+        Text(ui(R.string.editorial_saved_count, panel.flags.count(ArticleFlag::saved)))
+        Text(ui(R.string.editorial_read_count, panel.flags.count(ArticleFlag::read)))
     }
 }

@@ -27,17 +27,30 @@ internal enum class ThemePreset(
     val link: Color,
     val text: Color,
     val muted: Color,
+    val surface: Color,
+    val card: Color,
+    val elevated: Color,
 ) {
-    Ocean("ocean", R.string.theme_ocean, Color(0xFF080F1D), Color(0xFF398ED5), Color(0xFFA0DAFF), Color(0xFFFAFAFA), Color(0xFFD2D2D2)),
-    Graphite("graphite", R.string.theme_graphite, Color(0xFF121314), Color(0xFF92969B), Color(0xFFE1E1E1), Color.White, Color(0xFFCCCCCC)),
-    Jade("jade", R.string.theme_jade, Color(0xFF081715), Color(0xFF2EAA87), Color(0xFF99EBD0), Color(0xFFF8F8F8), Color(0xFFC9C9C9)),
-    Amethyst("amethyst", R.string.theme_amethyst, Color(0xFF160D20), Color(0xFF975BDA), Color(0xFFE0BAFF), Color(0xFFFCFCFC), Color(0xFFD7D7D7)),
-    Amber("amber", R.string.theme_amber, Color(0xFF1B120C), Color(0xFFC47E34), Color(0xFFFFD4A2), Color(0xFFF5F5F5), Color(0xFFDADADA));
+    Graphite("graphite", R.string.theme_graphite, Color(0xFF13171C), Color(0xFFD6A06B), Color(0xFFE8B884),
+        Color(0xFFF1F3F5), Color(0xFFAEB8C2), Color(0xFF1B2025), Color(0xFF232A31), Color(0xFF303943)),
+    Amber("amber", R.string.theme_amber, Color(0xFF181310), Color(0xFFDAA45D), Color(0xFFF0BF81),
+        Color(0xFFF7EFE7), Color(0xFFCDC0B4), Color(0xFF211A16), Color(0xFF2A211B), Color(0xFF382D25)),
+    Ocean("ocean", R.string.theme_ocean, Color(0xFF111820), Color(0xFF75ADE1), Color(0xFF9ED1FC),
+        Color(0xFFEFF4FC), Color(0xFFAFBCCA), Color(0xFF19232D), Color(0xFF202D3A), Color(0xFF293C4D)),
+    Jade("jade", R.string.theme_jade, Color(0xFF101B1A), Color(0xFF63C0A2), Color(0xFF99EBD0),
+        Color(0xFFEFF6F3), Color(0xFFABBCB4), Color(0xFF172420), Color(0xFF1E2E28), Color(0xFF273D33)),
+    Amethyst("amethyst", R.string.theme_amethyst, Color(0xFF18141F), Color(0xFFB08ADD), Color(0xFFDABBFA),
+        Color(0xFFF5EFFC), Color(0xFFC0B4CC), Color(0xFF201A29), Color(0xFF2B2236), Color(0xFF382B47));
+
+    val tertiaryText get() = lerp(muted, background, 0.24f)
+    val success get() = Color(0xFF9BC9A7)
+    val warning get() = Color(0xFFDBBA83)
+    val danger get() = Color(0xFFF2A6AA)
 
     fun panel(amount: Float) = lerp(background, tint, amount)
 
     companion object {
-        fun fromId(id: String?) = entries.firstOrNull { it.id == id } ?: Ocean
+        fun fromId(id: String?) = entries.firstOrNull { it.id == id } ?: Graphite
     }
 }
 

@@ -112,6 +112,9 @@ internal interface Cache {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveDigest(digest: CachedDigest)
 
+    @Query("SELECT COUNT(DISTINCT run) FROM CachedDigest WHERE server = :server")
+    fun cachedIssues(server: String): Flow<Int>
+
     @Query("SELECT * FROM CachedDigest WHERE server = :server AND run = :run AND language = :language ORDER BY offset")
     suspend fun digest(server: String, run: String, language: String): List<CachedDigest>
 

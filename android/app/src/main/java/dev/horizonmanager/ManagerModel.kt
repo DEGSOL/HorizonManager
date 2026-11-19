@@ -23,6 +23,9 @@ internal data class Panel(
     val server: Server? = null,
     val ready: Boolean = false,
     val busy: Boolean = false,
+    val syncing: Boolean = false,
+    val lastContact: String = "",
+    val connectionProblem: String = "",
     val probe: Map<String, String> = emptyMap(),
     val hostConfirmation: HostConfirmation? = null,
     val problem: String = "",
@@ -66,7 +69,9 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     private var journalSync = 0L
     private var pendingNotification = ""
     private var installOperation = ""
-    private var archiveRun: String? = null
+    @Volatile private var archiveRun: String? = null
+    private class PageRequest(val run: String, val language: String)
+    @Volatile private var pageRequest: PageRequest? = null
     private val archiveSettings = app.getSharedPreferences("digest_windows", 0)
     private val archiveOverrides = app.getSharedPreferences("digest_archive_overrides", 0)
 
@@ -93,7 +98,10 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             is HostConfirmation -> "SSH_HOST_CHANGED"
             else -> "ANDROID_" + error.javaClass.simpleName.uppercase()
         }
-        mutable.update { it.copy(problem = problem, userProblem = if (announce) problem else it.userProblem) }
+        mutable.update {
+            it.copy(problem = problem, userProblem = if (announce) problem else it.userProblem,
+                connectionProblem = if (isConnectionFailure(problem)) problem else it.connectionProblem)
+        }
         val now = android.os.SystemClock.elapsedRealtime()
         if (problem == lastError && now - lastErrorTime < 60_000) return
         lastError = problem
@@ -327,9 +335,14 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         operation(quiet) { probe(server) }
     }
 
-    private fun <T> withAgent(server: Server, action: (AgentApi) -> T): T =
-        if (server.https.isNotEmpty()) action(AgentApi(server))
-        else Ssh.withSession(server) { action(AgentApi(server, it)) }
+    private fun <T> withAgent(server: Server, action: (AgentApi) -> T): T {
+        val result = if (server.https.isNotEmpty()) action(AgentApi(server))
+            else Ssh.withSession(server) { action(AgentApi(server, it)) }
+        mutable.update {
+            if (it.server?.id == server.id) it.copy(lastContact = Instant.now().toString(), connectionProblem = "") else it
+        }
+        return result
+    }
 
     private suspend fun loadArchive(server: Server) {
         val cached = cache.archive(server.id) ?: return
@@ -347,6 +360,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         val data = cache.digest(server, run, language).map { JSONObject(it.data) }
         if (data.isEmpty()) return false
         mutable.update {
+            if (it.server?.id != server) return@update it
             it.copy(selectedRun = run, language = language, markdown = data.first().optString("markdown"),
                 articles = data.flatMap { page -> page.getJSONArray("items").objects() }.distinctBy { card -> card.optString("id") },
                 total = data.first().optInt("total"))
@@ -355,6 +369,15 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     }
 
     private suspend fun synchronize(server: Server, everything: Boolean) {
+        mutable.update { it.copy(syncing = true) }
+        try {
+            fetchPanel(server, everything)
+        } finally {
+            mutable.update { it.copy(syncing = false) }
+        }
+    }
+
+    private suspend fun fetchPanel(server: Server, everything: Boolean) {
         val cursor = cache.eventCursor(server.id)
         val remote = withAgent(server) { api ->
             val head = (api.get("digests?limit=$DIGEST_PAGE_SIZE") as JSONArray).objects()
@@ -441,6 +464,11 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         }
     }
 
+    fun leaveArchive() {
+        archiveRun = null
+        pageRequest = null
+    }
+
     fun showFeed() {
         val server = state.value.server?.takeIf { it.installed } ?: return
         archiveRun = null
@@ -489,26 +517,42 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         }
     }
 
+    fun cancelChronology(run: String, language: String) {
+        val request = pageRequest
+        if (request?.run == run && request.language == language) pageRequest = null
+    }
+
     fun loadChronology(run: String, language: String) {
         val panel = state.value
         val server = panel.server ?: return
         if (panel.selectedRun != run || panel.language != language || panel.articles.size >= panel.total) return
-        if (active?.isActive == true && !activeIsQuiet) {
-            viewModelScope.launch { active?.join(); loadChronology(run, language) }
+        if (pageRequest?.let { it.run == run && it.language == language } == true) return
+        val request = PageRequest(run, language)
+        pageRequest = request
+        val blocking = active?.takeIf { it.isActive && !activeIsQuiet }
+        if (blocking != null) {
+            viewModelScope.launch {
+                blocking.join()
+                if (pageRequest === request) {
+                    pageRequest = null
+                    loadChronology(run, language)
+                }
+            }
             return
         }
         operation {
-            val pages = cache.digest(server.id, run, language)
-            var offset = 0
-            for (page in pages) {
-                if (page.offset > offset) break
-                offset = maxOf(offset, page.offset + JSONObject(page.data).getJSONArray("items").length())
-            }
-            var total = state.value.total
+            if (pageRequest !== request) return@operation
             val downloaded = mutableListOf<Pair<Int, JSONObject>>()
             try {
-                if (offset < total) withAgent(server) { api ->
-                    while (offset < total) {
+                val pages = cache.digest(server.id, run, language)
+                var offset = 0
+                for (page in pages) {
+                    if (page.offset > offset) break
+                    offset = maxOf(offset, page.offset + JSONObject(page.data).getJSONArray("items").length())
+                }
+                var total = state.value.total
+                if (offset < total && pageRequest === request) withAgent(server) { api ->
+                    while (offset < total && pageRequest === request) {
                         val page = api.get("digests/$run/$language?offset=$offset&limit=40") as JSONObject
                         val count = page.getJSONArray("items").length()
                         if (count == 0) throw Problem("AGENT_PROTOCOL")
@@ -518,8 +562,11 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                     }
                 }
             } finally {
-                downloaded.forEach { (start, page) -> saveDigest(server.id, page, start) }
-                showCached(server.id, run, language)
+                downloaded.forEach { (offset, page) -> saveDigest(server.id, page, offset) }
+                if (pageRequest === request) {
+                    pageRequest = null
+                    showCached(server.id, run, language)
+                }
             }
         }
     }
@@ -541,7 +588,13 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     fun flag(article: String, save: Boolean? = null, read: Boolean? = null) {
         val server = state.value.server ?: return
         viewModelScope.launch {
-            cache.updateFlag(server.id, article, save, read)
+            try {
+                cache.updateFlag(server.id, article, save, read)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                if (state.value.server?.id == server.id) record(error, server)
+            }
         }
     }
 

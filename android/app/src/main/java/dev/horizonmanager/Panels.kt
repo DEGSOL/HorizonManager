@@ -1,216 +1,16 @@
 package dev.horizonmanager
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.MailOutline
-import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.vectorResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.json.JSONArray
 import org.json.JSONObject
-import java.util.Locale
-
-@Composable
-internal fun Archive(issues: List<JSONObject>, hours: Int, hasMore: Boolean, busy: Boolean,
-                     hasEarlyArchives: Boolean, open: (JSONObject) -> Unit, loadMore: () -> Unit) {
-    Text(ui(if (hasEarlyArchives) R.string.archive_period_with_manual else R.string.archive_period, hours),
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant)
-    if (issues.isEmpty()) {
-        Tile { Text(ui(R.string.empty_archive), style = MaterialTheme.typography.titleMedium) }
-    }
-    issues.forEach { issue ->
-        key(issue.getString("id")) {
-            GlassSettingRow(localTime(digestTime(issue)), ui(R.string.ui_full_digest), enabled = !busy) { open(issue) }
-        }
-    }
-    if (hasMore) {
-        OutlinedButton(enabled = !busy, onClick = loadMore) { Text(ui(R.string.older_issues)) }
-    }
-}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun News(panel: Panel, model: ManagerModel, issue: JSONObject?, ai: () -> Unit, sources: () -> Unit,
-                  filters: NewsFilters, archived: Boolean = false) {
-    val preparing = !archived && digestIsPreparing(panel.jobs)
-    val palette = LocalHorizonPalette.current
-    var markdown by remember(issue?.optString("id")) { mutableStateOf(false) }
-    Reveal(preparing) {
-        Tile {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                CircularProgressIndicator(Modifier.size(28.dp), color = palette.link, strokeWidth = 2.5.dp)
-                Column {
-                    Text(ui(R.string.digest_preparing), style = MaterialTheme.typography.titleMedium)
-                    Text(ui(R.string.digest_preparing_detail), style = MaterialTheme.typography.bodySmall, color = palette.muted)
-                }
-            }
-        }
-    }
-    if (issue == null) {
-        if (preparing) return
-        Tile {
-            Text(ui(if (panel.archive.isEmpty()) R.string.ui_your_first_digest else R.string.empty_current_digest),
-                style = MaterialTheme.typography.titleLarge)
-            Text(when {
-                panel.archive.isEmpty() -> ui(R.string.ui_news_will_appear_here_after_horizon)
-                panel.manuallyArchived.isNotEmpty() -> ui(R.string.previous_issues_in_archive)
-                else -> ui(R.string.current_period, panel.collectionHours)
-            })
-            if (panel.archive.isEmpty()) Text(ui(R.string.ui_choose_an_ai_model_in_settings))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { model.submit() }, enabled = !panel.busy) { Text(ui(R.string.ui_start_collection)) }
-                if (panel.archive.isEmpty()) {
-                    OutlinedButton(onClick = ai, enabled = panel.schema.length() > 0) { Text(ui(R.string.ui_configure_ai)) }
-                    OutlinedButton(onClick = sources) { Text(ui(R.string.ui_add_a_source)) }
-                }
-                TextButton(onClick = { model.refresh() }, enabled = !panel.busy) { Text(ui(R.string.ui_check_the_feed)) }
-            }
-        }
-        return
-    }
-    val run = issue.getString("id")
-    val languages = issue.getJSONArray("languages").strings()
-    val loaded = panel.selectedRun == run && panel.markdown.isNotEmpty()
-    val needsTranslation = languages.isNotEmpty() && digestLocale() !in languages
-    Tile(accented = true) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(ui(R.string.ui_digest), style = MaterialTheme.typography.titleMedium)
-                Text(localTime(digestTime(issue)), style = MaterialTheme.typography.bodyMedium, color = palette.muted)
-            }
-            GlassIconAction(Icons.Default.Refresh, ui(R.string.ui_sync), enabled = !panel.busy) { model.refresh() }
-            val issueIcon = if (markdown) Icons.AutoMirrored.Filled.List else ImageVector.vectorResource(R.drawable.ic_issue)
-            GlassIconAction(issueIcon, ui(if (markdown) R.string.ui_back_to_articles else R.string.ui_full_digest),
-                enabled = loaded, active = markdown) { markdown = !markdown }
-            if (!archived) GlassIconAction(ImageVector.vectorResource(R.drawable.ic_archive_down), ui(R.string.archive_early)) {
-                model.archiveDigest(run)
-            }
-        }
-        Reveal(!loaded) {
-            if (panel.busy || panel.problem.isEmpty()) LinearProgressIndicator(Modifier.fillMaxWidth())
-            Text(ui(R.string.issue_not_loaded))
-        }
-        Reveal(loaded && needsTranslation) {
-            TextButton(onClick = { model.translateDigest(run) },
-                enabled = !panel.busy && panel.jobs.none { it.optString("state") in setOf("queued", "running") }) {
-                Text(ui(R.string.ui_translate_issue))
-            }
-        }
-    }
-    Reveal(loaded && needsTranslation) {
-        Text(ui(R.string.ui_this_issue_is_shown_in_an), style = MaterialTheme.typography.bodySmall)
-    }
-    if (!loaded) return
-    AnimatedContent(markdown, transitionSpec = { fadeIn(tween(220, delayMillis = 70)) togetherWith fadeOut(tween(100)) },
-        label = "digest reading mode") { full ->
-        if (full) Tile { Markdown(panel.markdown) }
-        else DigestArticles(panel, model, run, filters)
-    }
-}
-
-@Composable
-private fun DigestArticles(panel: Panel, model: ManagerModel, run: String, filters: NewsFilters) {
-    val palette = LocalHorizonPalette.current
-    val flags = panel.flags.associateBy { it.article }
-    var open by remember(run, panel.language) { mutableStateOf<JSONObject?>(null) }
-    Column(verticalArrangement = Arrangement.spacedBy(13.dp)) {
-        val needsChronologyPages = filters.order == NewsOrder.Oldest && panel.articles.size < panel.total
-        LaunchedEffect(run, panel.language, filters.order) {
-            if (needsChronologyPages) model.loadChronology(run, panel.language)
-        }
-        if (needsChronologyPages) {
-            Tile {
-                if (panel.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-                Text(ui(R.string.chronology_progress, panel.articles.size, panel.total))
-                if (!panel.busy && panel.problem.isNotEmpty()) {
-                    TextButton(onClick = { model.loadChronology(run, panel.language) }) { Text(ui(R.string.ui_retry)) }
-                }
-            }
-            return@Column
-        }
-        val shown = panel.articles.asSequence().filter { row ->
-            val flag = flags[row.getString("id")]
-            (!filters.saved || flag?.saved == true) && (!filters.unread || flag?.read != true) &&
-                (filters.profile.isEmpty() || row.optString("profile") == filters.profile) &&
-                (filters.query.isBlank() || listOf("title", "summary", "source", "category").any { row.optString(it).contains(filters.query.trim(), true) })
-        }.let { filtered ->
-            when (filters.order) {
-                NewsOrder.Oldest -> filtered.sortedBy(::chronologicalTime)
-                NewsOrder.Title -> filtered.sortedBy { it.optString("title").lowercase() }
-                NewsOrder.Score -> filtered.sortedByDescending { it.optDouble("score", -1.0) }
-            }
-        }.toList()
-        if (shown.isEmpty()) Tile {
-            Text(if (panel.total == 0) ui(R.string.ui_no_items_passed_the_horizon_filters) else ui(R.string.ui_no_downloaded_articles_match_your_filters))
-        }
-        for (article in shown) key(article.getString("id")) {
-            val id = article.getString("id")
-            val flag = flags[id]
-            val source = article.optString("source")
-            val category = article.optString("category").takeUnless { it == "null" }.orEmpty()
-            val sourceLabel = listOf(source, category, article.optString("profile").takeUnless { it == "null" }.orEmpty())
-                .filter { it.isNotBlank() }.joinToString(" · ")
-            Tile(Modifier.clickable { open = article; model.flag(id, read = true) }) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(sourceLabel, Modifier.weight(1f), style = MaterialTheme.typography.labelLarge,
-                        color = palette.muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    val saved = flag?.saved == true
-                    val read = flag?.read == true
-                    GlassIconAction(if (saved) Icons.Default.Star else Icons.Outlined.Star,
-                        ui(if (saved) R.string.remove_from_favorites else R.string.add_to_favorites), active = saved) {
-                        model.flag(id, save = !saved)
-                    }
-                    GlassIconAction(if (read) Icons.Default.Check else Icons.Outlined.MailOutline,
-                        ui(if (read) R.string.mark_unread else R.string.ui_mark_as_read), active = read) {
-                        model.flag(id, read = !read)
-                    }
-                }
-                Text(article.optString("title"), style = MaterialTheme.typography.titleLarge)
-                val summary = article.optString("summary")
-                if (summary.isNotBlank()) Text(summary, maxLines = 3, overflow = TextOverflow.Ellipsis,
-                    color = palette.muted)
-                Text(localTime(article.optString("time")) +
-                    article.optDouble("score").takeIf { it.isFinite() }?.let { " · %.1f / 10".format(Locale.ROOT, it) }.orEmpty(),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = lerp(palette.muted, Color(0xFF969696), 0.55f))
-            }
-        }
-        if (panel.articles.size < panel.total) {
-            OutlinedButton(onClick = { model.openDigest(panel.selectedRun, panel.language, panel.articles.size) }) {
-                Text(ui(R.string.ui_load_more_of, panel.articles.size, panel.total))
-            }
-        }
-    }
-    open?.let { article -> ArticleDialog(article) { open = null } }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-internal fun Sources(panel: Panel, model: ManagerModel) {
+internal fun Sources(panel: Panel, model: ManagerModel, dirtyChange: (Boolean) -> Unit) {
     val config = panel.config.optJSONObject("config")
     val sourceRoot = panel.schema.optJSONObject("config")
     if (config == null || sourceRoot == null) {
@@ -221,7 +21,9 @@ internal fun Sources(panel: Panel, model: ManagerModel) {
     val ids = profileIds(profiles)
     val original = config.getJSONObject("sources")
     var working by remember(panel.config.optInt("revision")) { mutableStateOf(original.copyObject()) }
-    var type by remember { mutableStateOf("rss") }
+    var type by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("rss") }
+    val dirty = working.toString() != original.toString()
+    SideEffect { dirtyChange(dirty) }
     val types = panel.schema.optJSONArray("sources")?.strings().orEmpty()
     val sourceSchema = definition(sourceRoot, sourceRoot.getJSONObject("properties").getJSONObject("sources")).getJSONObject("properties")
     Tile {
@@ -229,24 +31,33 @@ internal fun Sources(panel: Panel, model: ManagerModel) {
         Choice(ui(R.string.ui_integration), types, type, { type = it })
         when (type) {
             "rss" -> Text(ui(R.string.ui_add_an_rss_or_atom_url))
-            "telegram" -> Text(ui(R.string.ui_enter_the_public_channel_name_without))
             "twitter" -> Text(ui(R.string.ui_apify_requires_apify_token_and_access))
             "openbb" -> if (!panel.status.optBoolean("openbb")) Text(ui(R.string.ui_openbb_requires_an_additional_package_on))
             "github" -> Text(ui(R.string.ui_use_user_events_for_user_activity))
             "google_news", "gdelt" -> Text(ui(R.string.ui_enter_a_search_query_and_optionally))
         }
         key(type) {
-            EditValue(sourceRoot, sourceSchema.getJSONObject(type), type, working.opt(type), {
+            if (type == "telegram") {
+                val schema = definition(sourceRoot, sourceSchema.getJSONObject(type))
+                val item = schema.getJSONObject("properties").getJSONObject("channels").getJSONObject("items")
+                TelegramSources(working.optJSONObject(type) ?: JSONObject(), original.optJSONObject(type) ?: JSONObject(),
+                    sourceRoot, item, ids, panel.busy || panel.jobs.any { it.optString("state") in setOf("queued", "running") },
+                    { working = working.copyObject().put(type, it) },
+                    { index -> model.submit("source", "telegram", if (index == null) null else "channels", index) })
+            } else EditValue(sourceRoot, sourceSchema.getJSONObject(type), type, working.opt(type), {
                 working = working.copyObject().put(type, it)
             }, ids, expandedByDefault = true)
         }
-        Row {
-            Button(onClick = { model.saveConfig(config.copyObject().put("sources", working), profiles) },
-                enabled = !panel.busy && working.toString() != original.toString()) { Text(ui(R.string.ui_apply_source_settings)) }
-            TextButton(onClick = { working = original.copyObject() }) { Text(ui(R.string.ui_discard_changes)) }
+        Reveal(dirty) {
+            Text(ui(R.string.editorial_unsaved), color = LocalHorizonPalette.current.warning)
+            FlowRow {
+                Button(onClick = { model.saveConfig(config.copyObject().put("sources", working), profiles) },
+                    enabled = !panel.busy) { Text(ui(R.string.ui_apply_source_settings)) }
+                TextButton(onClick = { working = original.copyObject() }, enabled = !panel.busy) { Text(ui(R.string.ui_discard_changes)) }
+            }
         }
     }
-    Tile {
+    if (type != "telegram") Tile {
         Text(ui(R.string.ui_test_saved_sources), style = MaterialTheme.typography.titleMedium)
         when (val value = original.opt(type)) {
             is JSONArray -> for (index in 0 until value.length()) {
@@ -292,7 +103,7 @@ private fun stateName(value: String) = mapOf("queued" to ui(R.string.ui_waiting)
     "success" to ui(R.string.ui_succeeded), "empty" to ui(R.string.ui_no_posts), "partial_failure" to ui(R.string.ui_partial_failure),
     "failure" to ui(R.string.ui_error_72aecd), "failed" to ui(R.string.ui_error_72aecd), "cancelled" to ui(R.string.ui_stopped), "timeout" to ui(R.string.ui_timed_out), "interrupted" to ui(R.string.ui_interrupted))[value] ?: value
 
-private fun phaseName(value: String) = mapOf("fetch" to ui(R.string.ui_collecting_news), "score" to ui(R.string.ui_ai_scoring),
+internal fun phaseName(value: String) = mapOf("fetch" to ui(R.string.ui_collecting_news), "score" to ui(R.string.ui_ai_scoring),
     "filter" to ui(R.string.ui_filtering_and_deduplication), "enrich" to ui(R.string.ui_analysis_and_context),
     "generate" to ui(R.string.ui_generating_digest), "save" to ui(R.string.ui_saving), "delivery" to ui(R.string.ui_delivery))[value] ?: stateName(value)
 
@@ -301,6 +112,7 @@ private fun phaseName(value: String) = mapOf("fetch" to ui(R.string.ui_collectin
 internal fun Control(panel: Panel, model: ManagerModel, confirm: (String, () -> Unit) -> Unit,
                      configure: (String) -> Unit) {
     val status = panel.status
+    ServerConnectionStatus(panel, model)
     val active = panel.jobs.firstOrNull { it.optString("state") in listOf("queued", "running") }
     val latest = panel.jobs.firstOrNull { it.optString("kind") == "run" && it.optString("state") == "success" }
     val issue = panel.events.firstOrNull { it.optString("level") in listOf("ERROR", "CRITICAL") }
@@ -350,81 +162,11 @@ internal fun Control(panel: Panel, model: ManagerModel, confirm: (String, () -> 
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model: ManagerModel, export: (String) -> Unit) {
-    var level by remember { mutableStateOf("") }
-    var component by remember { mutableStateOf("") }
-    var period by remember { mutableStateOf(ui(R.string.ui_all_dates)) }
-    var search by remember { mutableStateOf("") }
-    var job by remember { mutableStateOf("") }
-    var detail by remember { mutableStateOf<JSONObject?>(null) }
-    var page by remember { mutableIntStateOf(80) }
-    val ctx = LocalContext.current
-    val components = panel.events.map { it.optString("component") }.distinct()
-    val cutoff = when (period) {
-        ui(R.string.ui_last_24_hours) -> java.time.Instant.now().minusSeconds(86400)
-        ui(R.string.ui_last_7_days) -> java.time.Instant.now().minusSeconds(604800)
-        else -> java.time.Instant.EPOCH
-    }
-    val events = panel.events.filter { row ->
-        (level.isBlank() || row.optString("level") == level) &&
-            (component.isBlank() || row.optString("component") == component) &&
-            (job.isBlank() || row.optString("job") == job) &&
-            runCatching { java.time.Instant.parse(row.optString("time")) >= cutoff }.getOrDefault(false) &&
-            (search.isBlank() || listOf("job", "code", "detail").any { row.optString(it).contains(search, true) })
-    }
-    ValueField(ui(R.string.ui_search_events_or_ids), search, { search = it })
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Choice(ui(R.string.ui_level), listOf("", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"), level, { level = it }, { it.ifBlank { ui(R.string.ui_all) } })
-        Choice(ui(R.string.ui_component), listOf("") + components, component, { component = it }, { it.ifBlank { ui(R.string.ui_all) } })
-        Choice(ui(R.string.ui_time_range), listOf(ui(R.string.ui_all_dates), ui(R.string.ui_last_24_hours), ui(R.string.ui_last_7_days)), period, { period = it }, { it })
-    }
-    if (job.isNotEmpty()) TextButton(onClick = { job = "" }) { Text(ui(R.string.ui_clear_operation_filter, job)) }
-    FlowRow {
-        TextButton(onClick = { model.refresh() }) { Text(ui(R.string.ui_sync)) }
-        TextButton(enabled = events.isNotEmpty(), onClick = { export(JSONArray(events).toString(2)) }) { Text(ui(R.string.ui_export)) }
-        TextButton(enabled = panel.events.isNotEmpty(), onClick = {
-            val max = panel.events.maxOfOrNull { it.optLong("id") } ?: 0
-            confirm(ui(R.string.ui_delete_downloaded_journal_entries_and_vps)) { model.clearEvents(max) }
-        }) { Text(ui(R.string.ui_clear)) }
-    }
-    if (events.isEmpty()) Tile { Text(ui(R.string.ui_no_entries_match_these_filters)) }
-    events.take(page).forEach { row ->
-        Tile(Modifier.clickable { detail = row }) {
-            val warning = row.optString("level") in listOf("ERROR", "CRITICAL", "WARNING")
-            Text("${row.optString("component")} · ${row.optString("level")} · ${localTime(row.optString("time"))}",
-                style = MaterialTheme.typography.labelMedium,
-                color = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(row.optString("detail").ifBlank { phaseName(row.optString("code")) }, maxLines = 3, overflow = TextOverflow.Ellipsis)
-        }
-    }
-    if (events.size > page) TextButton(onClick = { page += 80 }) { Text(ui(R.string.ui_more_entries)) }
-    detail?.let { row ->
-        val code = row.optString("code")
-        HorizonAlertDialog(onDismissRequest = { detail = null }, title = { Text(code) },
-            text = {
-                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(localTime(row.optString("time")) + " · ${row.optString("component")}")
-                    Text(errorText(code))
-                    val technical = row.optString("detail")
-                    if (technical.isNotBlank()) Text(technical)
-                    val id = row.optString("job")
-                    if (id.isNotBlank() && id != "null") TextButton(onClick = { job = id; detail = null }) { Text(ui(R.string.ui_events_for_this_operation)) }
-                }
-            }, confirmButton = {
-                Button(onClick = {
-                    ctx.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Horizon", row.toString(2)))
-                }) { Text(ui(R.string.ui_copy)) }
-            }, dismissButton = { TextButton(onClick = { detail = null }) { Text(ui(R.string.ui_close)) } })
-    }
-}
-
 private fun profileIds(profiles: JSONArray) = profiles.objects().mapNotNull { it.optJSONObject("definition")?.optString("id") }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String) {
+internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, dirtyChange: (Boolean) -> Unit) {
     val stored = panel.config.optJSONObject("config") ?: return
     val serverId = panel.server?.id ?: return
     val schema = panel.schema.optJSONObject("config") ?: return
@@ -439,9 +181,11 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String) {
     val configuredSecret = secretAlias in secrets
     var genericKey by remember(secretAlias, aiDraft?.optString("provider"), panel.config.optInt("revision")) { mutableStateOf("") }
     var showGenericKey by remember(secretAlias, panel.config.optInt("revision")) { mutableStateOf(!configuredSecret) }
+    val dirty = working.toString() != stored.toString() || profiles.toString() != storedProfiles.toString() || genericKey.isNotBlank()
+    if (page != "schedule") SideEffect { dirtyChange(dirty) }
     Tile {
         when (page) {
-            "schedule" -> ScheduleForm(panel, model)
+            "schedule" -> ScheduleForm(panel, model, dirtyChange)
             "secrets" -> {
                 val secretNames = panel.schema.optJSONArray("secrets")?.strings().orEmpty()
                 val configured = panel.config.optJSONArray("secrets")?.strings().orEmpty()
@@ -538,7 +282,8 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String) {
                     }
                     Text(ui(R.string.ui_enter_the_model_id_from_your))
                     val advanced = definition(schema, fields.getJSONObject("ai")).copyObject()
-                    advanced.getJSONObject("properties").remove("languages")
+                    val properties = advanced.getJSONObject("properties")
+                    listOf("provider", "model", "base_url", "languages").forEach { properties.remove(it) }
                     EditValue(schema, advanced, "ai", ai,
                         { working = working.copyObject().put("ai", it) }, ids, ui(R.string.ui_advanced_ai_options))
                 } else {
@@ -587,8 +332,9 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String) {
                 }
             }
         }
-        if (page != "schedule" && page != "secrets" &&
+        Reveal(dirty && page != "schedule" && page != "secrets" &&
             (page != "ai" || AiRouter.configured(working.getJSONObject("ai")) == null)) {
+            Text(ui(R.string.editorial_unsaved), color = LocalHorizonPalette.current.warning)
             Button(onClick = {
                 val keys = JSONObject()
                 if (page == "ai" && genericKey.isNotBlank() && aiDraft?.optString("provider") != "ollama")
@@ -601,7 +347,7 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ScheduleForm(panel: Panel, model: ManagerModel) {
+private fun ScheduleForm(panel: Panel, model: ManagerModel, dirtyChange: (Boolean) -> Unit) {
     val spec = panel.schedule.optJSONObject("spec") ?: return
     var mode by remember(spec.toString()) { mutableStateOf(spec.optString("mode")) }
     var hours by remember(spec.toString()) { mutableStateOf(spec.optInt("hours", 6).toString()) }
@@ -611,6 +357,15 @@ private fun ScheduleForm(panel: Panel, model: ManagerModel) {
     var days by remember(spec.toString()) {
         mutableStateOf(spec.optJSONArray("days")?.let { array -> (0 until array.length()).map { array.getInt(it) }.toSet() }.orEmpty())
     }
+    val changed = mode != spec.optString("mode") || when (mode) {
+        "interval" -> hours.toIntOrNull() != spec.optInt("hours", 6)
+        "calendar" -> hour.toIntOrNull() != spec.optInt("hour", 8) || minute.toIntOrNull() != spec.optInt("minute") ||
+            zone != spec.optString("zone") || days != spec.optJSONArray("days")?.let { array ->
+                (0 until array.length()).map { array.getInt(it) }.toSet()
+            }.orEmpty()
+        else -> false
+    }
+    SideEffect { dirtyChange(changed) }
     Text(ui(R.string.ui_vps_schedule), style = MaterialTheme.typography.titleLarge)
     Choice(ui(R.string.ui_mode), listOf("off", "calendar", "interval"), mode, { mode = it },
         { mapOf("off" to ui(R.string.ui_off), "calendar" to ui(R.string.ui_by_day_of_the_week), "interval" to ui(R.string.ui_at_regular_intervals))[it] ?: it })
@@ -634,10 +389,13 @@ private fun ScheduleForm(panel: Panel, model: ManagerModel) {
         "calendar" -> days.isNotEmpty() && (hour.toIntOrNull() ?: -1) in 0..23 && (minute.toIntOrNull() ?: -1) in 0..59 && zone.isNotBlank()
         else -> true
     }
-    Button(enabled = enabled && !panel.busy, onClick = {
-        model.schedule(JSONObject().put("mode", mode).apply {
-            if (mode == "interval") put("hours", hours.toInt())
-            if (mode == "calendar") put("hour", hour.toInt()).put("minute", minute.toInt()).put("zone", zone).put("days", JSONArray(days.sorted()))
-        })
-    }) { Text(ui(R.string.ui_save_schedule)) }
+    Reveal(changed) {
+        Text(ui(R.string.editorial_unsaved), color = LocalHorizonPalette.current.warning)
+        Button(enabled = enabled && !panel.busy, onClick = {
+            model.schedule(JSONObject().put("mode", mode).apply {
+                if (mode == "interval") put("hours", hours.toInt())
+                if (mode == "calendar") put("hour", hour.toInt()).put("minute", minute.toInt()).put("zone", zone).put("days", JSONArray(days.sorted()))
+            })
+        }) { Text(ui(R.string.ui_save_schedule)) }
+    }
 }

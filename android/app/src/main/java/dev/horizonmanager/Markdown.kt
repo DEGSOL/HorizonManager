@@ -26,21 +26,23 @@ internal fun isWeb(url: String) = url.startsWith("https://", true) || url.starts
 
 private fun children(node: Node): Sequence<Node> = generateSequence(node.firstChild) { it.next }
 
+internal fun markdownBlocks(markdown: String): List<Node> = children(parser.parse(markdown)).toList()
+
 @Composable
 internal fun Markdown(markdown: String) {
-    val doc = remember(markdown) { parser.parse(markdown) }
+    val blocks = remember(markdown) { markdownBlocks(markdown) }
     Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-        children(doc).forEach { Block(it) }
+        blocks.forEach { MarkdownBlock(it) }
     }
 }
 
 @Composable
-private fun Block(node: Node) {
+internal fun MarkdownBlock(node: Node) {
     val linkColor = LocalHorizonPalette.current.link
     val uri = LocalUriHandler.current
     when (node) {
         is BulletList, is OrderedList, is ListItem, is BlockQuote -> {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) { children(node).forEach { Block(it) } }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) { children(node).forEach { MarkdownBlock(it) } }
         }
         is ThematicBreak -> androidx.compose.material3.HorizontalDivider()
         is HtmlBlock -> Text(node.literal)
