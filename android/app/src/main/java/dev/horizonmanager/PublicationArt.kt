@@ -135,7 +135,7 @@ private class ArtworkCache(context: Context) {
 
     private fun originals(page: String): List<String> {
         val u = page.toHttpUrlOrNull() ?: return emptyList()
-        val telegram = u.host in setOf("t.me", "telegram.me")
+        val telegram = u.host in setOf("t.me", "telegram.me", "telegram.dog")
         val html = bytes(
             if (telegram) u.newBuilder().setQueryParameter("embed", "1").fragment(null).build().toString()
             else page,
@@ -144,10 +144,17 @@ private class ArtworkCache(context: Context) {
         val doc = Jsoup.parse(html.bytes.decodeToString(), html.url)
         if (telegram) {
             val post = u.encodedPath.trim('/').removePrefix("s/")
-            val node = doc.select("[data-post]").firstOrNull { it.attr("data-post") == post }
-            val pattern = Regex("""url\(['"]?(https://[^)'"]+)""")
-            return node?.select(".tgme_widget_message_photo_wrap").orEmpty()
-                .mapNotNull { pattern.find(it.attr("style"))?.groupValues?.get(1) }
+            val node = doc.select("[data-post]").firstOrNull { it.attr("data-post").equals(post, ignoreCase = true) }
+            val pattern = Regex("""url\(\s*['"]?([^)'"]+)""")
+            return node?.select(".tgme_widget_message_photo_wrap, .tgme_widget_message_video_thumb, video[poster]").orEmpty()
+                .mapNotNull {
+                    it.absUrl("poster").ifBlank { it.absUrl("data-src") }.ifBlank { it.absUrl("src") }
+                        .ifBlank {
+                            val path = pattern.find(it.attr("style"))?.groupValues?.get(1)?.trim().orEmpty()
+                            if (path.isEmpty()) "" else html.url.toHttpUrlOrNull()?.resolve(path)?.toString().orEmpty()
+                        }
+                        .takeIf(String::isNotBlank)
+                }
         }
         return listOf("meta[property=og:image:secure_url]", "meta[property=og:image]",
             "meta[name=twitter:image]", "article img[src]").flatMap { selector ->
@@ -184,11 +191,12 @@ private class ArtworkCache(context: Context) {
         return cover
     }
 
-    suspend fun load(article: JSONObject): Cover? =
+    suspend fun load(article: JSONObject, relay: (suspend () -> ByteArray?)?): Cover? =
         withContext(Dispatchers.IO) {
             val page = articleField(article, "url")
             val media = article.optJSONObject("media")
-            val id = page + "|" + (media?.optString("url") ?: article.optString("id"))
+            val provided = media?.optString("url").orEmpty()
+            val id = page + "|" + provided.ifBlank { article.optString("id") }
             memory.get(id)?.let {
                 return@withContext it
             }
@@ -197,8 +205,11 @@ private class ArtworkCache(context: Context) {
                     return@withPermit it
                 }
                 try {
-                    val provided = media?.optString("url").orEmpty()
-                    val cover = loadCover(provided) ?: fallback(page, provided)
+                    val telegram = articleField(article, "telegram_url")
+                    val cover = relay?.invoke()?.let(::decodeCover)
+                        ?: loadCover(provided)
+                        ?: fallback(telegram, provided)
+                        ?: if (page != telegram) fallback(page, provided) else null
                     cover?.also { memory.put(id, it) }
                 } catch (_: java.io.IOException) {
                     null
@@ -268,10 +279,13 @@ internal fun decodeCover(bytes: ByteArray): Cover? {
 }
 
 @Composable
-internal fun artwork(article: JSONObject): Cover? {
+internal fun artwork(article: JSONObject, relay: (suspend () -> ByteArray?)? = null): Cover? {
     val context = LocalContext.current
-    val key = article.optString("id") + article.optString("url") + article.optString("media")
-    return produceState<Cover?>(null, key) { value = ArtworkCache.get(context).load(article) }.value
+    val key = article.optString("id") + article.optString("url") + article.optString("media") +
+        article.optString("telegram_url")
+    return produceState<Cover?>(null, key, relay != null) {
+        value = ArtworkCache.get(context).load(article, relay)
+    }.value
 }
 
 private fun DrawScope.crop(image: ImageBitmap) {

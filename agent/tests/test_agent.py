@@ -344,6 +344,45 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(set(self.client.get("/v1/digests").json()[0]["languages"]), {"en", "ru"})
         self.assertEqual(self.client.get(f"/v1/digests/{run.hex}/zh").status_code, 404)
 
+    def test_existing_digest_recovers_placeholder_and_relays_cover_without_another_ai_request(self):
+        self.client.put("/v1/digest-language", json={"language": "ru"})
+        self.assertEqual(self.client.put("/v1/config", json=self.config()).status_code, 200)
+        run = uuid4()
+        self.client.post("/v1/jobs", json={"id": str(run)})
+        self.assertEqual(self.wait(run.hex)["state"], "success")
+        directory = self.root / "runs" / run.hex
+        localized = directory / "localized_items.json"
+        raw = json.loads(localized.read_text())
+        raw[0]["title"] = "Настоящий заголовок новости"
+        raw[0]["content"] = "Сохранившийся русский текст публикации."
+        artifact = raw[0]["processing"]["artifacts"]["ru"]
+        artifact["title"] = "Перевод недоступен"
+        artifact["blocks"][0]["content"] = "Читайте эту новость в первоисточнике."
+        localized.write_text(json.dumps(raw, ensure_ascii=False))
+        (directory / "summary-ru.md").write_text("# Перевод недоступен")
+        requests_before = len(self.fixture.translation_requests)
+        result = self.client.get(f"/v1/digests/{run.hex}/ru").json()
+        self.assertEqual(result["content_version"], 2)
+        self.assertEqual(result["items"][0]["title"], raw[0]["title"])
+        self.assertEqual(result["items"][0]["body"], raw[0]["content"])
+        self.assertNotIn("Перевод недоступен", result["markdown"])
+        self.assertIn(raw[0]["title"], result["markdown"])
+        self.assertEqual(len(self.fixture.translation_requests), requests_before)
+
+        item_id = raw[0]["id"]
+        known = {"kind": "original", "url": "https://example.com/photo.jpeg"}
+        (directory / "media.json").write_text(json.dumps({item_id: known}))
+        photo = bytes.fromhex("ffd8ff") + bytes(20)
+        cover_path = f"/v1/covers/{run.hex}/{key_for(item_id)}"
+        with patch("horizon_manager.media.fetch_image", AsyncMock(return_value=photo)) as download:
+            response = self.client.get(cover_path)
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(base64.b64decode(response.json()["image"]), photo)
+            self.assertEqual(self.client.get(cover_path).json(), response.json())
+            download.assert_awaited_once()
+        self.assertEqual(self.client.get(cover_path, headers={"Authorization": "Bearer wrong"}).status_code, 401)
+        self.assertEqual(self.client.get(f"/v1/covers/{run.hex}/{key_for('not-in-this-digest')}").status_code, 404)
+
     def test_ai_preflight_and_push_registration(self):
         response = self.client.post("/v1/jobs", json={"id": str(uuid4()), "kind": "ai"})
         self.assertEqual(response.status_code, 422)

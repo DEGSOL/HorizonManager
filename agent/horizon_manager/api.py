@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import hmac
 import httpx
 import importlib.util
@@ -18,12 +19,15 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from src.mcp.horizon_adapter import dicts_to_items
 from src.models import SOURCE_REGISTRY
 from src.processing.content import split_content
 
 from . import VERSION, backup, jobs, push, router_catalog
-from .article_context import find_item, key_for, localized_context, previous_context
+from .article_context import find_item, key_for, localized_context, previous_context, read_json
 from .configuration import DIGEST_LANGUAGES, ai_missing, schema, secret_name_allowed, validate
+from .localized_digest import LocalizedSummarizer, restore_original_cards
+from .media import relay_cover
 from .scheduler import Schedule, next_run
 from .store import Store, utc
 
@@ -112,6 +116,7 @@ def create_app(root, token):
     upstream_cache = {}
     installer_lock = threading.Lock()
     installer_stamp = None
+    cover_slots = asyncio.Semaphore(4)
 
     def sync_installer_events():
         nonlocal installer_stamp
@@ -200,7 +205,7 @@ def create_app(root, token):
             next_at = db.execute("SELECT next FROM schedule WHERE id=1").fetchone()[0]
             language, chosen = store.digest_language(db)
             return {**health(), "digest_language": language, "digest_language_chosen": chosen, "disk_free": disk.free, "disk_total": disk.total,
-                    "media_search": store.media_search(db), "enrichment_mode": store.enrichment_mode(db),
+                    "media_search": store.media_search(db), "cover_relay": True, "enrichment_mode": store.enrichment_mode(db),
                     "load": os.getloadavg()[0], "cpu": os.cpu_count(), "memory": mem, "next": next_at}
 
     @app.put("/v1/media-search")
@@ -489,6 +494,25 @@ def create_app(root, token):
             fail(404, "MEDIA_UNAVAILABLE")
         return json.loads(path.read_text(encoding="utf-8"))
 
+    @app.get("/v1/covers/{run}/{key}")
+    async def cover(run: str, key: str):
+        if not re.fullmatch(r"[a-f0-9]{64}", key):
+            fail(404, "ARTICLE_UNKNOWN")
+        path = artifacts(run)
+        item = find_item(path, key, ("localized", "enriched", "filtered"))
+        if item is None:
+            fail(404, "ARTICLE_UNKNOWN")
+        known = read_json(path / "media.json", {}).get(item["id"])
+        cached = root / "cover-cache" / (key_for(f"{run}/{key}") + ".img")
+        try:
+            async with cover_slots:
+                data = await relay_cover(item, known, cached)
+        except TimeoutError:
+            data = None
+        if data is None:
+            fail(404, "MEDIA_UNAVAILABLE")
+        return {"image": base64.b64encode(data).decode("ascii")}
+
     def stored_context(db, run, key, language):
         row = db.execute("""SELECT jobs.id, state, phase, result
             FROM article_context_jobs JOIN jobs ON jobs.id=article_context_jobs.job
@@ -552,6 +576,18 @@ def create_app(root, token):
             items = json.loads(stage.read_text(encoding="utf-8"))
         except FileNotFoundError:
             fail(404, "DIGEST_UNKNOWN")
+        repaired = restore_original_cards(items, language)
+        if repaired and offset == 0:
+            meta = read_json(path / "meta.json", {})
+            profiles = read_json(path / "enrichment_profiles.json", {})
+            names = {profile_id: entry["definition"].get("display_names", {})
+                     for profile_id, entry in profiles.items()}
+            with store.db() as db:
+                order = store.settings(db)["config"].get("digest", {}).get("profile_order", [])
+            summarizer = LocalizedSummarizer(profile_names=names, profile_order=order)
+            markdown = asyncio.run(summarizer.generate_summary(
+                dicts_to_items(items), meta.get("created_at", "")[:10], meta.get("raw_count", len(items)), language,
+            ))
         media_file = path / "media.json"
         media = json.loads(media_file.read_text()) if media_file.is_file() else None
         cards = []
@@ -569,6 +605,7 @@ def create_app(root, token):
                 **({"media": media.get(item["id"], {})} if media is not None else {}),
                 "source": item["source_type"], "time": item["published_at"],
                 "category": (item.get("metadata") or {}).get("category"),
+                **({"telegram_url": item["metadata"]["msg_url"]} if (item.get("metadata") or {}).get("msg_url") else {}),
                 "profile": (process.get("classification") or {}).get("profile"),
                 "score": analysis.get("score"), "summary": body[:8000],
                 "body": body, "body_is_plain": not bool(primary) or (
@@ -577,7 +614,8 @@ def create_app(root, token):
                 "reason": (analysis.get("reason") or "")[:8000] if not has_localized_items else "",
                 "blocks": blocks[:30], "citations": artifact.get("sources", [])[:50],
             })
-        return {"id": run, "language": language, "markdown": markdown, "items": cards, "total": len(items)}
+        return {"id": run, "language": language, "markdown": markdown, "items": cards, "total": len(items),
+                "content_version": 2}
 
     @app.post("/v1/backup")
     def export(body: Password):

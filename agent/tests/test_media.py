@@ -5,7 +5,7 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from horizon_manager.media import commons_image, prepare_images, rss_images, source_cover, web_url
+from horizon_manager.media import commons_image, prepare_images, relay_cover, rss_images, source_cover, web_url
 
 
 class PublicationMediaTests(unittest.IsolatedAsyncioTestCase):
@@ -41,6 +41,35 @@ class PublicationMediaTests(unittest.IsolatedAsyncioTestCase):
             artwork = json.loads((Path(folder) / "media.json").read_bytes())
             self.assertEqual(artwork["news"]["url"], "https://example.com/landing/cover.jpg")
             self.assertEqual(probe.await_count, 2)
+
+    async def test_telegram_cover_comes_from_original_post_when_story_links_out(self):
+        item = SimpleNamespace(id="news", url="https://example.com/article",
+                               metadata={"msg_url": "https://telegram.me/NewsChannel/71"})
+        config = SimpleNamespace(sources=SimpleNamespace(rss=[]))
+        pages = [(b"<html></html>", "https://telegram.me/NewsChannel/71"),
+                 (b"""<div data-post="newschannel/70"><video poster="https://cdn.example.com/other.jpg"></video></div>
+                      <div data-post="newschannel/71"><video poster="https://cdn.example.com/post.jpg"></video></div>""",
+                  "https://telegram.me/s/NewsChannel?before=72")]
+        with TemporaryDirectory() as folder, patch("horizon_manager.media.fetch_document",
+                AsyncMock(side_effect=pages)) as fetch, patch("horizon_manager.media.usable_image",
+                AsyncMock(return_value=True)) as probe:
+            await prepare_images(Path(folder), [item], config, False)
+            artwork = json.loads((Path(folder) / "media.json").read_bytes())
+            self.assertEqual(artwork["news"]["source"], item.metadata["msg_url"])
+            self.assertEqual(artwork["news"]["url"], "https://cdn.example.com/post.jpg")
+            self.assertEqual(fetch.await_args.args[1], "https://telegram.me/s/NewsChannel?before=72")
+            self.assertEqual(probe.await_args.args[1], "https://cdn.example.com/post.jpg")
+
+    async def test_relay_caches_download_without_another_cdn_request(self):
+        image = bytes.fromhex("ffd8ff") + bytes(20)
+        item = {"url": "https://example.com/article"}
+        known = {"url": "https://cdn.example.com/old-cover.jpg"}
+        with TemporaryDirectory() as folder, patch("horizon_manager.media.fetch_image",
+                AsyncMock(return_value=image)) as fetch:
+            cached = Path(folder) / "media" / "relay.img"
+            self.assertEqual(await relay_cover(item, known, cached), image)
+            self.assertEqual(await relay_cover(item, known, cached), image)
+            fetch.assert_awaited_once()
 
     async def test_unusable_wikimedia_result_is_not_published(self):
         item = SimpleNamespace(id="news", url="https://example.com/article", metadata={})

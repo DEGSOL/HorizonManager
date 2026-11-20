@@ -340,13 +340,33 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         operation(quiet) { probe(server) }
     }
 
-    private fun <T> withAgent(server: Server, action: (AgentApi) -> T): T {
+    private fun <T> withAgent(server: Server, updateStatus: Boolean = true, action: (AgentApi) -> T): T {
         val result = if (server.https.isNotEmpty()) action(AgentApi(server))
             else Ssh.withSession(server) { action(AgentApi(server, it)) }
-        mutable.update {
+        if (updateStatus) mutable.update {
             if (it.server?.id == server.id) it.copy(lastContact = Instant.now().toString(), connectionProblem = "") else it
         }
         return result
+    }
+
+    fun coverRelay(panel: Panel, articleId: String): (suspend () -> ByteArray?)? {
+        val server = panel.server ?: return null
+        val run = panel.selectedRun
+        if (!panel.status.optBoolean("cover_relay") || run.isBlank()) return null
+        return {
+            try {
+                val result = withAgent(server, updateStatus = false) {
+                    it.get("covers/$run/${contextHash(articleId)}") as JSONObject
+                }
+                val encoded = result.optString("image")
+                if (encoded.length in 1..6_666_668) android.util.Base64.decode(encoded, android.util.Base64.DEFAULT)
+                else null
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                null
+            }
+        }
     }
 
     private suspend fun loadArchive(server: Server) {
@@ -382,8 +402,20 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         }
     }
 
+    private suspend fun staleDigestOffsets(server: String, run: String, language: String): Set<Int> =
+        cache.digest(server, run, language).mapNotNull { page ->
+            val value = JSONObject(page.data)
+            val stale = value.optInt("content_version") < 2 && value.optJSONArray("items")?.objects()?.any {
+                it.optString("title") in setOf("Translation unavailable", "暂时无法翻译", "Перевод недоступен")
+            } == true
+            page.offset.takeIf { stale }
+        }.toSet()
+
     private suspend fun fetchPanel(server: Server, everything: Boolean) {
         val cursor = cache.eventCursor(server.id)
+        val current = state.value
+        val stale = if (current.selectedRun.isNotEmpty())
+            staleDigestOffsets(server.id, current.selectedRun, current.language) else emptySet()
         val remote = withAgent(server) { api ->
             val status = api.get("status") as JSONObject
             if (status.has("digest_language") && !status.optBoolean("digest_language_chosen")) {
@@ -408,9 +440,16 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                 digestLanguage(it, status.optString("digest_language", digestLocale()))
             }
             val changed = selected?.getString("id") != panel.selectedRun || lang != panel.language
-            val digest = if ((everything || changed) && selected != null && lang != null) {
+            val needsRepair = !changed && status.optBoolean("cover_relay") && stale.isNotEmpty()
+            val digest = if ((everything || changed || needsRepair) && selected != null && lang != null) {
                 api.get("digests/${selected.getString("id")}/$lang") as JSONObject
             } else null
+            val repairs = if (needsRepair && digest?.optInt("content_version") == 2) {
+                val id = digest.getString("id")
+                stale.filter { it != 0 }.map { offset ->
+                    offset to (api.get("digests/$id/$lang?offset=$offset") as JSONObject)
+                }
+            } else emptyList()
             val schema = if (panel.schema.length() == 0) api.get("schema") as JSONObject else panel.schema
             val schedule = if (everything || panel.schedule.length() == 0) api.get("schedule") as JSONObject else panel.schedule
             val sources = (api.get("sources") as JSONArray).objects()
@@ -421,13 +460,14 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                 val id = selected.getString("id")
                 runCatching { Triple(id, requireNotNull(lang), api.get("media/$id") as JSONObject) }.getOrNull()
             } else null
-            Refresh(archive, hasMore, digest, config, schema, schedule, sources, status, jobs, events, media)
+            Refresh(archive, hasMore, digest, config, schema, schedule, sources, status, jobs, events, media, repairs)
         }
         cache.saveArchive(CachedArchive(server.id, JSONArray(remote.archive).toString()))
         val hours = collectionHours(remote.config, state.value.collectionHours)
         if (hours != state.value.collectionHours) archiveSettings.edit().putInt(server.id, hours).apply()
         if (remote.digest != null) {
             val (run, lang) = saveDigest(server.id, remote.digest, 0)
+            remote.repairs.forEach { (offset, page) -> saveDigest(server.id, page, offset) }
             showCached(server.id, run, lang)
         }
         remote.media?.let { (id, language, media) ->
@@ -458,7 +498,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     private data class Refresh(
         val archive: List<JSONObject>, val hasMore: Boolean, val digest: JSONObject?, val config: JSONObject, val schema: JSONObject,
         val schedule: JSONObject, val sources: List<JSONObject>, val status: JSONObject, val jobs: List<JSONObject>,
-        val events: List<JSONObject>, val media: Triple<String,String,JSONObject>?,
+        val events: List<JSONObject>, val media: Triple<String,String,JSONObject>?, val repairs: List<Pair<Int, JSONObject>>,
     )
 
     private suspend fun saveDigest(server: String, page: JSONObject, offset: Int): Pair<String, String> {
@@ -533,8 +573,15 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             val cached = offset == 0 && showCached(server.id, run, language)
             if (offset == 0 && !cached)
                 mutable.update { it.copy(selectedRun = run, language = language, articles = emptyList(), markdown = "", total = 0) }
-            val page = withAgent(server) { it.get("digests/$run/$language?offset=$offset") as JSONObject }
-            saveDigest(server.id, page, offset)
+            val stale = if (offset == 0) staleDigestOffsets(server.id, run, language) else emptySet()
+            val pages = withAgent(server) { api ->
+                val page = api.get("digests/$run/$language?offset=$offset") as JSONObject
+                val repairs = if (page.optInt("content_version") == 2) stale.filter { it != offset }.map { cursor ->
+                    cursor to (api.get("digests/$run/$language?offset=$cursor") as JSONObject)
+                } else emptyList()
+                listOf(offset to page) + repairs
+            }
+            pages.forEach { (cursor, page) -> saveDigest(server.id, page, cursor) }
             if (offset == 0) mutable.update { it.copy(syncedDigest = run) }
             showCached(server.id, run, language)
         }
@@ -812,7 +859,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     private fun mutate(full: Boolean = false, action: (AgentApi) -> Unit) {
         val server = state.value.server ?: return
         operation {
-            withAgent(server, action)
+            withAgent(server, action = action)
             synchronize(server, everything = full)
         }
     }

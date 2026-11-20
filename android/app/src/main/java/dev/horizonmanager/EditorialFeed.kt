@@ -292,7 +292,8 @@ internal fun NewsScreen(
                                         item,
                                         flag,
                                         Modifier.semantics { traversalIndex = index.toFloat() },
-                                        {
+                                        relay = model.coverRelay(panel, id),
+                                        open = {
                                             openId = id
                                             if (flag?.read != true) model.flag(id, read = true)
                                         },
@@ -380,6 +381,7 @@ internal fun NewsScreen(
                 ArticleDialog(
                     selected, flag, { model.flag(id, save = flag?.saved != true) },
                     { model.flag(id, read = flag?.read != true) },
+                    relay = model.coverRelay(panel, id),
                     contextContent = {
                         key(serverId, run, language, id) {
                             ArticleContext(selected) { submit ->
@@ -531,12 +533,13 @@ internal fun PublicationTile(
     article: JSONObject,
     flag: ArticleFlag?,
     modifier: Modifier,
+    relay: (suspend () -> ByteArray?)? = null,
     open: () -> Unit,
     save: () -> Unit,
 ) {
     val p = LocalHorizonPalette.current
     val key = article.optString("id")
-    val cover = artwork(article)
+    val cover = artwork(article, relay)
     var height by remember { mutableFloatStateOf(0f) }
     val shape = androidx.compose.foundation.shape.RoundedCornerShape(19.dp)
     Box(modifier.fillMaxWidth().clip(shape).clickable(role = Role.Button, onClick = open)) {

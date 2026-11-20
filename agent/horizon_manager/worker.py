@@ -235,7 +235,10 @@ async def main(payload, job):
             orchestrator = service._orchestrator(context)
             today = datetime.now(timezone.utc).date().isoformat()
             items = dicts_to_items(service.run_store.load_items(job, stage))
-            unavailable = await complete_artifacts(items, language, context.config.ai)
+            unavailable = await complete_artifacts(
+                items, language, context.config.ai,
+                report=lambda code, count: send("log", level="WARNING", code=code, detail=str(count)),
+            )
             for item in items:
                 item.processing.artifacts = {language: item.processing.artifacts[language]}
             if unavailable:
