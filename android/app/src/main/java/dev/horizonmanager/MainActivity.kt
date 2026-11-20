@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -395,12 +396,20 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                                 panel.servers.forEach { server -> key(server.id) {
                                     val endpoint = "${server.user} @ ${server.host} · ${server.port}"
                                     val detail = if (server.id == currentServer?.id) "${ui(R.string.ui_selected)} · $endpoint" else endpoint
-                                    GlassSettingRow(server.name, detail, enabled = !panel.busy) {
-                                        model.select(server)
-                                        route = ""
-                                        archiveIssue = ""
-                                        tab = FEED
-                                        manageServers = false
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(Modifier.weight(1f)) {
+                                            GlassSettingRow(server.name, detail, enabled = !panel.busy) {
+                                                model.select(server)
+                                                route = ""
+                                                archiveIssue = ""
+                                                tab = FEED
+                                                manageServers = false
+                                            }
+                                        }
+                                        GlassIconAction(Icons.Default.Delete, ui(R.string.server_remove_named, server.name),
+                                            enabled = !panel.busy) {
+                                            confirm = ui(R.string.server_remove_message, server.name) to { model.removeServer(server.id) }
+                                        }
                                     }
                                 } }
                                 Button(onClick = { model.add(); manageServers = false; tab = FEED }, enabled = !panel.busy) {

@@ -169,6 +169,12 @@ class FluidScreensTest {
                         .put("next", now.plusSeconds(3600).epochSecond),
                     archive = listOf(issue) + archive,
                     status = JSONObject().put("agent", "0.1.4").put("media_search", false),
+                    events = listOf(
+                        JSONObject().put("time", now.toString()).put("code", "SCHEDULE_SKIPPED_ACTIVE")
+                            .put("component", "scheduler").put("level", "WARNING"),
+                        JSONObject().put("time", now.toString()).put("code", "filter")
+                            .put("component", "horizon").put("level", "INFO"),
+                    ),
                 )
         }
         compose.waitForIdle()
@@ -243,6 +249,43 @@ class FluidScreensTest {
     }
 
     @Test
+    fun settingsExplainDigestSelectionSecretsAndJournal() {
+        loadIssue()
+        tab(R.string.settings)
+        text(R.string.mr_news).performClick()
+        text(R.string.settings_digest_rules).performClick()
+        text(R.string.digest_basic_title).assertIsDisplayed()
+        text(R.string.digest_groups_title).performClick()
+        text(R.string.digest_group_add).performScrollTo().performClick()
+        text(R.string.digest_categories_detail).performScrollTo().assertIsDisplayed()
+        text(R.string.ui_cancel).performScrollTo().performClick()
+        text(R.string.digest_basic_title).performScrollTo()
+        snapshot("10-digest-rules")
+        back()
+        back()
+        text(R.string.editorial_ai_processing).performClick()
+        text(R.string.ui_secrets).performClick()
+        text(R.string.secrets_intro).assertIsDisplayed()
+        text(R.string.secrets_add).performClick()
+        text(R.string.ui_new_value).performScrollTo().assertIsDisplayed()
+        text(R.string.ui_cancel).performScrollTo().performClick()
+        back()
+        text(R.string.ui_processing_profiles).performClick()
+        text(R.string.profile_guide_title).performClick()
+        text(R.string.profile_guide_score_body).performScrollTo().assertIsDisplayed()
+        back()
+        back()
+        text(R.string.ui_maintenance).performClick()
+        text(R.string.journal).performClick()
+        val journalList = compose.onNode(hasScrollToIndexAction())
+        journalList.performScrollToIndex(2)
+        text(R.string.journal_schedule_skipped).performClick()
+        text(R.string.journal_technical).assertIsDisplayed()
+        compose.onNodeWithText("SCHEDULE_SKIPPED_ACTIVE").assertIsDisplayed()
+        snapshot("11-journal-explanation")
+    }
+
+    @Test
     fun realScreensAndBackStack() {
         val heading = loadIssue()
         compose.onNodeWithText(heading).assertExists()
@@ -285,6 +328,13 @@ class FluidScreensTest {
         text(R.string.journal).assertExists()
         back()
         text(R.string.mr_server).performClick()
+        text(R.string.ui_servers).performClick()
+        val serverName = "VPS · тестовый стенд"
+        compose.onNodeWithContentDescription(ui(R.string.server_remove_named, serverName)).performClick()
+        compose.onNodeWithText(ui(R.string.server_remove_message, serverName)).assertIsDisplayed()
+        text(R.string.ui_cancel).performClick()
+        compose.onNodeWithText(serverName).assertIsDisplayed()
+        back()
         text(R.string.control).performClick()
         text(R.string.ui_check_status).assertExists()
         snapshot("07-server")

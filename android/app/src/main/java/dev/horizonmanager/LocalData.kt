@@ -77,6 +77,8 @@ internal class Vault(context: Context) {
         write("push:$server", value, bound = true)
     }
 
+    fun removePushSecret(server: String) = synchronized(LOCK) { write("push:$server", null) }
+
     fun removeLegacyRouterKeys(profiles: List<Server>) = synchronized(LOCK) {
         storage.edit().apply {
             for (server in profiles) for (router in AiRouter.entries) remove("router:${server.id}:${router.id}")

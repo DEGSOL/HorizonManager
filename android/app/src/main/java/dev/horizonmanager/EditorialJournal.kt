@@ -90,14 +90,17 @@ internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model:
                 (job.isBlank() || row.optString("job") == job) &&
                 (period == "all" || runCatching { Instant.parse(row.optString("time")) >= cutoff }.getOrDefault(false)) &&
                 (query.isBlank() || listOf("job", "code", "component", "detail").any { row.optString(it).contains(query.trim(), true) }
-                    || errorText(row.optString("code")).contains(query.trim(), true))
+                    || journalMessage(row).let { (title, body) ->
+                        title.contains(query.trim(), true) || body.contains(query.trim(), true)
+                    })
         }
     }
     LazyColumn(Modifier.fillMaxSize().editorialInsets(), state = rememberLazyListState(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item("heading") { header() }
         item("filters") {
-            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Tile {
+                SettingHeading(ui(R.string.journal_activity_title), R.string.journal_activity_help)
                 ValueField(ui(R.string.ui_search_events_or_ids), query, { query = it })
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                     levels.forEach { (key, title) ->
@@ -108,7 +111,7 @@ internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model:
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Choice(ui(R.string.ui_component), (listOf("") + components + component).distinct(),
-                        component, { component = it }, { it.ifBlank { ui(R.string.ui_all) } })
+                        component, { component = it }, ::journalComponent)
                     Choice(ui(R.string.ui_time_range), listOf("all", "day", "week"), period, { period = it }, {
                         ui(when (it) { "day" -> R.string.ui_last_24_hours; "week" -> R.string.ui_last_7_days; else -> R.string.ui_all_dates })
                     })
@@ -118,8 +121,7 @@ internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model:
                     TextButton(onClick = { model.refresh() }, enabled = !panel.busy) { Text(ui(R.string.ui_sync)) }
                     TextButton(enabled = events.isNotEmpty(), onClick = { export(JSONArray(events).toString(2)) }) { Text(ui(R.string.ui_export)) }
                     TextButton(enabled = panel.events.isNotEmpty() && !panel.busy, onClick = {
-                        val lastRemote = panel.events.maxOfOrNull { it.optLong("id") } ?: 0
-                        confirm(ui(R.string.ui_delete_downloaded_journal_entries_and_vps)) { model.clearEvents(lastRemote) }
+                        confirm(ui(R.string.ui_delete_downloaded_journal_entries_and_vps), model::clearEvents)
                     }) { Text(ui(R.string.ui_clear)) }
                 }
                 if (panel.syncing) LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -129,26 +131,32 @@ internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model:
         items(events) { row ->
             val importance = row.optString("level")
             val color = when (importance) { "ERROR", "CRITICAL" -> theme.danger; "WARNING" -> theme.warning; else -> theme.muted }
-            val code = row.optString("code")
+            val (title, explanation) = journalMessage(row)
             Tile(Modifier.clickable(role = Role.Button) { detail = row }) {
-                Text(listOf(importance, row.optString("component"), localTime(row.optString("time")))
+                Text(listOf(journalLevel(importance), journalComponent(row.optString("component")), localTime(row.optString("time")))
                     .filter(String::isNotBlank).joinToString(" · "), style = MaterialTheme.typography.labelMedium, color = color)
-                Text(if (code in phases) phaseName(code) else errorText(code), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                if (code.isNotBlank()) Text(code, color = theme.tertiaryText, style = MaterialTheme.typography.bodySmall)
+                Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                Text(explanation, color = theme.muted, style = MaterialTheme.typography.bodySmall,
+                    maxLines = 3, overflow = TextOverflow.Ellipsis)
             }
         }
     }
     detail?.let { row ->
         val code = row.optString("code")
-        HorizonAlertDialog(onDismissRequest = { detail = null }, title = { Text(code.ifBlank { ui(R.string.journal) }) },
+        val (title, explanation) = journalMessage(row)
+        HorizonAlertDialog(onDismissRequest = { detail = null }, title = { Text(title) },
             text = {
                 Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                    Text(localTime(row.optString("time")) + " · " + row.optString("component"))
-                    Text(if (code in phases) phaseName(code) else errorText(code))
-                    row.optString("detail").takeIf(String::isNotBlank)?.let { Text(it) }
+                    Text(listOf(journalComponent(row.optString("component")), localTime(row.optString("time"))).joinToString(" · "),
+                        color = theme.muted, style = MaterialTheme.typography.labelMedium)
+                    Text(explanation)
                     val id = row.optString("job")
                     if (id.isNotBlank()) TextButton(onClick = { job = id; detail = null }) { Text(ui(R.string.ui_events_for_this_operation)) }
+                    HorizontalDivider()
+                    Text(ui(R.string.journal_technical), style = MaterialTheme.typography.labelLarge)
+                    val technical = listOf(code, row.optString("detail"), id).filter(String::isNotBlank).joinToString("\n")
+                    if (technical.isNotBlank()) Text(technical, style = MaterialTheme.typography.bodySmall, color = theme.muted)
                 }
             }, confirmButton = {
                 Button(onClick = {

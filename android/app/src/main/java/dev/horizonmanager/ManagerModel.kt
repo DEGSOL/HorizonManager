@@ -201,22 +201,41 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             if (activeIsQuiet) viewModelScope.launch { active?.join(); select(server) }
             return
         }
+        selectLocally(server, state.value.servers)
+        operation { loadSelected(server) }
+    }
+
+    private fun selectLocally(server: Server?, servers: List<Server>) {
         candidate = null
-        selection.edit().putString("id", server.id).apply()
         archiveRun = null
-        mutable.update { Panel(servers = it.servers, server = server, ready = server.installed,
-            collectionHours = archiveSettings.getInt(server.id, DEFAULT_COLLECTION_HOURS),
-            manuallyArchived = archiveOverrides.getStringSet(server.id, emptySet()).orEmpty().toSet()) }
-        observe(server.id)
-        operation {
-            loadArchive(server)
-            val fresh = state.value.server ?: return@operation
-            if (fresh.installed) {
-                synchronize(fresh, everything = true)
-            } else {
-                probe(fresh)
-            }
+        pageRequest = null
+        selection.edit().putString("id", server?.id).apply()
+        mutable.update { previous ->
+            Panel(servers = servers, server = server, ready = server?.installed == true, busy = previous.busy,
+                collectionHours = server?.let { archiveSettings.getInt(it.id, DEFAULT_COLLECTION_HOURS) } ?: DEFAULT_COLLECTION_HOURS,
+                manuallyArchived = server?.let { archiveOverrides.getStringSet(it.id, emptySet()).orEmpty().toSet() }.orEmpty())
         }
+        observe(server?.id ?: "setup")
+    }
+
+    private suspend fun loadSelected(server: Server) {
+        loadArchive(server)
+        if (server.installed) synchronize(server, everything = true) else probe(server)
+    }
+
+    fun removeServer(id: String) = operation {
+        val panel = state.value
+        if (panel.servers.none { it.id == id }) return@operation
+        val remaining = panel.servers.filterNot { it.id == id }
+        vault.save(remaining)
+        // The connection is removed locally. The remote service and its data are untouched.
+        runCatching { DigestNotifications.forget(app, id) }
+        runCatching { DigestWorker.remove(app, id, remaining) }
+        if (panel.server?.id == id) {
+            val next = remaining.firstOrNull()
+            withContext(Dispatchers.Main.immediate) { selectLocally(next, remaining) }
+            if (next != null) loadSelected(next)
+        } else mutable.update { it.copy(servers = remaining) }
     }
 
     fun openNotification(server: String) {
@@ -849,9 +868,10 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             .put("revision", state.value.config.getInt("revision")))
     }
 
-    fun clearEvents(before: Long) {
+    fun clearEvents() {
         val server = state.value.server ?: return
         operation {
+            val before = cache.eventCursor(server.id)
             if (before > 0) withAgent(server) { it.delete("events?before=$before") }
             cache.clearEvents(server.id, before)
             synchronize(server, everything = false)

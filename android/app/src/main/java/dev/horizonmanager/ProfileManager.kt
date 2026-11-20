@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -55,6 +57,7 @@ internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boo
         editing = id
     }
     if (index < 0) {
+        ProfileGuide()
         val sorted =
             profiles.sortedByDescending { it.getJSONObject("definition").optString("id") == active }
         for (doc in sorted) {
@@ -123,6 +126,29 @@ internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boo
                 Text(ui(R.string.mr_set_default))
             }
         else Text(ui(R.string.mr_default_profile), color = LocalHorizonPalette.current.link)
+        val allRules = settings.optJSONObject("profile_settings") ?: JSONObject()
+        val rules = allRules.optJSONObject(editing) ?: JSONObject()
+        fun rule(name: String, value: Any) {
+            processing = settings.copyObject().put("profile_settings",
+                allRules.copyObject().put(editing, rules.copyObject().put(name, value))).toString()
+        }
+        Tile {
+            SettingHeading(ui(R.string.profile_rules_title), R.string.profile_guide_score_body)
+            val threshold = rules.optDouble("threshold").takeIf(Double::isFinite)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(ui(R.string.ui_importance_threshold), Modifier.weight(1f))
+                Switch(threshold != null, onCheckedChange = { rule("threshold", if (it) 6.0 else JSONObject.NULL) })
+            }
+            if (threshold != null) {
+                Text(ui(R.string.profile_score_min_value, threshold))
+                Slider(threshold.toFloat(), { rule("threshold", it.toDouble()) }, valueRange = 0f..10f, steps = 19)
+            } else Text(ui(R.string.profile_score_off), color = LocalHorizonPalette.current.muted)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(ui(R.string.ui_topic_deduplication), Modifier.weight(1f))
+                SettingHelp(ui(R.string.ui_topic_deduplication), R.string.profile_guide_duplicates_body)
+                Switch(rules.optBoolean("topic_dedup", true), onCheckedChange = { rule("topic_dedup", it) })
+            }
+        }
         var section by rememberSaveable(editing) { mutableStateOf("") }
         val docProps = root.getJSONObject("properties")
         val defProps =
@@ -240,6 +266,23 @@ internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boo
                 Text(ui(R.string.ui_cancel))
             }
         }
+}
+
+@Composable
+private fun ProfileGuide() {
+    SettingsExpandable(R.string.profile_guide_title, R.string.profile_guide_summary) {
+        for ((title, description) in listOf(
+            R.string.profile_guide_sources to R.string.profile_guide_sources_body,
+            R.string.profile_guide_route to R.string.profile_guide_route_body,
+            R.string.profile_guide_score to R.string.profile_guide_score_body,
+            R.string.profile_guide_duplicates to R.string.profile_guide_duplicates_body,
+            R.string.profile_guide_limits to R.string.profile_guide_limits_body,
+            R.string.profile_guide_verify to R.string.profile_guide_verify_body,
+        )) {
+            Text(ui(title), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 4.dp))
+            Text(ui(description), style = MaterialTheme.typography.bodyMedium, color = LocalHorizonPalette.current.muted)
+        }
+    }
 }
 
 internal val LocalEditorBack = compositionLocalOf<MutableState<(() -> Unit)?>?> { null }

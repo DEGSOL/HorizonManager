@@ -122,6 +122,18 @@ internal object DigestNotifications {
         setEndpoint(app, server, "")
     }
 
+    fun forget(app: Context, server: String) {
+        try {
+            unregister(app, server)
+        } finally {
+            val store = prefs(app)
+            val edit = store.edit()
+            store.all.keys.filter { it.startsWith("$server:") }.forEach(edit::remove)
+            edit.apply()
+            Vault(app).removePushSecret(server)
+        }
+    }
+
     @Synchronized
     fun marker(app: Context, server: Server, id: String) {
         if (!server.background) return

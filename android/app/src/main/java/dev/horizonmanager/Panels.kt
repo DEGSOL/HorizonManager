@@ -178,6 +178,20 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, dirty
     val serverId = panel.server?.id ?: return
     val schema = panel.schema.optJSONObject("config") ?: return
     val storedProfiles = panel.config.getJSONArray("profiles")
+    when (page) {
+        "digest" -> {
+            DigestRulesForm(panel, model, stored, storedProfiles, dirtyChange)
+            return
+        }
+        "secrets" -> {
+            SecretsSettings(panel, model, stored, storedProfiles, dirtyChange)
+            return
+        }
+        "profiles" -> {
+            ProfileManager(panel, model, dirtyChange)
+            return
+        }
+    }
     var working by remember(page, panel.config.optInt("revision")) { mutableStateOf(stored.copyObject()) }
     var profiles by remember(page, panel.config.optInt("revision")) { mutableStateOf(JSONArray(storedProfiles.toString())) }
     val ids = profileIds(profiles)
@@ -189,35 +203,19 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, dirty
     var genericKey by remember(secretAlias, aiDraft?.optString("provider"), panel.config.optInt("revision")) { mutableStateOf("") }
     var showGenericKey by remember(secretAlias, panel.config.optInt("revision")) { mutableStateOf(!configuredSecret) }
     val dirty = working.toString() != stored.toString() || profiles.toString() != storedProfiles.toString() || genericKey.isNotBlank()
-    if (page != "profiles") SideEffect { dirtyChange(dirty) }
-    if (page == "profiles") {
-        ProfileManager(panel, model, dirtyChange)
+    SideEffect { dirtyChange(dirty) }
+    if (page == "advanced") {
+        AdvancedSettings(working, schema, ids) { name, value -> working = working.copyObject().put(name, value) }
+        if (dirty) Tile {
+            Text(ui(R.string.editorial_unsaved), color = LocalHorizonPalette.current.warning)
+            Button(onClick = { model.saveConfig(working, profiles) }, enabled = !panel.busy) {
+                Text(ui(R.string.ui_save_settings))
+            }
+        }
         return
     }
     Tile {
         when (page) {
-            "secrets" -> {
-                val secretNames = panel.schema.optJSONArray("secrets")?.strings().orEmpty()
-                val configured = panel.config.optJSONArray("secrets")?.strings().orEmpty()
-                val providerName = stored.getJSONObject("ai").optString("api_key_env")
-                var name by remember { mutableStateOf(providerName.ifBlank { "OPENAI_API_KEY" }) }
-                var value by remember { mutableStateOf("") }
-                var remove by remember { mutableStateOf(false) }
-                SettingHeading(ui(R.string.ui_secrets_on_the_vps), R.string.setting_help_secrets)
-                Choice(ui(R.string.ui_known_variables), (secretNames + configured).distinct(), name, { name = it }, { it }, row = true)
-                ValueField(ui(R.string.ui_variable_name), name, { name = it })
-                if (name in configured) Text(ui(R.string.ui_value_saved))
-                PasswordField(ui(R.string.ui_new_value), value) { value = it }
-                Button(enabled = value.isNotBlank() && name.isNotBlank() && !panel.busy, onClick = {
-                    model.saveConfig(stored, storedProfiles, JSONObject().put(name, value))
-                    value = ""
-                }) { Text(ui(R.string.ui_save_secret)) }
-                if (name in configured) TextButton(onClick = { remove = true }) { Text(ui(R.string.ui_delete_secret)) }
-                if (remove) HorizonAlertDialog(onDismissRequest = { remove = false }, title = { Text(ui(R.string.ui_delete, name)) },
-                    text = { Text(ui(R.string.ui_sources_apis_or_delivery_that_rely)) },
-                    confirmButton = { Button(onClick = { remove = false; model.saveConfig(stored, storedProfiles, JSONObject().put(name, JSONObject.NULL)) }) { Text(ui(R.string.ui_delete_86ea33)) } },
-                    dismissButton = { TextButton(onClick = { remove = false }) { Text(ui(R.string.ui_cancel)) } })
-            }
             "ai" -> {
                 val ai = working.getJSONObject("ai")
                 val router = AiRouter.configured(ai)
@@ -296,8 +294,6 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, dirty
             else -> {
                 val names = when (page) {
                     "delivery" -> listOf("email", "webhook")
-                    "advanced" -> listOf("extractors", "display")
-                    "digest" -> listOf("collection", "digest")
                     else -> listOf(page)
                 }
                 for (name in names) {
@@ -309,7 +305,7 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, dirty
                 }
             }
         }
-        Reveal(dirty && page != "secrets" &&
+        Reveal(dirty &&
             (page != "ai" || AiRouter.configured(working.getJSONObject("ai")) == null)) {
             Text(ui(R.string.editorial_unsaved), color = LocalHorizonPalette.current.warning)
             Button(onClick = {

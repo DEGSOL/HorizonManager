@@ -100,5 +100,10 @@ internal class DigestWorker(context: Context, params: WorkerParameters) : Corout
                 .setInputData(workDataOf("server" to server)).setConstraints(network).build()
             WorkManager.getInstance(app).enqueueUniqueWork("horizon-push-$server", ExistingWorkPolicy.REPLACE, work)
         }
+
+        fun remove(app: Context, server: String, profiles: List<Server>) {
+            WorkManager.getInstance(app).cancelUniqueWork("horizon-push-$server")
+            schedule(app, profiles)
+        }
     }
 }

@@ -52,6 +52,9 @@ private val labels = mapOf(
     "fetch_top_stories" to R.string.ui_number_of_top_stories, "max_records" to R.string.ui_maximum_records,
     "max_items" to R.string.ui_maximum_items, "time_window_hours" to R.string.ui_collection_window_hours,
     "group_by" to R.string.ui_grouping, "profile_order" to R.string.ui_profile_order, "category_groups" to R.string.ui_group_quotas,
+    "favor_precision" to R.string.advanced_precision, "favor_recall" to R.string.advanced_recall,
+    "only_main_content" to R.string.advanced_only_content, "trafilatura" to "Trafilatura",
+    "firecrawl" to "Firecrawl", "outcrawl" to "Outcrawl", "specstream" to "SpecStream",
     "default_group" to R.string.ui_default_group_name, "default_group_limit" to R.string.ui_default_group_limit,
     "categories" to R.string.ui_categories_or_profiles, "limit" to R.string.ui_limit,
     "threshold" to R.string.ui_importance_threshold, "topic_dedup" to R.string.ui_topic_deduplication,
@@ -94,8 +97,12 @@ private fun inferred(value: Any?): JSONObject = JSONObject().put("type", when (v
 })
 
 private fun alternatives(root: JSONObject, schema: JSONObject): List<JSONObject> =
-    schema.optJSONArray("anyOf")?.objects()?.map { definition(root, it) }
+    (schema.optJSONArray("anyOf") ?: schema.optJSONArray("oneOf"))?.objects()?.map { definition(root, it) }
         ?.filterNot { it.optString("type") == "null" }.orEmpty()
+
+private fun variantId(schema: JSONObject): String =
+    schema.optJSONObject("properties")?.optJSONObject("type")?.optString("const")
+        ?.takeIf(String::isNotBlank) ?: schema.optString("type")
 
 internal fun sample(root: JSONObject, raw: JSONObject, required: Boolean = false): Any {
     val schema = definition(root, raw)
@@ -103,6 +110,7 @@ internal fun sample(root: JSONObject, raw: JSONObject, required: Boolean = false
     schema.optJSONArray("enum")?.let { if (it.length() > 0) return it.get(0) }
     if (schema.has("const")) return schema.get("const")
     val variants = alternatives(root, schema)
+    if (schema.has("oneOf") && variants.isNotEmpty()) return sample(root, variants.first(), required = true)
     if (variants.isNotEmpty()) return if (required) sample(root, variants.first(), true) else JSONObject.NULL
     return when (schema.optString("type")) {
         "boolean" -> false
@@ -113,7 +121,8 @@ internal fun sample(root: JSONObject, raw: JSONObject, required: Boolean = false
             val necessary = schema.optJSONArray("required")?.strings().orEmpty()
             for (field in properties.keys()) {
                 val child = properties.getJSONObject(field)
-                if (field in necessary || child.has("default")) put(field, sample(root, child, field in necessary))
+                if (field in necessary || child.has("default") || child.has("const"))
+                    put(field, sample(root, child, field in necessary))
             }
         }
         else -> ""
@@ -170,8 +179,8 @@ internal fun EditValue(
     val schema = definition(root, raw)
     val variants = alternatives(root, schema)
     val typed = if (variants.isNotEmpty()) {
-        val kind = inferred(value).optString("type")
-        variants.firstOrNull { it.optString("type") == kind } ?: variants.first()
+        val kind = if (schema.has("oneOf")) (value as? JSONObject)?.optString("type") else inferred(value).optString("type")
+        variants.firstOrNull { variantId(it) == kind } ?: variants.first()
     } else if (!schema.has("type") && !schema.has("enum")) inferred(value) else schema
     val type = typed.optString("type")
     val current = validValue(value)
@@ -193,16 +202,19 @@ internal fun EditValue(
             }
         } else {
             if (variants.size > 1) {
-                Choice(ui(R.string.ui_format, title), variants.map { it.optString("type") }, type,
+                val extractor = schema.has("oneOf") && schema.has("discriminator")
+                Choice(if (extractor) ui(R.string.advanced_extractor_provider) else ui(R.string.ui_format, title),
+                    variants.map(::variantId), variantId(typed),
                     { desired ->
-                        val selected = variants.first { it.optString("type") == desired }
+                        val selected = variants.first { variantId(it) == desired }
                         onChange(when {
                             field == "profile" && desired == "string" -> "auto"
                             field == "profile" && desired == "array" && profileIds.isNotEmpty() -> JSONArray(listOf(profileIds.first()))
                             else -> sample(root, selected, true)
                         })
                     },
-                    { mapOf("string" to ui(R.string.ui_text), "array" to ui(R.string.ui_list), "object" to ui(R.string.ui_fields))[it] ?: it })
+                    { mapOf("string" to ui(R.string.ui_text), "array" to ui(R.string.ui_list), "object" to ui(R.string.ui_fields))[it] ?: label(it) },
+                    row = extractor)
             }
             val direct = when (field) {
                 "profile", "default_profile" -> if (type == "string") (if (field == "profile") listOf("auto") else emptyList()) + profileIds else emptyList()
@@ -241,12 +253,13 @@ internal fun EditValue(
                                 }
                                 var keyText by remember { mutableStateOf("") }
                                 var valueType by remember { mutableStateOf("string") }
-                                ValueField(ui(R.string.ui_field_name), keyText, { keyText = it })
+                                ValueField(ui(if (field == "extractors") R.string.advanced_extractor_name else R.string.ui_field_name),
+                                    keyText, { keyText = it })
                                 if (extra == null) Choice(ui(R.string.ui_value_type), listOf("string", "boolean", "number", "object", "array"), valueType, { valueType = it })
                                 TextButton(enabled = keyText.isNotBlank() && !obj.has(keyText), onClick = {
                                     onChange(obj.copyObject().put(keyText, sample(root, extra ?: JSONObject().put("type", valueType), true)))
                                     keyText = ""
-                                }) { Text(ui(R.string.ui_add_field)) }
+                                }) { Text(ui(if (field == "extractors") R.string.advanced_extractor_add else R.string.ui_add_field)) }
                             }
                         }
                     }

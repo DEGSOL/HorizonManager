@@ -272,25 +272,38 @@ internal fun TransferSettings(panel: Panel, model: ManagerModel, backup: () -> U
     val config = panel.config.optJSONObject("config") ?: return
     Tile {
         SettingHeading(ui(R.string.ui_backup), R.string.setting_help_backup)
-        FlowRow {
-            TextButton(onClick = backup, enabled = !panel.busy) { Text(ui(R.string.ui_export_backup)) }
-            TextButton(onClick = restore, enabled = !panel.busy) { Text(ui(R.string.ui_restore_backup_4afed2)) }
+        GlassSettingRow(ui(R.string.ui_export_backup), ui(R.string.transfer_backup_export_detail),
+            enabled = !panel.busy, open = backup)
+        GlassSettingRow(ui(R.string.ui_restore_backup_4afed2), ui(R.string.transfer_backup_restore_detail),
+            enabled = !panel.busy, open = restore)
+    }
+    Tile {
+        Text(ui(R.string.transfer_json_title), style = MaterialTheme.typography.titleMedium)
+        GlassSettingRow(ui(R.string.ui_import_horizon_config), ui(R.string.transfer_config_import_detail), enabled = !panel.busy) {
+            importFile("config")
+        }
+        GlassSettingRow(ui(R.string.ui_export_settings), ui(R.string.transfer_config_export_detail), enabled = !panel.busy) {
+            export("horizon-settings.json", config.toString(2))
+        }
+        GlassSettingRow(ui(R.string.ui_import_manager_profiles), ui(R.string.transfer_profiles_import_detail), enabled = !panel.busy) {
+            importFile("profiles")
+        }
+        GlassSettingRow(ui(R.string.ui_export_profiles), ui(R.string.transfer_profiles_export_detail), enabled = !panel.busy) {
+            export("horizon-profiles.json", panel.config.getJSONArray("profiles").toString(2))
         }
     }
     Tile {
-        Text(ui(R.string.ui_transfer_settings), style = MaterialTheme.typography.titleMedium)
-        FlowRow {
-            TextButton(onClick = { importFile("config") }) { Text(ui(R.string.ui_import_horizon_config)) }
-            TextButton(onClick = { export("horizon-settings.json", config.toString(2)) }) { Text(ui(R.string.ui_export_settings)) }
-            TextButton(onClick = { importFile("profiles") }) { Text(ui(R.string.ui_import_manager_profiles)) }
-            TextButton(onClick = { export("horizon-profiles.json", panel.config.getJSONArray("profiles").toString(2)) }) { Text(ui(R.string.ui_export_profiles)) }
-            TextButton(onClick = { confirm(ui(R.string.ui_restore_the_previous_configuration_and_its)) { model.revert() } }) { Text(ui(R.string.ui_roll_back_settings)) }
-        }
+        Text(ui(R.string.transfer_server_title), style = MaterialTheme.typography.titleMedium)
+        Text(ui(R.string.transfer_server_detail), color = LocalHorizonPalette.current.muted)
         var path by remember { mutableStateOf(panel.probe["existing"].orEmpty()) }
         ValueField(ui(R.string.ui_existing_horizon_folder_on_the_vps), path, { path = it })
-        TextButton(enabled = !panel.busy && path.startsWith("/"), onClick = {
-            confirm(ui(R.string.ui_copy_settings_from_this_folder_into)) { model.copyExisting(path) }
+        TextButton(enabled = !panel.busy && path.trim().startsWith("/"), onClick = {
+            confirm(ui(R.string.ui_copy_settings_from_this_folder_into)) { model.copyExisting(path.trim()) }
         }) { Text(ui(R.string.ui_copy_configuration_from_vps)) }
+    }
+    Tile {
+        GlassSettingRow(ui(R.string.ui_roll_back_settings), ui(R.string.transfer_rollback_detail),
+            enabled = !panel.busy) { confirm(ui(R.string.ui_restore_the_previous_configuration_and_its)) { model.revert() } }
     }
 }
 
