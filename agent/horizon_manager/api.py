@@ -594,6 +594,7 @@ def create_app(root, token):
         has_localized_items = stage.name == "localized_items.json"
         for item in items[offset:offset + limit]:
             process = item.get("processing") or {}
+            metadata = item.get("metadata") or {}
             analysis = process.get("analysis") or {}
             artifact = (process.get("artifacts") or {}).get(language) or {}
             blocks = artifact.get("blocks", [])
@@ -604,8 +605,10 @@ def create_app(root, token):
                 "id": item["id"], "title": artifact.get("title") or item["title"], "url": item["url"],
                 **({"media": media.get(item["id"], {})} if media is not None else {}),
                 "source": item["source_type"], "time": item["published_at"],
-                "category": (item.get("metadata") or {}).get("category"),
-                **({"telegram_url": item["metadata"]["msg_url"]} if (item.get("metadata") or {}).get("msg_url") else {}),
+                "category": metadata.get("category"),
+                **({"telegram_url": metadata["msg_url"]} if metadata.get("msg_url") else {}),
+                **({"telegram_channel": metadata.get("channel") or item.get("author")}
+                   if item["source_type"] == "telegram" else {}),
                 "profile": (process.get("classification") or {}).get("profile"),
                 "score": analysis.get("score"), "summary": body[:8000],
                 "body": body, "body_is_plain": not bool(primary) or (

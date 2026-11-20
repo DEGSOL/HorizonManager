@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="schedule_next">Следующий запуск</string>
+    <string name="schedule_manual">Только вручную</string>
+    <string name="schedule_vps_hint">VPS запускает дайджест по расписанию, даже если MRizon закрыт.</string>
+    <string name="schedule_unavailable">Расписание недоступно</string>
+    <string name="schedule_frequency">Когда собирать дайджест</string>
+    <string name="schedule_hours">%1$d ч</string>
+    <string name="schedule_every_day">Каждый день</string>
+    <string name="schedule_workdays">Будни</string>
+    <string name="schedule_weekends">Выходные</string>
+    <string name="schedule_days">Дни запуска</string>
+    <string name="schedule_pick_day">Выбери хотя бы один день.</string>
+    <string name="schedule_time">Время запуска</string>
+    <string name="schedule_zone_search">Поиск города или часового пояса</string>
+    <string name="schedule_device_zone">Как на телефоне</string>
+    <string name="schedule_zone_empty">Часовой пояс не найден</string>
+    <string name="journal_config_invalid">Настройки или профиль отклонены. Проверь изменённый раздел и повтори сохранение.</string>
+    <string name="journal_profile_duplicate">У профилей обработки должны быть разные идентификаторы.</string>
+    <string name="journal_profile_default">Выбери существующий профиль по умолчанию.</string>
+    <string name="journal_profile_source">Проверь выбранные профили в разделе «Источники». В списке кандидатов должны быть разные существующие профили.</string>
+    <string name="journal_profile_digest">Проверь профили, указанные в группах дайджеста.</string>
+    <string name="journal_profile_order">Проверь порядок профилей в дайджесте и расширенные настройки обработки.</string>
+    <string name="journal_translation_recovered">Перевод получен при повторной попытке</string>
+    <string name="journal_translation_invalid">После повторной попытки модель вернула некорректный перевод.</string>
+    <string name="journal_translation_timeout">Модель не успела вернуть перевод.</string>
+    <string name="journal_translation_error">Провайдер не смог вернуть перевод.</string>
+    <string name="journal_translation_partial">Для части новостей сохранён исходный текст.</string>
+    <string name="journal_schedule_saved">VPS сохранил расписание.</string>
+    <string name="schedule_last_known">Последние данные с VPS</string>
+</resources>

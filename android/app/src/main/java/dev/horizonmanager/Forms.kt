@@ -172,7 +172,14 @@ internal fun EditValue(
         } else {
             if (variants.size > 1) {
                 Choice(ui(R.string.ui_format, title), variants.map { it.optString("type") }, type,
-                    { desired -> onChange(sample(root, variants.first { it.optString("type") == desired }, true)) },
+                    { desired ->
+                        val selected = variants.first { it.optString("type") == desired }
+                        onChange(when {
+                            field == "profile" && desired == "string" -> "auto"
+                            field == "profile" && desired == "array" && profileIds.isNotEmpty() -> JSONArray(listOf(profileIds.first()))
+                            else -> sample(root, selected, true)
+                        })
+                    },
                     { mapOf("string" to ui(R.string.ui_text), "array" to ui(R.string.ui_list), "object" to ui(R.string.ui_fields))[it] ?: it })
             }
             val direct = when (field) {
@@ -228,23 +235,30 @@ internal fun EditValue(
                     TextButton(onClick = { shown = !shown }) { Text("$title · ${array.length()}${if (shown) " ▴" else " ▾"}") }
                     Reveal(shown) {
                         Column(Modifier.padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                            val selectedProfiles = if (field == "profile") array.strings() else emptyList()
                             for (index in 0 until array.length()) {
                                 val item = array.get(index)
                                 key(index) {
+                                    val options = if (field == "profile")
+                                        profileIds.filter { it == item || it !in selectedProfiles } else profileIds
                                     EditValue(root, entry ?: inferred(item), field + "_item", item,
-                                        { new -> onChange(JSONArray(array.toString()).put(index, new)) }, profileIds,
+                                        { new -> onChange(JSONArray(array.toString()).put(index, new)) }, options,
                                         (item as? JSONObject)?.optString("name")?.ifBlank { null }
                                             ?: (item as? JSONObject)?.optString("channel")?.ifBlank { null } ?: "${index + 1}. $title")
                                     Row {
-                                        TextButton(onClick = { onChange(JSONArray(array.toString()).apply { remove(index) }) }) { Text(ui(R.string.ui_remove)) }
+                                        TextButton(enabled = field != "profile" || array.length() > 1,
+                                            onClick = { onChange(JSONArray(array.toString()).apply { remove(index) }) }) { Text(ui(R.string.ui_remove)) }
                                         TextButton(enabled = index > 0, onClick = {
                                             onChange(JSONArray(array.toString()).put(index, array.get(index - 1)).put(index - 1, array.get(index)))
                                         }) { Text(ui(R.string.ui_move_up)) }
                                     }
                                 }
                             }
-                            TextButton(onClick = {
-                                onChange(JSONArray(array.toString()).put(sample(root, entry ?: JSONObject().put("type", "string"), true)))
+                            val nextProfile = profileIds.firstOrNull { it !in selectedProfiles }
+                            TextButton(enabled = field != "profile" || nextProfile != null, onClick = {
+                                val new = if (field == "profile") requireNotNull(nextProfile)
+                                    else sample(root, entry ?: JSONObject().put("type", "string"), true)
+                                onChange(JSONArray(array.toString()).put(new))
                             }) { Text(ui(R.string.ui_add_559a87)) }
                         }
                     }

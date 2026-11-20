@@ -171,6 +171,10 @@ private fun profileIds(profiles: JSONArray) = profiles.objects().mapNotNull { it
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, dirtyChange: (Boolean) -> Unit) {
+    if (page == "schedule") {
+        ScheduleForm(panel, model, dirtyChange)
+        return
+    }
     val stored = panel.config.optJSONObject("config") ?: return
     val serverId = panel.server?.id ?: return
     val schema = panel.schema.optJSONObject("config") ?: return
@@ -186,14 +190,13 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, dirty
     var genericKey by remember(secretAlias, aiDraft?.optString("provider"), panel.config.optInt("revision")) { mutableStateOf("") }
     var showGenericKey by remember(secretAlias, panel.config.optInt("revision")) { mutableStateOf(!configuredSecret) }
     val dirty = working.toString() != stored.toString() || profiles.toString() != storedProfiles.toString() || genericKey.isNotBlank()
-    if (page != "schedule" && page != "profiles") SideEffect { dirtyChange(dirty) }
+    if (page != "profiles") SideEffect { dirtyChange(dirty) }
     if (page == "profiles") {
         ProfileManager(panel, model, dirtyChange)
         return
     }
     Tile {
         when (page) {
-            "schedule" -> ScheduleForm(panel, model, dirtyChange)
             "secrets" -> {
                 val secretNames = panel.schema.optJSONArray("secrets")?.strings().orEmpty()
                 val configured = panel.config.optJSONArray("secrets")?.strings().orEmpty()
@@ -309,7 +312,7 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, dirty
                 }
             }
         }
-        Reveal(dirty && page != "schedule" && page != "secrets" &&
+        Reveal(dirty && page != "secrets" &&
             (page != "ai" || AiRouter.configured(working.getJSONObject("ai")) == null)) {
             Text(ui(R.string.editorial_unsaved), color = LocalHorizonPalette.current.warning)
             Button(onClick = {
@@ -319,60 +322,5 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, dirty
                 model.saveConfig(working, profiles, keys)
             }, enabled = !panel.busy) { Text(ui(R.string.ui_save_settings)) }
         }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun ScheduleForm(panel: Panel, model: ManagerModel, dirtyChange: (Boolean) -> Unit) {
-    val spec = panel.schedule.optJSONObject("spec") ?: return
-    var mode by remember(spec.toString()) { mutableStateOf(spec.optString("mode")) }
-    var hours by remember(spec.toString()) { mutableStateOf(spec.optInt("hours", 6).toString()) }
-    var hour by remember(spec.toString()) { mutableStateOf(spec.optInt("hour", 8).toString()) }
-    var minute by remember(spec.toString()) { mutableStateOf(spec.optInt("minute").toString()) }
-    var zone by remember(spec.toString()) { mutableStateOf(spec.optString("zone")) }
-    var days by remember(spec.toString()) {
-        mutableStateOf(spec.optJSONArray("days")?.let { array -> (0 until array.length()).map { array.getInt(it) }.toSet() }.orEmpty())
-    }
-    val changed = mode != spec.optString("mode") || when (mode) {
-        "interval" -> hours.toIntOrNull() != spec.optInt("hours", 6)
-        "calendar" -> hour.toIntOrNull() != spec.optInt("hour", 8) || minute.toIntOrNull() != spec.optInt("minute") ||
-            zone != spec.optString("zone") || days != spec.optJSONArray("days")?.let { array ->
-                (0 until array.length()).map { array.getInt(it) }.toSet()
-            }.orEmpty()
-        else -> false
-    }
-    SideEffect { dirtyChange(changed) }
-    Text(ui(R.string.ui_vps_schedule), style = MaterialTheme.typography.titleLarge)
-    Choice(ui(R.string.ui_mode), listOf("off", "calendar", "interval"), mode, { mode = it },
-        { mapOf("off" to ui(R.string.ui_off), "calendar" to ui(R.string.ui_by_day_of_the_week), "interval" to ui(R.string.ui_at_regular_intervals))[it] ?: it })
-    Reveal(mode == "interval") {
-        ValueField(ui(R.string.ui_interval_from_1_to_168_hours), hours, { hours = it }, numeric = true)
-    }
-    Reveal(mode == "calendar") {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            listOf(ui(R.string.ui_mon), ui(R.string.ui_tue), ui(R.string.ui_wed), ui(R.string.ui_thu), ui(R.string.ui_fri), ui(R.string.ui_sat), ui(R.string.ui_sun)).forEachIndexed { day, title ->
-                FilterChip(day in days, { days = if (day in days) days - day else days + day }, { Text(title) })
-            }
-        }
-        ValueField(ui(R.string.ui_hour_0_23), hour, { hour = it }, numeric = true)
-        ValueField(ui(R.string.ui_minute_0_59), minute, { minute = it }, numeric = true)
-        Choice(ui(R.string.ui_time_zone), listOf("Asia/Yekaterinburg", "Europe/Moscow", "Europe/Amsterdam", "UTC").let { (it + zone).distinct() },
-            zone, { zone = it }, { it })
-        ValueField(ui(R.string.ui_other_iana_time_zone), zone, { zone = it })
-    }
-    val enabled = when (mode) {
-        "interval" -> (hours.toIntOrNull() ?: 0) in 1..168
-        "calendar" -> days.isNotEmpty() && (hour.toIntOrNull() ?: -1) in 0..23 && (minute.toIntOrNull() ?: -1) in 0..59 && zone.isNotBlank()
-        else -> true
-    }
-    Reveal(changed) {
-        Text(ui(R.string.editorial_unsaved), color = LocalHorizonPalette.current.warning)
-        Button(enabled = enabled && !panel.busy, onClick = {
-            model.schedule(JSONObject().put("mode", mode).apply {
-                if (mode == "interval") put("hours", hours.toInt())
-                if (mode == "calendar") put("hour", hour.toInt()).put("minute", minute.toInt()).put("zone", zone).put("days", JSONArray(days.sorted()))
-            })
-        }) { Text(ui(R.string.ui_save_schedule)) }
     }
 }

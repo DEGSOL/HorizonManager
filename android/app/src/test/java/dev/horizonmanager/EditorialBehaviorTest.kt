@@ -31,6 +31,19 @@ class EditorialBehaviorTest {
     }
 
     @Test
+    fun telegramCardsUsePublisherEvenWhenTheArticleLinksOut() {
+        val article = JSONObject().put("source", "telegram").put("url", "https://example.org/news")
+        assertEquals("", telegramPublisher(article))
+        article.put("telegram_url", "https://t.me/s/realChannel/42?single")
+        assertEquals("@realChannel", telegramPublisher(article))
+        article.put("telegram_channel", "explicitChannel")
+        assertEquals("@explicitChannel", telegramPublisher(article))
+        article.remove("telegram_channel")
+        article.put("telegram_url", "https://t.me/c/123/45")
+        assertEquals("", telegramPublisher(article))
+    }
+
+    @Test
     fun movingChannelPreservesOtherEntries() {
         val channels = listOf("first", "second", "third")
         assertEquals(listOf("third", "first", "second"), moveSource(channels, 2, 0))

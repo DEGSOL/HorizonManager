@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="schedule_next">Next scheduled run</string>
+    <string name="schedule_manual">Manually only</string>
+    <string name="schedule_vps_hint">The VPS runs the schedule even when MRizon is closed.</string>
+    <string name="schedule_unavailable">Schedule unavailable</string>
+    <string name="schedule_frequency">When to create a digest</string>
+    <string name="schedule_hours">%1$d h</string>
+    <string name="schedule_every_day">Every day</string>
+    <string name="schedule_workdays">Weekdays</string>
+    <string name="schedule_weekends">Weekends</string>
+    <string name="schedule_days">Run on</string>
+    <string name="schedule_pick_day">Select at least one day.</string>
+    <string name="schedule_time">Start time</string>
+    <string name="schedule_zone_search">Find a city or time zone</string>
+    <string name="schedule_device_zone">Use device time zone</string>
+    <string name="schedule_zone_empty">No matching time zones</string>
+    <string name="journal_config_invalid">Configuration or profile rejected. Check the edited section and try again.</string>
+    <string name="journal_profile_duplicate">Each processing profile needs a unique ID.</string>
+    <string name="journal_profile_default">Select an existing profile as the default.</string>
+    <string name="journal_profile_source">Check which processing profiles are selected in Sources. A candidate list must contain distinct, existing profiles.</string>
+    <string name="journal_profile_digest">Check the profiles assigned to digest groups.</string>
+    <string name="journal_profile_order">Check the digest profile order and advanced processing settings.</string>
+    <string name="journal_translation_recovered">Translation recovered on retry</string>
+    <string name="journal_translation_invalid">The model returned an invalid translation after retry.</string>
+    <string name="journal_translation_timeout">The model took too long to return a translation.</string>
+    <string name="journal_translation_error">The provider failed to return a translation.</string>
+    <string name="journal_translation_partial">Some articles retain the original text.</string>
+    <string name="journal_schedule_saved">The VPS saved the schedule.</string>
+    <string name="schedule_last_known">Last known schedule</string>
+</resources>

@@ -64,7 +64,10 @@ class Fixture(BaseHTTPRequestHandler):
             self.server.enrichment_requests.append(request["messages"])
             if request.get("model") == "slow-context":
                 time.sleep(3)
-        if "Return OK as plain text." in instructions:
+        if "You route content" in instructions and request.get("model") == "classify-with-retry":
+            self.server.classification_requests.append(instructions)
+            content = '{"profile":"tech-news"}' if "containing only" in instructions else '{"profile":"unknown",'
+        elif "Return OK as plain text." in instructions:
             content = "OK"
         elif "Artifact" in instructions or "blocks" in instructions:
             title, article = "Fixture engineering article", "A fixture summary."
@@ -115,6 +118,7 @@ class AgentTests(unittest.TestCase):
         cls.thread.join()
 
     def setUp(self):
+        self.fixture.classification_requests = []
         self.fixture.enrichment_requests = []
         self.fixture.translation_requests = []
         self.temp = TemporaryDirectory()
@@ -153,6 +157,27 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(self.client.get("/v1/health", headers={"Authorization": "Bearer wrong"}).status_code, 401)
         self.assertEqual(self.client.post("/v1/jobs", content=b"x",
                                          headers={"Content-Length": "12000000"}).status_code, 413)
+
+    def test_invalid_classifier_response_retries_only_the_profile_selection(self):
+        config = self.config(model="classify-with-retry")
+        config["config"]["sources"]["rss"][0]["profile"] = ["tech-news", "tech-blog"]
+        self.assertEqual(self.client.put("/v1/config", json=config).status_code, 200)
+        run = uuid4()
+        self.client.post("/v1/jobs", json={"id": str(run)})
+        self.assertEqual(self.wait(run.hex)["state"], "success")
+        article = self.client.get(f"/v1/digests/{run.hex}/en").json()["items"][0]
+        self.assertEqual(article["profile"], "tech-news")
+        self.assertEqual(len(self.fixture.classification_requests), 2)
+        self.assertFalse(any(event["code"] == "INVALID_FORMAT" for event in self.client.get("/v1/events").json()))
+
+    def test_rejected_profile_references_return_specific_codes_without_overwriting_settings(self):
+        before = self.client.get("/v1/config").json()
+        invalid = self.config()
+        invalid["config"]["sources"]["rss"][0]["profile"] = []
+        self.assertEqual(self.client.put("/v1/config", json=invalid).json()["detail"]["code"], "PROFILE_SOURCE_INVALID")
+        invalid["profiles"].append(invalid["profiles"][0])
+        self.assertEqual(self.client.put("/v1/config", json=invalid).json()["detail"]["code"], "PROFILE_DUPLICATE_ID")
+        self.assertEqual(self.client.get("/v1/config").json(), before)
 
     def test_media_and_language_settings_survive_backup_without_changing_horizon_config(self):
         before = self.client.get("/v1/config").json()
@@ -353,6 +378,8 @@ class AgentTests(unittest.TestCase):
         directory = self.root / "runs" / run.hex
         localized = directory / "localized_items.json"
         raw = json.loads(localized.read_text())
+        raw[0].update(source_type="telegram", author="mrizonNews",
+                      metadata={"msg_url": "https://t.me/mrizonNews/123", "channel": "mrizonNews"})
         raw[0]["title"] = "Настоящий заголовок новости"
         raw[0]["content"] = "Сохранившийся русский текст публикации."
         artifact = raw[0]["processing"]["artifacts"]["ru"]
@@ -365,6 +392,8 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(result["content_version"], 2)
         self.assertEqual(result["items"][0]["title"], raw[0]["title"])
         self.assertEqual(result["items"][0]["body"], raw[0]["content"])
+        self.assertEqual(result["items"][0]["telegram_channel"], "mrizonNews")
+        self.assertEqual(result["items"][0]["telegram_url"], "https://t.me/mrizonNews/123")
         self.assertNotIn("Перевод недоступен", result["markdown"])
         self.assertIn(raw[0]["title"], result["markdown"])
         self.assertEqual(len(self.fixture.translation_requests), requests_before)

@@ -166,12 +166,35 @@ class FluidScreensTest {
                     total = stories.size,
                     config = cfg.getJSONObject("config"),
                     schema = cfg.getJSONObject("schema"),
+                    schedule = JSONObject().put("spec", JSONObject()
+                        .put("mode", "calendar").put("hour", 9).put("minute", 0)
+                        .put("zone", "Asia/Yekaterinburg").put("days", JSONArray((0..6).toList())))
+                        .put("next", now.plusSeconds(3600).epochSecond),
                     archive = listOf(issue) + archive,
                     status = JSONObject().put("agent", "0.1.4").put("media_search", false),
                 )
         }
         compose.waitForIdle()
         return ui(R.string.feed) + " " + shortDigestDate(date)
+    }
+
+    @Test
+    fun scheduleShowsServerRunAndRevealsOnlyRelevantControls() {
+        loadIssue()
+        tab(R.string.settings)
+        text(R.string.mr_news).performClick()
+        text(R.string.ui_schedule).performClick()
+        compose.onNode(hasText(ui(R.string.schedule_next)) or hasText(ui(R.string.schedule_last_known))).assertExists()
+        text(R.string.schedule_every_day).assertExists()
+        compose.onNodeWithText("09:00").assertExists()
+        text(R.string.ui_interval_from_1_to_168_hours).assertDoesNotExist()
+        text(R.string.ui_save_schedule).assertDoesNotExist()
+        snapshot("08-schedule")
+        text(R.string.schedule_weekends).performScrollTo().performClick()
+        text(R.string.ui_save_schedule).assertExists()
+        text(R.string.ui_at_regular_intervals).performScrollTo().performClick()
+        text(R.string.ui_interval_from_1_to_168_hours).assertExists()
+        text(R.string.schedule_time).assertDoesNotExist()
     }
 
     @Test

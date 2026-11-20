@@ -39,7 +39,7 @@ class DigestLocalizationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(items[1].processing.artifacts["ru"].blocks[0].content, "Short original description")
         first_payload, second_payload = [json.loads(call.kwargs["user"]) for call in calls.await_args_list]
         self.assertEqual([row["id"] for row in first_payload], ["0", "1"])
-        self.assertEqual([row["id"] for row in second_payload], ["1"])
+        self.assertEqual(second_payload, {"title": "Second news", "text": "Short original description"})
         self.assertEqual(first_payload[0]["text"], "Short original description")
 
 
@@ -57,12 +57,13 @@ class DigestLocalizationTests(unittest.IsolatedAsyncioTestCase):
     async def test_truncated_response_retains_complete_item_and_retries_only_missing_id(self):
         items = [article("First news"), article("Second news")]
         responses = ['{"items":[{"id":0,"title":"Первая новость","text":"Подробное описание новости."},'
-                     '{"id":"1","title":"Вторая', json.dumps({"items": [
-                         {"id": "1", "title": "Вторая новость", "text": "Второе подробное описание."},
-                     ]})]
+                     '{"id":"1","title":"Вторая', json.dumps(
+                         {"title": "Вторая новость", "text": "Второе подробное описание."})]
         client = SimpleNamespace(complete=AsyncMock(side_effect=responses))
         config = SimpleNamespace(enrichment_concurrency=1, max_tokens=1536)
+        report = unittest.mock.Mock()
         with patch("horizon_manager.localized_digest.create_ai_client", return_value=client):
-            self.assertEqual(await complete_artifacts(items, "ru", config), 0)
+            self.assertEqual(await complete_artifacts(items, "ru", config, report=report), 0)
         self.assertEqual([item.processing.artifacts["ru"].title for item in items], ["Первая новость", "Вторая новость"])
-        self.assertEqual([row["id"] for row in json.loads(client.complete.await_args.kwargs["user"])], ["1"])
+        self.assertEqual(json.loads(client.complete.await_args.kwargs["user"])["title"], "Second news")
+        report.assert_called_once_with("LOCALIZATION_RECOVERED", 1)

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="schedule_next">下次计划运行</string>
+    <string name="schedule_manual">仅手动</string>
+    <string name="schedule_vps_hint">即使 MRizon 已关闭，VPS 也会按计划运行。</string>
+    <string name="schedule_unavailable">计划不可用</string>
+    <string name="schedule_frequency">何时生成摘要</string>
+    <string name="schedule_hours">%1$d 小时</string>
+    <string name="schedule_every_day">每天</string>
+    <string name="schedule_workdays">工作日</string>
+    <string name="schedule_weekends">周末</string>
+    <string name="schedule_days">运行日期</string>
+    <string name="schedule_pick_day">请至少选择一天。</string>
+    <string name="schedule_time">开始时间</string>
+    <string name="schedule_zone_search">查找城市或时区</string>
+    <string name="schedule_device_zone">使用设备时区</string>
+    <string name="schedule_zone_empty">未找到匹配的时区</string>
+    <string name="journal_config_invalid">配置或配置档案被拒绝。请检查已编辑的部分后重试。</string>
+    <string name="journal_profile_duplicate">每个处理配置档案需要唯一标识。</string>
+    <string name="journal_profile_default">请选择现有配置档案作为默认档案。</string>
+    <string name="journal_profile_source">请检查来源使用的处理配置档案。候选列表必须包含不同的现有档案。</string>
+    <string name="journal_profile_digest">请检查摘要分组使用的配置档案。</string>
+    <string name="journal_profile_order">请检查摘要中的档案顺序和高级处理设置。</string>
+    <string name="journal_translation_recovered">重试后已恢复翻译</string>
+    <string name="journal_translation_invalid">重试后模型仍返回无效翻译。</string>
+    <string name="journal_translation_timeout">模型返回翻译超时。</string>
+    <string name="journal_translation_error">服务提供商未能返回翻译。</string>
+    <string name="journal_translation_partial">部分文章保留了原文。</string>
+    <string name="journal_schedule_saved">VPS 已保存计划。</string>
+    <string name="schedule_last_known">上次获取的服务器计划</string>
+</resources>

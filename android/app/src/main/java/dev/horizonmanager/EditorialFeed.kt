@@ -116,7 +116,7 @@ internal fun NewsScreen(
                         (query.isBlank() ||
                             listOf("title", "summary", "source", "category").any {
                                 articleField(item, it).contains(query, true)
-                            })
+                            } || telegramPublisher(item).contains(query, true))
                 },
                 order,
             )
@@ -549,8 +549,8 @@ internal fun PublicationTile(
                 Modifier.fillMaxWidth().padding(start = 9.dp, end = 1.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                val category =
-                    articleField(article, "category").ifBlank { articleField(article, "source") }
+                val category = if (isTelegram(article)) "Telegram"
+                    else articleField(article, "category").ifBlank { articleField(article, "source") }
                 if (category.isNotBlank())
                     Text(
                         category,
@@ -594,7 +594,7 @@ internal fun PublicationTile(
                             letterSpacing = (-.55).sp,
                         ),
                 )
-                val source = telegramPublisher(article).ifBlank { articleField(article, "source") }
+                val source = if (isTelegram(article)) telegramPublisher(article) else articleField(article, "source")
                 if (source.isNotBlank())
                     Text(
                         source,
@@ -615,15 +615,26 @@ internal fun articleSource(article: JSONObject): String =
             articleField(article, "profile"),
         )
         .filter(String::isNotBlank)
-        .distinct()
+        .distinctBy { it.lowercase(Locale.ROOT) }
         .joinToString(" · ")
 
-private fun telegramPublisher(article: JSONObject): String {
-    if (articleField(article, "source") != "telegram") return ""
-    val uri = runCatching { java.net.URI(articleField(article, "url")) }.getOrNull() ?: return ""
-    if (uri.host != "t.me") return ""
-    val channel = uri.path.trim('/').removePrefix("s/").substringBefore('/')
-    return normalizeTelegramChannel(channel)?.let { "@$it" }.orEmpty()
+private val telegramPost = Regex("/(?:s/)?([A-Za-z][A-Za-z0-9_]{3,31})/[0-9]+/?")
+private val telegramHosts = setOf("t.me", "telegram.me", "telegram.dog")
+
+private fun isTelegram(article: JSONObject) = articleField(article, "source").equals("telegram", true)
+
+internal fun telegramPublisher(article: JSONObject): String {
+    if (!isTelegram(article)) return ""
+    normalizeTelegramChannel(articleField(article, "telegram_channel"))?.let { return "@$it" }
+    val mediaSource = article.optJSONObject("media")?.let { articleField(it, "source") }.orEmpty()
+    for (link in listOf(articleField(article, "telegram_url"), articleField(article, "url"), mediaSource)) {
+        val uri = runCatching { java.net.URI(link) }.getOrNull() ?: continue
+        if (uri.scheme?.lowercase(Locale.ROOT) !in setOf("https", "http") ||
+            uri.host?.lowercase(Locale.ROOT) !in telegramHosts || uri.userInfo != null) continue
+        val channel = telegramPost.matchEntire(uri.rawPath.orEmpty())?.groupValues?.get(1) ?: continue
+        return "@$channel"
+    }
+    return ""
 }
 
 internal fun articleMetadata(article: JSONObject): String =

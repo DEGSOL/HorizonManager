@@ -17,6 +17,7 @@ from src.mcp.service import HorizonPipelineService
 from src.models import Config
 
 from .article_context import context_artifacts, find_item, read_json
+from .classification import score_with_retry
 from .configuration import only_source, write_profiles
 from .localized_digest import atomic_text, complete_artifacts, save_localized
 
@@ -215,7 +216,7 @@ async def main(payload, job):
                 send("result", data={"raw": raw, "fetch_status": status})
                 return
             phase("score")
-            scored = await service.score_items(job, **common)
+            scored = await score_with_retry(service, job, **common)
             phase("filter")
             filtered = await service.filter_items(job, **common)
             kept = filtered["kept"]
@@ -237,7 +238,9 @@ async def main(payload, job):
             items = dicts_to_items(service.run_store.load_items(job, stage))
             unavailable = await complete_artifacts(
                 items, language, context.config.ai,
-                report=lambda code, count: send("log", level="WARNING", code=code, detail=str(count)),
+                report=lambda code, count: send(
+                    "log", level="INFO" if code == "LOCALIZATION_RECOVERED" else "WARNING",
+                    code=code, detail=str(count)),
             )
             for item in items:
                 item.processing.artifacts = {language: item.processing.artifacts[language]}

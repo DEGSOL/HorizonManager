@@ -451,7 +451,9 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                 }
             } else emptyList()
             val schema = if (panel.schema.length() == 0) api.get("schema") as JSONObject else panel.schema
-            val schedule = if (everything || panel.schedule.length() == 0) api.get("schedule") as JSONObject else panel.schedule
+            val schedule = if (everything || panel.schedule.length() == 0) api.get("schedule") as JSONObject
+                else if (status.has("next")) panel.schedule.copyObject().put("next", status.get("next"))
+                else panel.schedule
             val sources = (api.get("sources") as JSONArray).objects()
             val jobs = (api.get("jobs") as JSONArray).objects()
             val events = (api.get(if (cursor == 0L) "events?limit=250&latest=true" else "events?after=$cursor&limit=1000") as JSONArray).objects()
@@ -799,7 +801,24 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         else ui(R.string.ui_github_revision_verified_for_this_build, head.take(12), installed.take(12))
     }
 
-    fun schedule(spec: JSONObject) = mutate(true) { it.put("schedule", spec) }
+    fun refreshSchedule(quiet: Boolean = true) {
+        val server = state.value.server?.takeIf { it.installed } ?: return
+        operation(quiet) {
+            val schedule = withAgent(server) { it.get("schedule") as JSONObject }
+            mutable.update { if (it.server?.id == server.id) it.copy(schedule = schedule) else it }
+        }
+    }
+
+    fun schedule(spec: JSONObject) {
+        val server = state.value.server ?: return
+        operation {
+            val saved = withAgent(server) { it.put("schedule", spec) as JSONObject }
+            mutable.update {
+                if (it.server?.id != server.id) it
+                else it.copy(schedule = saved, status = it.status.copyObject().put("next", saved.opt("next")))
+            }
+        }
+    }
 
     fun export(password: String) = mutate {
         val result = it.post("backup", JSONObject().put("password", password)) as JSONObject

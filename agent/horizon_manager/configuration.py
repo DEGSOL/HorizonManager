@@ -56,9 +56,12 @@ def initial_config():
 
 
 def write_profiles(target, documents):
+    entries = [ProfileDocument.model_validate(document) for document in documents]
+    ids = {entry.definition.id for entry in entries}
+    if len(ids) != len(entries):
+        raise ValueError("PROFILE_DUPLICATE_ID")
     target.mkdir(parents=True, exist_ok=True)
-    for document in documents:
-        entry = ProfileDocument.model_validate(document)
+    for entry in entries:
         definition = entry.definition.model_copy(deep=True)
         folder = target / definition.id
         folder.mkdir()
@@ -143,11 +146,20 @@ def validate(config, documents, secrets, ready=False, openbb=False):
     with TemporaryDirectory() as scratch:
         path = Path(scratch) / "profiles"
         write_profiles(path, documents)
+        ids = {document["definition"]["id"] for document in documents}
+        if model.processing.default_profile not in ids:
+            raise ValueError("PROFILE_DEFAULT_UNKNOWN")
         registry = ProfileRegistry.load(path, model.processing.default_profile)
-        registry.validate_source_references(model.sources.model_dump(mode="json"))
-        registry.validate_digest_references(model.digest)
-        for profile in (*model.processing.profile_settings, *model.digest.profile_order):
-            registry.get(profile)
+        try:
+            registry.validate_source_references(model.sources.model_dump(mode="json"))
+        except ValueError:
+            raise ValueError("PROFILE_SOURCE_INVALID") from None
+        try:
+            registry.validate_digest_references(model.digest)
+        except ValueError:
+            raise ValueError("PROFILE_DIGEST_INVALID") from None
+        if (set(model.processing.profile_settings) | set(model.digest.profile_order)) - registry.ids:
+            raise ValueError("PROFILE_ORDER_INVALID")
         for entry in registry.profiles:
             if any(tool not in {"history_search", "web_search"} for block in entry.definition.enrichment.blocks for tool in block.tools):
                 raise ValueError("PROFILE_TOOL")
