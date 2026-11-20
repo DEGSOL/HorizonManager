@@ -16,7 +16,7 @@ private fun SettingsSection(@StringRes title: Int, content: @Composable ColumnSc
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(ui(title), Modifier.padding(start = 4.dp), style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
-        content()
+        Tile(content = content)
     }
 }
 
@@ -31,31 +31,39 @@ internal fun SettingsHome(panel: Panel, preset: ThemePreset, open: (String) -> U
                 Text(panel.server?.name ?: ui(R.string.editorial_not_configured),style=MaterialTheme.typography.headlineSmall)
                 panel.server?.let { Text(it.host,style=MaterialTheme.typography.bodySmall,color=LocalHorizonPalette.current.muted) }
             }
-            if (panel.ready) {
+            if (panel.ready) SettingsSection(R.string.setting_group_content) {
                 GlassSettingRow(ui(R.string.mr_news), ui(R.string.mr_news_detail), open = rowPage("news_settings"))
                 GlassSettingRow(ui(R.string.editorial_ai_processing), ui(R.string.editorial_ai_settings_detail),
                     enabled = configured, open = rowPage("ai_settings"))
             }
-            GlassSettingRow(ui(R.string.ui_maintenance), ui(R.string.settings_journal_detail), open = rowPage("maintenance"))
-            GlassSettingRow(ui(R.string.mr_interface), ui(preset.title), open = rowPage("interface"))
+            SettingsSection(R.string.setting_group_application) {
+                GlassSettingRow(ui(R.string.mr_interface), ui(preset.title), open = rowPage("interface"))
+                GlassSettingRow(ui(R.string.ui_maintenance), ui(R.string.settings_journal_detail), open = rowPage("maintenance"))
+            }
         }
         "news_settings" -> {
-            GlassSettingRow(ui(R.string.sources), ui(R.string.sources_description), open = rowPage("sources"))
-            if (configured) DigestSettings(open)
-            GlassSettingRow(ui(R.string.mr_images), ui(R.string.mr_images_detail), open = rowPage("images"))
+            SettingsSection(R.string.setting_group_content) {
+                GlassSettingRow(ui(R.string.sources), ui(R.string.sources_description), open = rowPage("sources"))
+                GlassSettingRow(ui(R.string.mr_images), ui(R.string.mr_images_detail), open = rowPage("images"))
+            }
+            if (configured) SettingsSection(R.string.ui_digest) { DigestSettings(open) }
         }
         "server_settings" -> {
             ServerConnectionStatus(panel, model = null)
-            GlassSettingRow(ui(R.string.ui_servers), ui(R.string.servers_description), open = servers)
-            if (panel.ready) {
-                GlassSettingRow(ui(R.string.ui_connection), ui(R.string.settings_connection_detail), open = rowPage("connection"))
-                GlassSettingRow(ui(R.string.control), ui(R.string.control_description), open = rowPage("control"))
+            SettingsSection(R.string.ui_connection) {
+                GlassSettingRow(ui(R.string.ui_servers), ui(R.string.servers_description), open = servers)
+                if (panel.ready) {
+                    GlassSettingRow(ui(R.string.ui_connection), ui(R.string.settings_connection_detail), open = rowPage("connection"))
+                    GlassSettingRow(ui(R.string.control), ui(R.string.control_description), open = rowPage("control"))
+                }
             }
         }
         "interface" -> {
-            GlassSettingRow(ui(R.string.theme), ui(preset.title), open = rowPage("theme"))
-            GlassSettingRow(ui(R.string.editorial_feed_behavior), ui(R.string.editorial_feed_behavior_detail), open = rowPage("reading"))
-            if (panel.ready) {
+            SettingsSection(R.string.setting_group_reading) {
+                GlassSettingRow(ui(R.string.theme), ui(preset.title), open = rowPage("theme"))
+                GlassSettingRow(ui(R.string.editorial_feed_behavior), ui(R.string.editorial_feed_behavior_detail), open = rowPage("reading"))
+            }
+            if (panel.ready) SettingsSection(R.string.setting_group_device) {
                 GlassSettingRow(ui(R.string.editorial_local_data), ui(R.string.editorial_local_data_detail), open = rowPage("local"))
                 GlassSettingRow(ui(R.string.settings_notifications), ui(R.string.settings_notifications_detail), open = rowPage("alerts"))
             }
@@ -67,10 +75,9 @@ internal fun SettingsHome(panel: Panel, preset: ThemePreset, open: (String) -> U
 internal fun ImageSettings(panel: Panel, model: ManagerModel) {
     val supported = panel.status.has("media_search")
     Tile {
-        Text(ui(R.string.mr_images_detail))
-        Text(ui(R.string.mr_search_detail), color = LocalHorizonPalette.current.muted)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Wikimedia Commons", Modifier.weight(1f))
+            Text(ui(R.string.setting_find_missing_covers), Modifier.weight(1f))
+            SettingHelp(ui(R.string.setting_find_missing_covers), R.string.mr_search_detail)
             Switch(panel.status.optBoolean("media_search"), { model.mediaSearch(it) }, enabled = supported && !panel.busy)
         }
         if (!supported) Text(ui(R.string.mr_agent_images))
@@ -80,7 +87,8 @@ internal fun ImageSettings(panel: Panel, model: ManagerModel) {
 @Composable
 internal fun DigestSettings(open: (String) -> Unit) {
     GlassSettingRow(ui(R.string.settings_digest_rules), ui(R.string.settings_digest_rules_detail)) { open("digest") }
-    GlassSettingRow(ui(R.string.ui_schedule), ui(R.string.ui_days_intervals_and_time_zone)) { open("schedule") }
+    GlassSettingRow(ui(R.string.ui_schedule), ui(R.string.ui_days_intervals_and_time_zone),
+        help = R.string.schedule_vps_hint) { open("schedule") }
 }
 
 @Composable
@@ -88,6 +96,7 @@ internal fun AiSettings(panel: Panel, model: ManagerModel, open: (String) -> Uni
     val mode = panel.status.optString("enrichment_mode")
     val supportsLanguage = panel.status.has("digest_language")
     Tile {
+        GlassSettingRow(ui(R.string.settings_ai_model), ui(R.string.ui_model_api_address_and_request_limits)) { open("ai") }
         Choice(ui(R.string.digest_output_language), digestLanguages, panel.preferredDigestLanguage(),
             model::setDigestLanguage, {
                 ui(when (it) {
@@ -95,25 +104,18 @@ internal fun AiSettings(panel: Panel, model: ManagerModel, open: (String) -> Uni
                     "zh" -> R.string.digest_language_chinese
                     else -> R.string.digest_language_english
                 })
-            }, enabled = supportsLanguage && !panel.busy)
-        Text(ui(if (supportsLanguage) R.string.digest_language_detail else R.string.article_context_update),
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-    Tile {
+            }, enabled = supportsLanguage && !panel.busy, row = true, help = R.string.digest_language_detail)
         Choice(ui(R.string.enrichment_mode), listOf("on_demand", "automatic"),
             mode.ifBlank { "on_demand" }, model::enrichmentMode, {
                 ui(if (it == "automatic") R.string.enrichment_automatic else R.string.enrichment_on_demand)
-            }, enabled = mode.isNotBlank() && !panel.busy)
-        Text(
-            ui(if (mode.isNotBlank()) R.string.enrichment_mode_detail else R.string.article_context_update),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+            }, enabled = mode.isNotBlank() && !panel.busy, row = true, help = R.string.setting_help_enrichment)
+        if (!supportsLanguage || mode.isBlank()) Text(ui(R.string.article_context_update), style = MaterialTheme.typography.bodySmall)
     }
-    GlassSettingRow(ui(R.string.settings_ai_model), ui(R.string.ui_model_api_address_and_request_limits)) { open("ai") }
     SettingsSection(R.string.ui_advanced_settings) {
-        GlassSettingRow(ui(R.string.ui_processing_profiles), ui(R.string.ui_prompts_scoring_criteria_and_output_blocks)) { open("profiles") }
-        GlassSettingRow(ui(R.string.ui_secrets), ui(R.string.ui_ai_keys_and_integration_tokens)) { open("secrets") }
+        GlassSettingRow(ui(R.string.ui_processing_profiles), ui(R.string.ui_prompts_scoring_criteria_and_output_blocks),
+            help = R.string.setting_help_profiles) { open("profiles") }
+        GlassSettingRow(ui(R.string.ui_secrets), ui(R.string.ui_ai_keys_and_integration_tokens),
+            help = R.string.setting_help_secrets) { open("secrets") }
     }
 }
 
@@ -154,9 +156,11 @@ internal fun ConnectionSettings(panel: Panel, model: ManagerModel, dirtyChange: 
     SideEffect { dirtyChange(changed) }
     ServerConnectionStatus(panel, model)
     Tile {
-        OutlinedTextField(url, { url = it }, label = { Text(ui(R.string.ui_https_domain_optional)) },
+        val https = ui(R.string.ui_https_domain_optional)
+        OutlinedTextField(url, { url = it }, label = { Text(https) },
+            trailingIcon = { SettingHelp(https, R.string.ui_leave_blank_to_use_ssh_https) },
             modifier = Modifier.fillMaxWidth(), singleLine = true, isError = changed && !valid,
-            supportingText = { Text(if (changed && !valid) errorText("HTTPS_URL") else ui(R.string.ui_leave_blank_to_use_ssh_https)) },
+            supportingText = if (changed && !valid) ({ Text(errorText("HTTPS_URL")) }) else null,
             colors = horizonFieldColors())
         Reveal(changed) {
             Text(ui(R.string.editorial_unsaved), color = LocalHorizonPalette.current.warning)
@@ -197,14 +201,14 @@ internal fun NotificationSettings(panel: Panel, model: ManagerModel, permission:
     }
     Tile {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(ui(R.string.ui_background_news_checks), Modifier.weight(1f))
+            SettingHelp(ui(R.string.ui_background_news_checks), R.string.ui_for_faster_alerts_connect_ntfy_through)
             Switch(server.background, enabled = !panel.busy, onCheckedChange = { checked ->
                 if (checked) permission()
                 model.settings(server.https, checked)
             })
         }
-        Text(ui(R.string.ui_for_faster_alerts_connect_ntfy_through), color = MaterialTheme.colorScheme.onSurfaceVariant)
         Reveal(server.background) {
             if (registration.isNotEmpty()) Text(ui(R.string.ui_push_notifications_connected))
             FlowRow {
@@ -232,13 +236,17 @@ internal fun ServerMaintenance(panel: Panel, model: ManagerModel, open: (String)
         close = { restart = false }) { password -> restart = false; model.restart(password) }
     if (upgrade) PasswordDialog(ui(R.string.ui_update_vps_agent), ui(R.string.ui_settings_and_the_archive_will_stay),
         close = { upgrade = false }) { password -> upgrade = false; model.updateAgent(password) }
-    GlassSettingRow(ui(R.string.journal), ui(R.string.settings_journal_detail)) { open("journal") }
-    if (!panel.ready) return
-    if (panel.config.length() > 0 && panel.schema.length() > 0) {
-        GlassSettingRow(ui(R.string.settings_transfer), ui(R.string.settings_transfer_detail)) { open("transfer") }
-        GlassSettingRow(ui(R.string.ui_secrets), ui(R.string.ui_ai_keys_and_integration_tokens)) { open("secrets") }
-        GlassSettingRow(ui(R.string.ui_advanced_settings), ui(R.string.ui_extractors_and_display)) { open("advanced") }
+    Tile {
+        GlassSettingRow(ui(R.string.journal), ui(R.string.settings_journal_detail)) { open("journal") }
+        if (panel.ready && panel.config.length() > 0 && panel.schema.length() > 0) {
+            GlassSettingRow(ui(R.string.settings_transfer), ui(R.string.settings_transfer_detail),
+                help = R.string.setting_help_backup) { open("transfer") }
+            GlassSettingRow(ui(R.string.ui_secrets), ui(R.string.ui_ai_keys_and_integration_tokens),
+                help = R.string.setting_help_secrets) { open("secrets") }
+            GlassSettingRow(ui(R.string.ui_advanced_settings), ui(R.string.ui_extractors_and_display)) { open("advanced") }
+        }
     }
+    if (!panel.ready) return
     Tile {
         Text(ui(R.string.settings_agent_tools), style = MaterialTheme.typography.titleMedium)
         FlowRow {
@@ -263,7 +271,7 @@ internal fun TransferSettings(panel: Panel, model: ManagerModel, backup: () -> U
                               confirm: (String, () -> Unit) -> Unit) {
     val config = panel.config.optJSONObject("config") ?: return
     Tile {
-        Text(ui(R.string.ui_backup), style = MaterialTheme.typography.titleMedium)
+        SettingHeading(ui(R.string.ui_backup), R.string.setting_help_backup)
         FlowRow {
             TextButton(onClick = backup, enabled = !panel.busy) { Text(ui(R.string.ui_export_backup)) }
             TextButton(onClick = restore, enabled = !panel.busy) { Text(ui(R.string.ui_restore_backup_4afed2)) }
@@ -289,9 +297,9 @@ internal fun TransferSettings(panel: Panel, model: ManagerModel, backup: () -> U
 @Composable
 internal fun ReadingPreferences(order: NewsOrder, change: (NewsOrder) -> Unit) {
     Tile {
-        Text(ui(R.string.editorial_feed_behavior_detail), color = LocalHorizonPalette.current.muted)
         Choice(ui(R.string.ui_sort), NewsOrder.entries.map { it.name }, order.name,
-            { change(NewsOrder.valueOf(it)) }, { ui(NewsOrder.valueOf(it).label) })
+            { change(NewsOrder.valueOf(it)) }, { ui(NewsOrder.valueOf(it).label) },
+            row = true, help = R.string.setting_help_sort)
     }
 }
 
@@ -302,7 +310,7 @@ internal fun LocalReadingData(panel: Panel) {
     val count by remember(context, server.id) { ManagerDb.get(context).cache().cachedIssues(server.id) }
         .collectAsState(initial = null)
     Tile {
-        Text(ui(R.string.editorial_local_data_detail))
+        SettingHeading(ui(R.string.editorial_local_data), R.string.setting_help_offline)
         count?.let { Text(ui(R.string.editorial_cached_issues, it)) }
         Text(ui(R.string.editorial_saved_count, panel.flags.count(ArticleFlag::saved)))
         Text(ui(R.string.editorial_read_count, panel.flags.count(ArticleFlag::read)))

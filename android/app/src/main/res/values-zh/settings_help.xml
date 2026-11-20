@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="setting_help_for">关于 %1$s 的帮助</string>
+    <string name="setting_group_content">内容</string>
+    <string name="setting_group_application">应用与维护</string>
+    <string name="setting_group_reading">阅读</string>
+    <string name="setting_group_device">此设备</string>
+    <string name="setting_find_missing_covers">查找缺失的封面</string>
+    <string name="setting_help_enrichment">按需模式会在打开文章并请求时补充背景。自动模式会在生成摘要时为所选文章补充背景。选择从下次运行开始生效，包括计划任务。</string>
+    <string name="setting_help_profiles">配置档案定义提示词和评分规则。可以为来源指定档案，也可以让 Horizon 自动选择。</string>
+    <string name="setting_help_secrets">密钥或令牌以变量名保存在 VPS 上。应用只显示已保存密钥的名称，可以替换其值。</string>
+    <string name="setting_help_backup">受保护的备份包含配置、配置档案、密钥和计划。恢复时需要密码。摘要和日志单独保存。</string>
+    <string name="setting_help_sort">此顺序默认用于新闻流和归档。要调整当前视图的顺序，请使用新闻流顶部的筛选器。</string>
+    <string name="setting_help_offline">已下载的摘要和已保存的封面可离线查看。无法取得封面的文章会显示背景。</string>
+    <string name="setting_help_sources">选择来源类型以编辑其列表。应用更改后将保存到 VPS。测试来源时使用上次保存的设置。</string>
+    <string name="setting_help_collection">运行时 Horizon 收集此前指定小时内发布的文章。运行时间由计划决定。</string>
+    <string name="setting_help_issue_limit">限制筛选后每份摘要中的文章数量。未设置时仅使用分组和配置档案规则。</string>
+    <string name="setting_help_score">低于此分数的文章无法通过该筛选。</string>
+    <string name="setting_help_tokens">限制模型回复长度。值过低可能截断摘要或结构化回复。</string>
+    <string name="setting_help_concurrency">设置此阶段可以同时运行的请求数。如果提供商经常提示请求频率超限，请降低此值。</string>
+    <string name="setting_help_dedup">Horizon 可以合并关于同一事件的文章，并从摘要中移除重复内容。</string>
+    <string name="setting_help_schedule_modes">可以手动运行、在选定的星期与时间运行，或按间隔重复运行。保存的计划由 VPS 独立执行。</string>
+    <string name="setting_help_schedule_zone">计划运行时间由所选时区决定，即使手机位于其他城市。</string>
+</resources>

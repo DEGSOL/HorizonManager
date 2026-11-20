@@ -95,7 +95,7 @@ internal fun ScheduleForm(panel: Panel, model: ManagerModel, dirtyChange: (Boole
         Text(ui(R.string.schedule_vps_hint), style = MaterialTheme.typography.bodySmall, color = palette.muted)
     }
     Tile {
-        Text(ui(R.string.schedule_frequency), style = MaterialTheme.typography.titleMedium)
+        SettingHeading(ui(R.string.schedule_frequency), R.string.setting_help_schedule_modes)
         Column(Modifier.fillMaxWidth().selectableGroup()) {
             for ((value, title) in modes) {
                 Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(
@@ -143,7 +143,8 @@ internal fun ScheduleForm(panel: Panel, model: ManagerModel, dirtyChange: (Boole
                 }
                 if (days == 0) Text(ui(R.string.schedule_pick_day), color = MaterialTheme.colorScheme.error)
                 GlassSettingRow(ui(R.string.schedule_time), targetTime(hour, minute), enabled = !panel.busy) { pickTime = true }
-                GlassSettingRow(ui(R.string.ui_time_zone), zoneLabel(zone), enabled = !panel.busy) { pickZone = true }
+                GlassSettingRow(ui(R.string.ui_time_zone), zoneLabel(zone), enabled = !panel.busy,
+                    help = R.string.setting_help_schedule_zone) { pickZone = true }
             }
         }
         Reveal(changed) {

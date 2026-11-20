@@ -27,8 +27,7 @@ internal fun Sources(panel: Panel, model: ManagerModel, dirtyChange: (Boolean) -
     val types = panel.schema.optJSONArray("sources")?.strings().orEmpty()
     val sourceSchema = definition(sourceRoot, sourceRoot.getJSONObject("properties").getJSONObject("sources")).getJSONObject("properties")
     Tile {
-        Text(ui(R.string.ui_horizon_sources), style = MaterialTheme.typography.titleLarge)
-        Choice(ui(R.string.ui_integration), types, type, { type = it })
+        Choice(ui(R.string.ui_integration), types, type, { type = it }, row = true, help = R.string.setting_help_sources)
         when (type) {
             "rss" -> Text(ui(R.string.ui_add_an_rss_or_atom_url))
             "twitter" -> Text(ui(R.string.ui_apify_requires_apify_token_and_access))
@@ -204,8 +203,8 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, dirty
                 var name by remember { mutableStateOf(providerName.ifBlank { "OPENAI_API_KEY" }) }
                 var value by remember { mutableStateOf("") }
                 var remove by remember { mutableStateOf(false) }
-                Text(ui(R.string.ui_secrets_on_the_vps), style = MaterialTheme.typography.titleLarge)
-                Choice(ui(R.string.ui_known_variables), (secretNames + configured).distinct(), name, { name = it }, { it })
+                SettingHeading(ui(R.string.ui_secrets_on_the_vps), R.string.setting_help_secrets)
+                Choice(ui(R.string.ui_known_variables), (secretNames + configured).distinct(), name, { name = it }, { it }, row = true)
                 ValueField(ui(R.string.ui_variable_name), name, { name = it })
                 if (name in configured) Text(ui(R.string.ui_value_saved))
                 PasswordField(ui(R.string.ui_new_value), value) { value = it }
@@ -227,7 +226,6 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, dirty
                 val supported = AiRouter.entries.map(AiRouter::id) +
                     providers.keys().asSequence().filter { it != "openai-chatgpt" }.toList()
                 fun replace(value: JSONObject) { working = working.copyObject().put("ai", value) }
-                Text(ui(R.string.ui_ai_provider), style = MaterialTheme.typography.titleLarge)
                 Choice(ui(R.string.ui_provider), supported, provider, { change ->
                     if (change != provider) {
                         val preset = AiRouter.entries.find { it.id == change }
@@ -243,9 +241,10 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, dirty
                 }, { value ->
                     AiRouter.entries.find { it.id == value }?.title
                         ?: if (value == "openai") ui(R.string.ui_openai_compatible_api) else value
-                })
+                }, row = true)
                 if (router == null) {
-                    ValueField(ui(R.string.ui_model_id), ai.optString("model"), { replace(ai.copyObject().put("model", it)) })
+                    ValueField(ui(R.string.ui_model_id), ai.optString("model"),
+                        { replace(ai.copyObject().put("model", it)) }, help = R.string.ui_enter_the_model_id_from_your)
                     ValueField(ui(R.string.ui_compatible_api_address_optional), ai.optString("base_url").takeUnless { it == "null" }.orEmpty(), {
                         replace(ai.copyObject().put("base_url", it.ifBlank { null } ?: JSONObject.NULL))
                     })
@@ -260,7 +259,6 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, dirty
                             PasswordField(ui(R.string.ui_api_key, provider), genericKey) { genericKey = it }
                         }
                     }
-                    Text(ui(R.string.ui_enter_the_model_id_from_your))
                     val advanced = definition(schema, fields.getJSONObject("ai")).copyObject()
                     val properties = advanced.getJSONObject("properties")
                     listOf("provider", "model", "base_url", "languages").forEach { properties.remove(it) }
@@ -293,7 +291,6 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, dirty
                 val savedAi = stored.getJSONObject("ai")
                 val canTest = savedAi.optString("model").isNotBlank() && (savedAi.optString("provider") == "ollama" ||
                     savedAi.optString("api_key_env") in panel.config.optJSONArray("secrets")?.strings().orEmpty())
-                Text(ui(R.string.ui_the_reading_language_follows_android_new))
                 TextButton(onClick = { model.submit("ai") }, enabled = !panel.busy && canTest) { Text(ui(R.string.ui_test_saved_model)) }
             }
             else -> {

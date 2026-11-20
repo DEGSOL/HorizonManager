@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -172,18 +173,43 @@ internal fun Tile(modifier: Modifier = Modifier, accented: Boolean = false,
 }
 
 @Composable
-internal fun GlassSettingRow(title: String, subtitle: String, enabled: Boolean = true, open: () -> Unit) {
-    val palette=LocalHorizonPalette.current
+internal fun GlassSettingRow(title: String, subtitle: String, enabled: Boolean = true,
+                             @StringRes help: Int? = null, open: () -> Unit) {
+    val palette = LocalHorizonPalette.current
     Column {
-        Row(Modifier.fillMaxWidth().clickable(enabled=enabled,role=Role.Button,onClick=open)
-            .heightIn(min=57.dp).padding(horizontal=4.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
-            Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)) {
-                Text(title,style=MaterialTheme.typography.titleMedium,color=if(enabled) palette.text else palette.muted)
-                if(subtitle.isNotBlank()) Text(subtitle,color=palette.muted,style=MaterialTheme.typography.bodySmall)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.weight(1f).clickable(enabled = enabled, role = Role.Button, onClick = open)
+                .heightIn(min = 57.dp).padding(horizontal = 4.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(title, style = MaterialTheme.typography.titleMedium, color = if (enabled) palette.text else palette.muted)
+                    if (subtitle.isNotBlank()) Text(subtitle, color = palette.muted, style = MaterialTheme.typography.bodySmall)
+                }
+                Text("›", Modifier.padding(start = 10.dp), style = MaterialTheme.typography.titleLarge, color = palette.link)
             }
-            Text("›",Modifier.padding(start=10.dp),style=MaterialTheme.typography.titleLarge,color=palette.link)
+            if (help != null) SettingHelp(title, help)
         }
-        androidx.compose.material3.HorizontalDivider(color=palette.elevated.copy(alpha=.65f),thickness=.5.dp)
+        androidx.compose.material3.HorizontalDivider(color = palette.elevated.copy(alpha = .65f), thickness = .5.dp)
+    }
+}
+
+@Composable
+internal fun SettingHelp(title: String, @StringRes description: Int) {
+    var explaining by remember { mutableStateOf(false) }
+    GlassIconAction(ImageVector.vectorResource(R.drawable.ic_help), ui(R.string.setting_help_for, title)) { explaining = true }
+    if (explaining) HorizonAlertDialog(
+        onDismissRequest = { explaining = false },
+        title = { Text(title) },
+        text = { Text(ui(description)) },
+        confirmButton = { TextButton(onClick = { explaining = false }) { Text(ui(R.string.ui_close)) } },
+    )
+}
+
+@Composable
+internal fun SettingHeading(title: String, @StringRes help: Int) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+        SettingHelp(title, help)
     }
 }
 

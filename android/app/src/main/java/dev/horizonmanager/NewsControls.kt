@@ -5,7 +5,9 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
@@ -16,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import org.json.JSONObject
 import java.time.Instant
@@ -95,45 +98,55 @@ internal fun NewsToolbar(filters: NewsFilters, enabled: Boolean) {
     Row(horizontalArrangement=Arrangement.spacedBy(4.dp),verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.frost(CircleShape)) { GlassIconAction(Icons.Default.Search, ui(R.string.news_search), enabled, active = filters.searchOpen || filters.query.isNotBlank()) {
             filters.searchOpen = !filters.searchOpen
+            if (filters.searchOpen) filters.optionsOpen = false
         } }
         Box(Modifier.frost(CircleShape)) { GlassIconAction(ImageVector.vectorResource(R.drawable.ic_sliders), ui(R.string.editorial_filters_sort), enabled,
-            active = filters.optionsOpen || filters.profile.isNotEmpty() || filters.category.isNotEmpty() || filters.explicitOrder) {
+            active = filters.optionsOpen || filters.scope != NewsScope.All || filters.profile.isNotEmpty() ||
+                filters.category.isNotEmpty() || filters.explicitOrder) {
             filters.optionsOpen = !filters.optionsOpen
+            if (filters.optionsOpen) filters.searchOpen = false
         } }
     }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun NewsFilterOptions(filters: NewsFilters, articles: List<JSONObject>) {
+internal fun PinnedNewsControls(filters: NewsFilters, articles: List<JSONObject>, maxHeight: Dp) {
     val scopes = listOf(NewsScope.All to R.string.ui_all, NewsScope.Unread to R.string.ui_unread, NewsScope.Saved to R.string.ui_saved)
-    if (filters.optionsOpen) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        scopes.forEach { (mode, title) ->
-            FilterChip(selected = filters.scope == mode, onClick = { filters.scope = mode }, label = { Text(ui(title)) })
-        }
-    }
     Reveal(filters.searchOpen) {
-        OutlinedTextField(value = filters.query, onValueChange = { filters.query = it }, modifier = Modifier.fillMaxWidth(),
+        OutlinedTextField(value = filters.query, onValueChange = { filters.query = it },
+            modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 10.dp),
             label = { Text(ui(R.string.ui_search_downloaded_articles)) }, singleLine = true, colors = horizonFieldColors(),
             trailingIcon = if (filters.query.isEmpty()) null else ({
                 GlassIconAction(Icons.Default.Close, ui(R.string.clear_search)) { filters.query = "" }
             }))
     }
     Reveal(filters.optionsOpen) {
-        val hasScore = articles.any { it.optDouble("score").isFinite() }
-        val orders = NewsOrder.entries.filter { hasScore || it !in listOf(NewsOrder.Score, NewsOrder.ScoreLow) }
-        val effective = filters.order.takeIf { it in orders } ?: NewsOrder.Newest
-        Choice(ui(R.string.ui_sort), orders.map { it.name }, effective.name, {
-            filters.order = NewsOrder.valueOf(it)
-            filters.explicitOrder = true
-        }, { ui(NewsOrder.valueOf(it).label) })
-        for ((field, current, change) in listOf(
-            Triple("category", filters.category, { it: String -> filters.category = it }),
-            Triple("profile", filters.profile, { it: String -> filters.profile = it }),
-        )) {
-            val values = articles.map { articleField(it, field) }.filter(String::isNotBlank).distinct().sorted()
-            if (values.isNotEmpty() || current.isNotEmpty()) Choice(label(field), (listOf("") + values + current).distinct(),
-                current, change, { it.ifBlank { ui(R.string.ui_all) } })
+        Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
+            .glassPanel(MaterialTheme.shapes.large, raised = true)
+            .heightIn(max = maxHeight).verticalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                scopes.forEach { (mode, title) ->
+                    FilterChip(selected = filters.scope == mode, onClick = { filters.scope = mode }, label = { Text(ui(title)) })
+                }
+            }
+            val hasScore = remember(articles) { articles.any { it.optDouble("score").isFinite() } }
+            val orders = NewsOrder.entries.filter { hasScore || it !in listOf(NewsOrder.Score, NewsOrder.ScoreLow) }
+            val effective = filters.order.takeIf { it in orders } ?: NewsOrder.Newest
+            Choice(ui(R.string.ui_sort), orders.map { it.name }, effective.name, {
+                filters.order = NewsOrder.valueOf(it)
+                filters.explicitOrder = true
+            }, { ui(NewsOrder.valueOf(it).label) }, row = true)
+            for ((field, current, change) in listOf(
+                Triple("category", filters.category, { it: String -> filters.category = it }),
+                Triple("profile", filters.profile, { it: String -> filters.profile = it }),
+            )) {
+                val values = remember(articles, field) {
+                    articles.map { articleField(it, field) }.filter(String::isNotBlank).distinct().sorted()
+                }
+                if (values.isNotEmpty() || current.isNotEmpty()) Choice(label(field), (listOf("") + values + current).distinct(),
+                    current, change, { it.ifBlank { ui(R.string.ui_all) } }, row = true)
+            }
         }
     }
 }

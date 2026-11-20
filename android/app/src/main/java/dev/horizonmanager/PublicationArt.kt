@@ -3,6 +3,9 @@ package dev.horizonmanager
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.Build
+import android.os.SystemClock
+import android.util.AtomicFile
 import android.util.LruCache
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
@@ -23,7 +26,9 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.Cache
@@ -57,7 +62,11 @@ internal fun publicPhotoAddress(address: InetAddress): Boolean {
 
 internal data class Cover(val image: ImageBitmap, val soft: ImageBitmap, val brightness: Float)
 
-private class ArtworkCache(context: Context) {
+internal fun artworkKey(server: String, article: JSONObject) =
+    contextHash(server + "\u0000" + articleField(article, "id").ifBlank { articleField(article, "url") })
+
+internal class ArtworkCache(context: Context) {
+    private val storage = File(context.noBackupFilesDir, "mrizon-covers")
     private val http =
         OkHttpClient.Builder()
             .proxy(java.net.Proxy.NO_PROXY)
@@ -82,11 +91,16 @@ private class ArtworkCache(context: Context) {
             .build()
     private val lookup = context.getSharedPreferences("mrizon-media-links", Context.MODE_PRIVATE)
     private val memory =
-        object : LruCache<String, Cover>(20 * 1024) {
+        object : LruCache<String, Cover>(32 * 1024) {
             override fun sizeOf(key: String, value: Cover) =
-                max(1, value.image.width * value.image.height / 256)
+                max(1, (value.image.asAndroidBitmap().allocationByteCount +
+                    value.soft.asAndroidBitmap().allocationByteCount) / 1024)
         }
+    private val recentMisses = LruCache<String, Long>(2048)
+    private val locks = Array(32) { Mutex() }
     private val slots = Semaphore(3)
+
+    fun peek(id: String): Cover? = memory.get(id)
 
     private data class MediaResponse(val bytes: ByteArray, val url: String)
 
@@ -191,35 +205,78 @@ private class ArtworkCache(context: Context) {
         return cover
     }
 
-    suspend fun load(article: JSONObject, relay: (suspend () -> ByteArray?)?): Cover? =
-        withContext(Dispatchers.IO) {
-            val page = articleField(article, "url")
-            val media = article.optJSONObject("media")
-            val provided = media?.optString("url").orEmpty()
-            val id = page + "|" + provided.ifBlank { article.optString("id") }
-            memory.get(id)?.let {
-                return@withContext it
+    private fun readCover(file: AtomicFile): Cover? = try {
+        file.openRead().use { input ->
+            val bytes = input.readNBytesCompat(MAX_IMAGE_BYTES + 1)
+            if (bytes.size <= MAX_IMAGE_BYTES) decodeCover(bytes) else null
+        }.also { if (it == null) file.delete() }
+    } catch (_: java.io.IOException) {
+        null
+    }
+
+    private fun storeCover(file: AtomicFile, cover: Cover) {
+        try {
+            val output = file.startWrite()
+            try {
+                @Suppress("DEPRECATION")
+                val format = if (Build.VERSION.SDK_INT >= 30) Bitmap.CompressFormat.WEBP_LOSSY else Bitmap.CompressFormat.WEBP
+                if (cover.image.asAndroidBitmap().compress(format, 88, output)) file.finishWrite(output)
+                else file.failWrite(output)
+            } catch (error: java.io.IOException) {
+                file.failWrite(output)
             }
-            slots.withPermit {
-                memory.get(id)?.let {
-                    return@withPermit it
-                }
-                try {
+        } catch (_: java.io.IOException) {
+            // A full disk must not prevent the current image from being shown.
+        }
+    }
+
+    private fun java.io.InputStream.readNBytesCompat(limit: Int): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        val buffer = ByteArray(8192)
+        while (out.size() < limit) {
+            val count = read(buffer, 0, minOf(buffer.size, limit - out.size()))
+            if (count < 0) break
+            out.write(buffer, 0, count)
+        }
+        return out.toByteArray()
+    }
+
+    suspend fun load(id: String, article: JSONObject, relay: (suspend () -> ByteArray?)?, prefetch: Boolean = false): Cover? =
+        withContext(Dispatchers.IO) {
+            peek(id)?.let { return@withContext it }
+            val file = AtomicFile(File(storage, "$id.webp"))
+            locks[Math.floorMod(id.hashCode(), locks.size)].withLock {
+                peek(id)?.let { return@withLock it }
+                if (prefetch && file.baseFile.isFile) return@withLock null
+                readCover(file)?.let { return@withLock it.also { cover -> memory.put(id, cover) } }
+                val page = articleField(article, "url")
+                val provided = article.optJSONObject("media")?.let { articleField(it, "url") }.orEmpty()
+                val miss = id + "|" + provided + "|" + (relay != null)
+                if (SystemClock.elapsedRealtime() < (recentMisses.get(miss) ?: 0L)) return@withLock null
+                slots.withPermit {
                     val telegram = articleField(article, "telegram_url")
-                    val cover = relay?.invoke()?.let(::decodeCover)
-                        ?: loadCover(provided)
-                        ?: fallback(telegram, provided)
-                        ?: if (page != telegram) fallback(page, provided) else null
-                    cover?.also { memory.put(id, it) }
-                } catch (_: java.io.IOException) {
-                    null
-                } catch (_: IllegalArgumentException) {
-                    null
+                    val cover = try {
+                        relay?.invoke()?.takeIf { it.size <= MAX_IMAGE_BYTES }?.let(::decodeCover)
+                            ?: loadCover(provided)
+                            ?: fallback(telegram, provided)
+                            ?: if (page != telegram) fallback(page, provided) else null
+                    } catch (_: java.io.IOException) {
+                        null
+                    } catch (_: IllegalArgumentException) {
+                        null
+                    }
+                    if (cover == null) recentMisses.put(miss, SystemClock.elapsedRealtime() + 120_000)
+                    else {
+                        storeCover(file, cover)
+                        if (!prefetch) memory.put(id, cover)
+                    }
+                    cover
                 }
             }
         }
 
     companion object {
+        private const val MAX_IMAGE_BYTES = 5_000_000
         @Volatile private var instance: ArtworkCache? = null
 
         fun get(context: Context) =
@@ -279,13 +336,15 @@ internal fun decodeCover(bytes: ByteArray): Cover? {
 }
 
 @Composable
-internal fun artwork(article: JSONObject, relay: (suspend () -> ByteArray?)? = null): Cover? {
+internal fun artwork(server: String, article: JSONObject, relay: (suspend () -> ByteArray?)? = null): Cover? {
     val context = LocalContext.current
-    val key = article.optString("id") + article.optString("url") + article.optString("media") +
-        article.optString("telegram_url")
-    return produceState<Cover?>(null, key, relay != null) {
-        value = ArtworkCache.get(context).load(article, relay)
-    }.value
+    val cache = remember(context.applicationContext) { ArtworkCache.get(context) }
+    val id = remember(server, article.optString("id"), article.optString("url")) { artworkKey(server, article) }
+    return key(id) {
+        produceState(cache.peek(id), article.optJSONObject("media")?.optString("url"), relay != null) {
+            value = cache.load(id, article, relay)
+        }.value
+    }
 }
 
 private fun DrawScope.crop(image: ImageBitmap) {

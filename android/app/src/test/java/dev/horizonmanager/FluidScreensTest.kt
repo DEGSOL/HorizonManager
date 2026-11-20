@@ -103,11 +103,7 @@ class FluidScreensTest {
                 .put("created", date)
                 .put("languages", JSONArray(listOf("ru")))
         val clazz = Class.forName("dev.horizonmanager.ArtworkCache")
-        val ctor =
-            clazz.getDeclaredConstructor(android.content.Context::class.java).apply {
-                isAccessible = true
-            }
-        val cache = ctor.newInstance(compose.activity)
+        val cache = ArtworkCache(compose.activity)
         clazz.getDeclaredField("instance").apply { isAccessible = true }.set(null, cache)
         val memory =
             clazz.getDeclaredField("memory").apply { isAccessible = true }.get(cache)
@@ -119,14 +115,14 @@ class FluidScreensTest {
                 val slug = if (k == 0) "iss040e033340" else photos[k]
                 val page = "https://images.nasa.gov/details/" + slug
                 val img = "https://images-assets.nasa.gov/image/" + slug + "/" + slug + "~small.jpg"
-                memory.put(page + "|" + img, pictures[k])
                 JSONObject()
                     .put("id", "n" + n)
                     .put("title", if (n < 4) headlines[k] else headlines[k] + " · " + (n + 1))
-                    .put("url", page)
+                    .put("url", if (n < 6) page else "")
                     .put("time", date)
                     .put("score", 8)
-                    .put("source", "NASA")
+                    .put("source", if (n < 6) "telegram" else "NASA")
+                    .put("telegram_channel", if (n < 6) "nasa_fixture" else "")
                     .put("category", "Космос")
                     .put(
                         "body",
@@ -135,8 +131,9 @@ class FluidScreensTest {
                     .put("body_is_plain", true)
                     .put(
                         "media",
-                        JSONObject().put("kind", "original").put("source", page).put("url", img),
+                        if (n < 6) JSONObject().put("kind", "original").put("source", page).put("url", img) else JSONObject(),
                     )
+                    .also { if (n < 6) memory.put(artworkKey(server.id, it), pictures[k]) }
             }
         val cacheDao = ManagerDb.get(compose.activity).cache()
         runBlocking(Dispatchers.IO) {
@@ -176,6 +173,54 @@ class FluidScreensTest {
         }
         compose.waitForIdle()
         return ui(R.string.feed) + " " + shortDigestDate(date)
+    }
+
+    @Test
+    fun prefetchedCoverSurvivesMemoryCacheAndNetworkLoss() = runBlocking {
+        val article = JSONObject().put("id", java.util.UUID.randomUUID().toString())
+        val key = artworkKey("test", article)
+        val first = ArtworkCache(compose.activity)
+        var calls = 0
+        assertNotNull(first.load(key, article, { calls++; bytes("earth.jpg") }, prefetch = true))
+        assertNull(first.peek(key))
+        val fresh = ArtworkCache(compose.activity)
+        article.put("media", JSONObject().put("url", "https://example.invalid/new-cover"))
+        assertEquals(key, artworkKey("test", article))
+        assertNotNull(fresh.load(key, article, { calls++; null }))
+        assertNotNull(fresh.peek(key))
+        assertEquals(1, calls)
+    }
+
+    @Test
+    fun searchAndFiltersStayUnderHeaderAndSettingsExplainParameters() {
+        val heading = loadIssue()
+        compose.onAllNodesWithText("Telegram").onFirst().assertIsDisplayed()
+        val list = compose.onNode(hasScrollToIndexAction())
+        list.performScrollToIndex(25)
+        tab(R.string.news_search)
+        val search = text(R.string.ui_search_downloaded_articles)
+        search.assertIsDisplayed()
+        val searchPosition = search.getUnclippedBoundsInRoot().top
+        list.performScrollToIndex(45)
+        search.assertIsDisplayed()
+        assertEquals(searchPosition, search.getUnclippedBoundsInRoot().top)
+        compose.onNodeWithText(heading).assertIsDisplayed()
+        tab(R.string.editorial_filters_sort)
+        search.assertDoesNotExist()
+        val sort = text(R.string.ui_sort)
+        sort.assertIsDisplayed()
+        val sortPosition = sort.getUnclippedBoundsInRoot().top
+        list.performScrollToIndex(65)
+        assertEquals(sortPosition, sort.getUnclippedBoundsInRoot().top)
+        snapshot("09-pinned-filters")
+        back()
+        list.performTouchInput { swipeDown() }
+        tab(R.string.settings)
+        text(R.string.editorial_ai_processing).performClick()
+        compose.onNodeWithContentDescription(ui(R.string.setting_help_for, ui(R.string.digest_output_language))).performClick()
+        text(R.string.digest_language_detail).assertIsDisplayed()
+        text(R.string.ui_close).performClick()
+        text(R.string.digest_language_detail).assertDoesNotExist()
     }
 
     @Test

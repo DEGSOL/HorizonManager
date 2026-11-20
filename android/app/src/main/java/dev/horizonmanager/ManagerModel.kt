@@ -9,6 +9,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -82,6 +84,20 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
 
     init {
         viewModelScope.launch {
+            state.distinctUntilChangedBy {
+                Triple(it.server?.id to it.selectedRun, canPrefetchArtwork(it), it.articles)
+            }.collectLatest { panel ->
+                val server = panel.server ?: return@collectLatest
+                if (!canPrefetchArtwork(panel)) return@collectLatest
+                val artwork = ArtworkCache.get(app)
+                for (article in panel.articles) {
+                    if (article.optJSONObject("media")?.let { articleField(it, "url").isNotBlank() } != true) continue
+                    val id = articleField(article, "id")
+                    artwork.load(artworkKey(server.id, article), article, coverRelay(panel, id), prefetch = true)
+                }
+            }
+        }
+        viewModelScope.launch {
             try {
                 val servers = withContext(Dispatchers.IO) {
                     vault.load().also(vault::removeLegacyRouterKeys)
@@ -96,6 +112,9 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             }
         }
     }
+
+    private fun canPrefetchArtwork(panel: Panel): Boolean =
+        panel.ready && panel.status.length() > 0 && panel.connectionProblem.isBlank()
 
     private fun record(error: Throwable, server: Server?, announce: Boolean = true) {
         val problem = when (error) {

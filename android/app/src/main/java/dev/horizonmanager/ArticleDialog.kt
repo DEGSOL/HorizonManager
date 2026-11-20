@@ -38,6 +38,7 @@ internal fun ArticleDialog(
     flag: ArticleFlag?,
     onSave: () -> Unit,
     onRead: () -> Unit,
+    artworkServer: String,
     relay: (suspend () -> ByteArray?)? = null,
     contextContent: @Composable () -> Unit,
     close: () -> Unit,
@@ -54,7 +55,7 @@ internal fun ArticleDialog(
             .joinToString("\n\n")
 
     BackHandler { close() }
-    val cover = artwork(article, relay)
+    val cover = artwork(artworkServer, article, relay)
     var titleHeight by remember { mutableFloatStateOf(0f) }
     Box(
         Modifier.fillMaxSize()

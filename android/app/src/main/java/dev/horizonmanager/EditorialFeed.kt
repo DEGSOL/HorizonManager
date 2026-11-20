@@ -167,9 +167,11 @@ internal fun NewsScreen(
             .windowInsetsPadding(
                 WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
             )
+            .imePadding()
     ) {
         val fontScale = androidx.compose.ui.platform.LocalDensity.current.fontScale
         val columns = if (maxWidth / fontScale < 295.dp) 1 else 2
+        val controlsHeight = maxHeight * .45f
         Column(
             Modifier.fillMaxSize()
                 .then(
@@ -209,6 +211,9 @@ internal fun NewsScreen(
                 )
                 if (!bubble && !full) NewsToolbar(filters, loaded)
             }
+            if (!bubble && !full && loaded) {
+                PinnedNewsControls(filters, panel.articles, controlsHeight)
+            }
             Box(Modifier.fillMaxSize()) {
                 Box(
                     Modifier.fillMaxSize()
@@ -246,10 +251,6 @@ internal fun NewsScreen(
                             verticalItemSpacing = 9.dp,
                             horizontalArrangement = Arrangement.spacedBy(9.dp),
                         ) {
-                            if (filters.searchOpen || filters.optionsOpen)
-                                item("filters", span = StaggeredGridItemSpan.FullLine) {
-                                    Column { NewsFilterOptions(filters, panel.articles) }
-                                }
                             if (preparing || panel.syncing && !loaded)
                                 item("progress", span = StaggeredGridItemSpan.FullLine) {
                                     Column {
@@ -292,6 +293,7 @@ internal fun NewsScreen(
                                         item,
                                         flag,
                                         Modifier.semantics { traversalIndex = index.toFloat() },
+                                        artworkServer = panel.server?.id.orEmpty(),
                                         relay = model.coverRelay(panel, id),
                                         open = {
                                             openId = id
@@ -381,6 +383,7 @@ internal fun NewsScreen(
                 ArticleDialog(
                     selected, flag, { model.flag(id, save = flag?.saved != true) },
                     { model.flag(id, read = flag?.read != true) },
+                    artworkServer = serverId,
                     relay = model.coverRelay(panel, id),
                     contextContent = {
                         key(serverId, run, language, id) {
@@ -533,13 +536,14 @@ internal fun PublicationTile(
     article: JSONObject,
     flag: ArticleFlag?,
     modifier: Modifier,
+    artworkServer: String,
     relay: (suspend () -> ByteArray?)? = null,
     open: () -> Unit,
     save: () -> Unit,
 ) {
     val p = LocalHorizonPalette.current
     val key = article.optString("id")
-    val cover = artwork(article, relay)
+    val cover = artwork(artworkServer, article, relay)
     var height by remember { mutableFloatStateOf(0f) }
     val shape = androidx.compose.foundation.shape.RoundedCornerShape(19.dp)
     Box(modifier.fillMaxWidth().clip(shape).clickable(role = Role.Button, onClick = open)) {
@@ -548,6 +552,7 @@ internal fun PublicationTile(
             Row(
                 Modifier.fillMaxWidth().padding(start = 9.dp, end = 1.dp),
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 val category = if (isTelegram(article)) "Telegram"
                     else articleField(article, "category").ifBlank { articleField(article, "source") }
@@ -562,10 +567,11 @@ internal fun PublicationTile(
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                         color = Color.White,
                         style = MaterialTheme.typography.labelMedium,
-                        maxLines = 2,
+                        maxLines = 1,
+                        softWrap = false,
                         overflow = TextOverflow.Ellipsis,
                     )
-                Spacer(Modifier.weight(1f))
+                else Spacer(Modifier.weight(1f))
                 val haptic = LocalHapticFeedback.current
                 GlassIconAction(
                     if (flag?.saved == true) Icons.Default.Star

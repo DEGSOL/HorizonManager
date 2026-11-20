@@ -124,11 +124,18 @@ internal fun sample(root: JSONObject, raw: JSONObject, required: Boolean = false
 internal fun Choice(
     title: String, entries: List<String>, current: String, change: (String) -> Unit,
     labelOf: (String) -> String = ::label, enabled: Boolean = true,
+    row: Boolean = false,
+    help: Int? = null,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val selected = if (current.isBlank() && "" !in entries) ui(R.string.ui_select) else labelOf(current)
     Column {
-        Text(title, style = MaterialTheme.typography.labelMedium)
-        TextButton(onClick = { expanded = true }, enabled = enabled) { Text(labelOf(current.ifBlank { ui(R.string.ui_select) })) }
+        if (row) GlassSettingRow(title, selected, enabled = enabled, help = help) { expanded = true }
+        else {
+            if (help == null) Text(title, style = MaterialTheme.typography.labelMedium)
+            else SettingHeading(title, help)
+            TextButton(onClick = { expanded = true }, enabled = enabled) { Text(selected) }
+        }
         DropdownMenu(expanded = expanded && enabled, onDismissRequest = { expanded = false }) {
             entries.forEach { value ->
                 DropdownMenuItem(text = { Text(labelOf(value)) }, onClick = { change(value); expanded = false })
@@ -138,9 +145,11 @@ internal fun Choice(
 }
 
 @Composable
-internal fun ValueField(title: String, text: String, set: (String) -> Unit, numeric: Boolean = false, multiline: Boolean = false) {
+internal fun ValueField(title: String, text: String, set: (String) -> Unit, numeric: Boolean = false,
+                        multiline: Boolean = false, help: Int? = null) {
     OutlinedTextField(value = text, onValueChange = set, label = { Text(title) },
         modifier = Modifier.fillMaxWidth(), singleLine = !multiline, colors = horizonFieldColors(),
+        trailingIcon = if (help != null) ({ SettingHelp(title, help) }) else null,
         minLines = if (multiline) 3 else 1, maxLines = if (multiline) 10 else 1,
         keyboardOptions = KeyboardOptions(keyboardType = if (numeric) KeyboardType.Decimal else KeyboardType.Text))
 }
@@ -166,9 +175,22 @@ internal fun EditValue(
     } else if (!schema.has("type") && !schema.has("enum")) inferred(value) else schema
     val type = typed.optString("type")
     val current = validValue(value)
+    val help = when (field) {
+        "time_window_hours" -> R.string.setting_help_collection
+        "max_items" -> R.string.setting_help_issue_limit
+        "min_score", "threshold" -> R.string.setting_help_score
+        "max_tokens" -> R.string.setting_help_tokens
+        "analysis_concurrency", "enrichment_concurrency" -> R.string.setting_help_concurrency
+        "topic_dedup" -> R.string.setting_help_dedup
+        "api_key_env" -> R.string.setting_help_secrets
+        else -> null
+    }
     Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
         if (current == null) {
-            TextButton(onClick = { onChange(sample(root, typed, true)) }) { Text(ui(R.string.ui_set, title)) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { onChange(sample(root, typed, true)) }) { Text(ui(R.string.ui_set, title)) }
+                if (help != null) SettingHelp(title, help)
+            }
         } else {
             if (variants.size > 1) {
                 Choice(ui(R.string.ui_format, title), variants.map { it.optString("type") }, type,
@@ -192,10 +214,11 @@ internal fun EditValue(
                 else -> typed.optJSONArray("enum")?.strings().orEmpty()
             }
             when {
-                direct.isNotEmpty() -> Choice(title, direct, current.toString(), { onChange(it) })
+                direct.isNotEmpty() -> Choice(title, direct, current.toString(), { onChange(it) }, row = true, help = help)
                 typed.has("const") -> Text("$title · ${typed.get("const")}", style = MaterialTheme.typography.labelMedium)
                 type == "boolean" -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Text(title, modifier = Modifier.weight(1f))
+                    if (help != null) SettingHelp(title, help)
                     Switch(checked = current == true, onCheckedChange = { onChange(it) })
                 }
                 type == "object" -> {
@@ -269,10 +292,10 @@ internal fun EditValue(
                         text = next
                         if (type == "integer") next.toLongOrNull()?.let(onChange)
                         else next.replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() }?.let(onChange)
-                    }, numeric = true)
+                    }, numeric = true, help = help)
                 }
                 else -> ValueField(title, current.toString(), onChange,
-                    multiline = field.endsWith("_prompt") || field in listOf("headers", "request_body"))
+                    multiline = field.endsWith("_prompt") || field in listOf("headers", "request_body"), help = help)
             }
             if (schema.optJSONArray("anyOf")?.objects()?.any { it.optString("type") == "null" } == true) {
                 TextButton(onClick = { onChange(JSONObject.NULL) }) { Text(ui(R.string.ui_reset, title)) }
