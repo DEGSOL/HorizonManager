@@ -2,7 +2,7 @@
 <resources>
     <string name="schedule_next">Следующий запуск</string>
     <string name="schedule_manual">Только вручную</string>
-    <string name="schedule_vps_hint">VPS запускает дайджест по расписанию, даже если MRizon закрыт.</string>
+    <string name="schedule_vps_hint">VPS запускает дайджест по расписанию, даже если Hovq закрыт.</string>
     <string name="schedule_unavailable">Расписание недоступно</string>
     <string name="schedule_frequency">Когда собирать дайджест</string>
     <string name="schedule_hours">%1$d ч</string>

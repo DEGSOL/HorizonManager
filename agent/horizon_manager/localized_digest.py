@@ -13,7 +13,20 @@ from src.mcp.horizon_adapter import dicts_to_items, items_to_dicts
 from src.models import ContentArtifact, ContentBlock
 from src.processing.content import split_content
 
-LANGUAGE_NAMES = {"en": "English", "zh": "Simplified Chinese", "ru": "Russian"}
+LANGUAGE_NAMES = {
+    "en": "English", "ru": "Russian", "de": "German", "fr": "French", "it": "Italian",
+    "es": "Spanish", "ja": "Japanese", "ko": "Korean", "zh": "Simplified Chinese",
+    "kk": "Kazakh (Cyrillic)", "tt": "Tatar (Cyrillic)",
+}
+SCRIPT_PATTERNS = {
+    "en": r"[A-Za-z]", "ru": r"[А-Яа-яЁё]",
+    "zh": r"[\u3400-\u9fff]", "ja": r"[\u3040-\u30ff\u3400-\u9fff]",
+    "ko": r"[\u1100-\u11ff\u3130-\u318f\uac00-\ud7af]",
+    "kk": r"[А-Яа-яЁёӘәҒғҚқҢңӨөҰұҮүҺһІі]",
+    "tt": r"[А-Яа-яЁёӘәҖҗҢңӨөҮүҺһ]",
+}
+NATIVE_PATTERNS = {"ru": SCRIPT_PATTERNS["ru"], "zh": SCRIPT_PATTERNS["zh"],
+                   "ja": r"[\u3040-\u30ff]", "ko": SCRIPT_PATTERNS["ko"]}
 TRANSLATION_UNAVAILABLE = {
     "en": ("Translation unavailable", "Read this article at its original source."),
     "zh": ("暂时无法翻译", "请打开原始来源阅读这篇文章。"),
@@ -31,18 +44,48 @@ LABELS["ru"] = {
     "empty_analyzed": "Проверено материалов: {total}. Ничего не прошло порог значимости.",
     "empty_body": "В этом выпуске нет материалов, прошедших фильтры Horizon.",
 }
-RU_PROFILES = {
-    "tech-news": "Технологические новости",
-    "tech-blog": "Технические статьи",
-    "finance-news": "Финансовые новости",
-    "ai-creator": "Творчество и ИИ",
+# These are fixed interface labels, never sent to the translation provider.
+EXTRA_LABELS = {
+    "de": ("Tagesdigest von Horizon", "Originalquelle", "Quellen", "Gesammelt: {total}. In dieser Ausgabe: {selected}.",
+           "Geprüft: {total}. Kein Beitrag hat den Mindestwert erreicht.", "Kein Beitrag hat den Filter passiert."),
+    "fr": ("Revue du jour Horizon", "Source originale", "Références", "Articles collectés : {total}. Dans cette édition : {selected}.",
+           "Articles évalués : {total}. Aucun n’a atteint le seuil.", "Aucun article ne répond aux critères."),
+    "it": ("Rassegna quotidiana di Horizon", "Fonte originale", "Riferimenti", "Raccolti: {total}. In questa edizione: {selected}.",
+           "Valutati: {total}. Nessun articolo ha raggiunto la soglia.", "Nessun articolo soddisfa i filtri."),
+    "es": ("Resumen diario de Horizon", "Fuente original", "Referencias", "Recopilados: {total}. En esta edición: {selected}.",
+           "Evaluados: {total}. Ningún artículo alcanzó el umbral.", "Ningún artículo cumple los filtros."),
+    "ja": ("Horizon 日刊ダイジェスト", "元記事", "参考資料", "収集：{total} 件。掲載：{selected} 件。",
+           "評価：{total} 件。基準を満たした記事はありません。", "条件を満たす記事はありません。"),
+    "ko": ("Horizon 일일 다이제스트", "원문", "참고 자료", "수집 {total}건 · 이번 호 {selected}건",
+           "평가 {total}건. 기준 점수에 도달한 기사가 없습니다.", "조건을 충족하는 기사가 없습니다."),
+    "kk": ("Horizon күнделікті дайджесі", "Түпнұсқа дереккөз", "Сілтемелер", "Жиналды: {total}. Шығарылымда: {selected}.",
+           "Бағаланды: {total}. Ешбір материал шекті балға жетпеді.", "Сүзгіден өткен материал жоқ."),
+    "tt": ("Horizon көндәлек дайджесты", "Төп чыганак", "Сылтамалар", "Җыелды: {total}. Чыгарылышта: {selected}.",
+           "Бәяләнде: {total}. Бер язма да кирәкле балл җыймады.", "Сөзгеч аша үткән язмалар юк."),
 }
+LABEL_NAMES = ("header", "source", "references", "selected_items", "empty_analyzed", "empty_body")
+for code, labels in EXTRA_LABELS.items():
+    LABELS[code] = dict(zip(LABEL_NAMES, labels))
+
+PROFILE_NAMES = {
+    "ru": ("Технологические новости", "Технические статьи", "Финансовые новости", "Творчество и ИИ"),
+    "de": ("Techniknachrichten", "Fachartikel", "Finanznachrichten", "Kreativität und KI"),
+    "fr": ("Actualité technologique", "Articles techniques", "Actualité financière", "Création et IA"),
+    "it": ("Notizie di tecnologia", "Articoli tecnici", "Notizie finanziarie", "Creatività e IA"),
+    "es": ("Noticias tecnológicas", "Artículos técnicos", "Noticias financieras", "Creatividad e IA"),
+    "ja": ("テクノロジーニュース", "技術記事", "金融ニュース", "クリエイティブと AI"),
+    "ko": ("기술 뉴스", "기술 기사", "금융 뉴스", "창작과 AI"),
+    "kk": ("Технология жаңалықтары", "Техникалық мақалалар", "Қаржы жаңалықтары", "Шығармашылық және ЖИ"),
+    "tt": ("Технология яңалыклары", "Техник мәкаләләр", "Финанс яңалыклары", "Иҗат һәм ЯИ"),
+}
+BUILTIN_PROFILE_IDS = ("tech-news", "tech-blog", "finance-news", "ai-creator")
 
 
 class LocalizedSummarizer(DailySummarizer):
     def profile_name(self, profile_id, language):
-        if language == "ru" and "ru" not in self.profile_names.get(profile_id, {}):
-            return RU_PROFILES.get(profile_id, "Профиль " + profile_id)
+        if language in PROFILE_NAMES and profile_id in BUILTIN_PROFILE_IDS:
+            custom_name = self.profile_names.get(profile_id, {}).get(language)
+            return custom_name or PROFILE_NAMES[language][BUILTIN_PROFILE_IDS.index(profile_id)]
         return super().profile_name(profile_id, language)
 
     def _format_item(self, item, labels, language, index, *, heading_level=2,
@@ -91,21 +134,29 @@ def _has_expected_script(title, body, language):
     letters = "".join(c for c in title + body if c.isalpha())
     if len(letters) < 12:
         return True  # A short headline may intentionally consist of names and acronyms.
-    pattern = {"en": r"[A-Za-z]", "ru": r"[А-Яа-яЁё]", "zh": r"[\u3400-\u9fff]"}[language]
-    return len(re.findall(pattern, letters)) * 2 >= len(letters)
+    pattern = SCRIPT_PATTERNS.get(language)
+    return pattern is None or len(re.findall(pattern, letters)) * 2 >= len(letters)
 
 
 def is_legacy_placeholder(artifact, language):
-    title, body = TRANSLATION_UNAVAILABLE[language]
-    return bool(artifact and artifact.get("title") == title and any(
+    placeholder = TRANSLATION_UNAVAILABLE.get(language)
+    if not placeholder or not artifact:
+        return False
+    title, body = placeholder
+    return artifact.get("title") == title and any(
         block.get("primary") and block.get("content") == body for block in artifact.get("blocks", [])
-    ))
+    )
 
 
 def _native_text(text, language):
-    pattern = {"ru": r"[А-Яа-яЁё]", "zh": r"[\u3400-\u9fff]"}.get(language)
+    pattern = NATIVE_PATTERNS.get(language)
+    if language == "zh" and re.search(NATIVE_PATTERNS["ja"], text):
+        return False
+    if language == "ru" and re.search(r"[ӘәҒғҚқҢңӨөҰұҮүҺһІіҖҗ]", text):
+        return False
     return bool(pattern and len(re.findall(pattern, text)) >= 4
                 and _has_expected_script("", text, language))
+
 
 
 def source_artifact(item, language):

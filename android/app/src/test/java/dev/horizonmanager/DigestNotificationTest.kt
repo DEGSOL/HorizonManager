@@ -23,7 +23,11 @@ class DigestNotificationTest {
     @Test
     fun digestTracksAndroidLanguageAndOnlyOlderAgentsNeedAnUpdate() {
         assertEquals("ru", digestLocale(Locale.forLanguageTag("ru-RU")))
-        assertEquals("zh", digestLocale(Locale.forLanguageTag("zh-Hant-TW")))
+        for (language in digestLanguages) assertEquals(language, digestLocale(Locale.forLanguageTag(language)))
+        assertEquals("zh", digestLocale(Locale.forLanguageTag("zh-Hans-CN")))
+        assertEquals("en", digestLocale(Locale.forLanguageTag("zh-Hant-TW")))
+        assertEquals("de", digestLocale(Locale.forLanguageTag("de-AT")))
+        assertEquals("en", appLocale(Locale.forLanguageTag("nl-NL")).language)
         assertEquals("en", digestLocale(Locale.forLanguageTag("nl-NL")))
         assertTrue(agentUpdateAvailable("0.1.0"))
         assertTrue(agentUpdateAvailable("0.1.3"))
@@ -31,7 +35,8 @@ class DigestNotificationTest {
         assertTrue(agentUpdateAvailable("0.1.5"))
         assertTrue(agentUpdateAvailable("0.1.6"))
         assertTrue(agentUpdateAvailable("0.1.7"))
-        assertFalse(agentUpdateAvailable("0.1.8"))
+        assertTrue(agentUpdateAvailable("0.1.8"))
+        assertFalse(agentUpdateAvailable("0.1.9"))
         assertFalse(agentUpdateAvailable("0.1.10"))
     }
 }

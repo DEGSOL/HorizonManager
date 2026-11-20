@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="hovq_settings_saved">설정이 저장되었습니다</string>
+    <string name="hovq_icon">앱 아이콘</string>
+    <string name="hovq_icon_detail">Android 홈 화면에 표시할 Hovq 아이콘을 선택하세요.</string>
+    <string name="hovq_icon_light">밝게</string>
+    <string name="hovq_icon_dark">어둡게</string>
+    <string name="hovq_icon_error">Android에서 아이콘을 변경하지 못했습니다.</string>
+    <string name="hovq_language_upgrade">VPS 에이전트를 업데이트하면 11개 다이제스트 언어를 모두 사용할 수 있습니다.</string>
+    <string name="hovq_vps_backup">VPS의 Horizon</string>
+    <string name="hovq_vps_backup_detail">소스, 프로필, AI 설정, 키, 일정, 다이제스트 옵션을 암호화된 파일 하나에 저장합니다.</string>
+    <string name="hovq_backup_connect_first">설정을 이전하려면 Horizon에 연결하세요.</string>
+    <string name="hovq_device_backup">이 기기의 Hovq</string>
+    <string name="hovq_device_backup_detail">VPS 연결 및 인증 정보, 알림 환경설정, 테마, 정렬, 아이콘을 암호화된 파일 하나에 저장합니다.</string>
+    <string name="hovq_transfer_detail">암호화된 파일로 Horizon 또는 Hovq 설정을 이전합니다.</string>
+    <string name="hovq_export">내보내기</string>
+    <string name="hovq_import">가져오기</string>
+    <string name="hovq_device_restore_password">Hovq 백업 비밀번호를 입력하세요. 일치하는 연결은 업데이트되며, 다른 연결은 유지됩니다.</string>
+    <string name="hovq_vps_restore_password">Horizon 백업 비밀번호를 입력하세요. 가져오면 활성 VPS의 설정과 일정이 교체됩니다.</string>
+    <string name="hovq_digest_channel">새 다이제스트</string>
+    <string name="hovq_digest_channel_detail">Horizon이 새 다이제스트를 완성하면 알림을 보냅니다.</string>
+    <string name="hovq_push_active">푸시 알림이 활성화되었습니다. Hovq가 간헐적으로 VPS를 확인합니다.</string>
+    <string name="hovq_polling_active">Android가 허용하면 15분마다 확인합니다. 푸시 알림을 연결하면 더 빨리 받을 수 있습니다.</string>
+    <string name="hovq_alerts_blocked">Android 설정에서 알림이 꺼져 있습니다.</string>
+    <string name="hovq_android_alert_settings">Android 알림 설정</string>
+    <string name="hovq_existing_horizon">%1$s에서 Horizon을 찾았습니다.</string>
+</resources>

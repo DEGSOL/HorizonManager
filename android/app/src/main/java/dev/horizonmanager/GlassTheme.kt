@@ -40,6 +40,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -122,7 +125,7 @@ internal data class HorizonTab(@param:StringRes val label: Int, val icon: ImageV
 
 @Composable
 internal fun GlassLayout(tabs: List<HorizonTab>, selection: Int, showTabs: Boolean, select: (Int) -> Unit,
-                         dimmed: Boolean = false, content: @Composable BoxScope.() -> Unit) {
+                         dimmed: Boolean = false, savedNotice: Boolean = false, content: @Composable BoxScope.() -> Unit) {
     val palette = LocalHorizonPalette.current
     val sceneLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
     val scene = remember(sceneLayer) { GlassScene(sceneLayer) }
@@ -134,6 +137,16 @@ internal fun GlassLayout(tabs: List<HorizonTab>, selection: Int, showTabs: Boole
     }.imePadding()) {
         Box(Modifier.fillMaxSize().recordScene(scene), content = content)
         CompositionLocalProvider(LocalGlassScene provides scene) {
+            AnimatedVisibility(savedNotice, modifier = Modifier.align(Alignment.BottomCenter)
+                .navigationBarsPadding().padding(bottom = if (showTabs) 76.dp else 14.dp, start = 18.dp, end = 18.dp),
+                enter = fadeIn(tween(170)) + slideInVertically(tween(190)) { it / 3 },
+                exit = fadeOut(tween(220)) + slideOutVertically(tween(220)) { it / 3 }) {
+                Box(Modifier.frost(MaterialTheme.shapes.large)
+                    .semantics { liveRegion = LiveRegionMode.Polite }
+                    .padding(horizontal = 22.dp, vertical = 12.dp)) {
+                    Text(ui(R.string.hovq_settings_saved), style = MaterialTheme.typography.labelLarge)
+                }
+            }
             AnimatedVisibility(showTabs, modifier = Modifier.align(Alignment.BottomCenter)
                 .navigationBarsPadding().padding(bottom = 10.dp),
                 enter = fadeIn(tween(160)) + slideInVertically(tween(220)) { it / 2 },

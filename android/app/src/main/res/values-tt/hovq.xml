@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="hovq_settings_saved">Көйләүләр сакланды</string>
+    <string name="hovq_icon">Кушымта тамгасы</string>
+    <string name="hovq_icon_detail">Android төп экранындагы Hovq тамгасын сайлагыз.</string>
+    <string name="hovq_icon_light">Ачык</string>
+    <string name="hovq_icon_dark">Караңгы</string>
+    <string name="hovq_icon_error">Android тамганы үзгәртә алмады.</string>
+    <string name="hovq_language_upgrade">Дайджестның 11 телен дә куллану өчен VPS агентын яңартыгыз.</string>
+    <string name="hovq_vps_backup">VPS-тагы Horizon</string>
+    <string name="hovq_vps_backup_detail">Чыганаклар, профильләр, ЯИ көйләүләре, ачкычлар, җәдвәл һәм дайджест көйләүләре бер шифрланган файлда.</string>
+    <string name="hovq_backup_connect_first">Көйләүләрне күчерү өчен Horizon-га тоташыгыз.</string>
+    <string name="hovq_device_backup">Бу җайланмадагы Hovq</string>
+    <string name="hovq_device_backup_detail">VPS тоташулары һәм керү мәгълүматы, белдерүләр, тема, тәртип һәм тамга бер шифрланган файлда.</string>
+    <string name="hovq_transfer_detail">Horizon яисә Hovq көйләүләрен шифрланган файллар аша күчерегез.</string>
+    <string name="hovq_export">Экспортлау</string>
+    <string name="hovq_import">Импортлау</string>
+    <string name="hovq_device_restore_password">Hovq күчермәсенең серсүзен кертегез. Туры килгән тоташулар яңартыла, калганнары саклана.</string>
+    <string name="hovq_vps_restore_password">Horizon күчермәсенең серсүзен кертегез. Импорт актив VPS-тагы көйләүләрне һәм җәдвәлне алыштыра.</string>
+    <string name="hovq_digest_channel">Яңа дайджестлар</string>
+    <string name="hovq_digest_channel_detail">Horizon яңа чыгарылышны әзерләп бетергәч, белдерү килә.</string>
+    <string name="hovq_push_active">Push кушылган. Hovq саклык өчен VPS-ны вакыт-вакыт тикшерә.</string>
+    <string name="hovq_polling_active">Android рөхсәт иткәндә 15 минут саен тикшерелә. Белдерүне тизрәк алу өчен push кушыгыз.</string>
+    <string name="hovq_alerts_blocked">Android көйләүләрендә белдерүләр сүндерелгән.</string>
+    <string name="hovq_android_alert_settings">Android белдерү көйләүләре</string>
+    <string name="hovq_existing_horizon">Horizon %1$s юлында табылды.</string>
+</resources>

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="journal_activity_title">活动记录</string>
-    <string name="journal_activity_help">条目说明 MRizon、VPS 和 Horizon 的操作。打开条目可查看详情、事件代码或同一任务的其他记录。</string>
+    <string name="journal_activity_help">条目说明 Hovq、VPS 和 Horizon 的操作。打开条目可查看详情、事件代码或同一任务的其他记录。</string>
     <string name="journal_technical">技术详情</string>
     <string name="journal_level_error">错误</string>
     <string name="journal_level_warning">警告</string>
@@ -14,7 +14,7 @@
     <string name="journal_filter_detail">Horizon 应用档案阈值，检查重复主题，并执行分组及总上限。</string>
     <string name="journal_enrich_detail">Horizon 为单篇文章或自动模式下的入选材料请求额外背景。</string>
     <string name="journal_generate_detail">Horizon 准备所选语言的文章并生成摘要文本。</string>
-    <string name="journal_save_detail">代理将摘要写入 VPS，供 MRizon 下载。</string>
+    <string name="journal_save_detail">代理将摘要写入 VPS，供 Hovq 下载。</string>
     <string name="journal_delivery_detail">Horizon 尝试将摘要发送到配置的邮箱或 Webhook。</string>
     <string name="journal_install_preflight">检查 VPS</string>
     <string name="journal_install_packages">系统软件包</string>
@@ -66,7 +66,7 @@
     <string name="journal_media_unavailable_detail">代理未能准备或返回封面。如果摘要已下载，仍可阅读文章正文。</string>
     <string name="journal_enrich_failed">额外背景不可用。Horizon 仍可发布首次分析后的正文。</string>
     <string name="journal_localization_recovered">重试补齐了首次响应中缺失的译文。</string>
-    <string name="journal_backup_exported">代理已准备加密备份。MRizon 将其保存到你选择的文件。</string>
+    <string name="journal_backup_exported">代理已准备加密备份。Hovq 将其保存到你选择的文件。</string>
     <string name="journal_backup_restored">代理已应用加密文件中的设置。</string>
     <string name="journal_cleared_detail">已移除请求清除的日志条目。</string>
     <string name="journal_push_problem">后台检查或通知投递失败。请检查连接与通知设置。</string>
@@ -76,7 +76,7 @@
     <string name="journal_config_action">打开上次编辑的设置，检查值和档案关联，然后重试保存。</string>
     <string name="journal_check_related">查看同一任务的其他记录，了解此事件的前后过程。</string>
     <string name="journal_access_model">在“AI 处理”中检查提供商、密钥和模型。重试任务前先测试模型。</string>
-    <string name="journal_vault_guide">Android 无法访问受保护的连接存储。请解锁手机并重新打开 MRizon。</string>
+    <string name="journal_vault_guide">Android 无法访问受保护的连接存储。请解锁手机并重新打开 Hovq。</string>
     <string name="journal_backup_version">当前代理不支持此备份格式或其 Horizon 版本。</string>
     <string name="journal_upstream_failure">连接的服务返回错误。查看相关事件可帮助定位失败阶段。</string>
     <string name="journal_request_guide">代理无法接受请求。请刷新服务器状态，检查参数后重试。</string>

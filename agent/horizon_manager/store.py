@@ -38,8 +38,6 @@ class Store:
                 CREATE TABLE IF NOT EXISTS enrichment_options (
                     id INTEGER PRIMARY KEY CHECK(id=1), mode TEXT NOT NULL
                         CHECK(mode IN ('on_demand', 'automatic')));
-                CREATE TABLE IF NOT EXISTS digest_options (
-                    id INTEGER PRIMARY KEY CHECK(id=1), language TEXT NOT NULL CHECK(language IN ('en', 'ru', 'zh')));
                 CREATE TABLE IF NOT EXISTS events (
                     id INTEGER PRIMARY KEY AUTOINCREMENT, time TEXT NOT NULL,
                     component TEXT NOT NULL, level TEXT NOT NULL,
@@ -57,10 +55,27 @@ class Store:
                     source TEXT PRIMARY KEY, status TEXT NOT NULL,
                     checked TEXT NOT NULL, last_success TEXT);
             """)
+            db.execute("BEGIN IMMEDIATE")
+            self.migrate_digest_options(db)
             db.execute("DROP INDEX IF EXISTS only_one_active")
             db.execute("INSERT OR IGNORE INTO configuration VALUES (1, 1, ?, ?, '{}')",
                        (json.dumps(initial_config()), json.dumps(builtin_profiles())))
             db.execute("INSERT OR IGNORE INTO schedule VALUES (1, '{\"mode\":\"off\"}', NULL)")
+
+    @staticmethod
+    def migrate_digest_options(db):
+        languages = ", ".join(repr(code) for code in DIGEST_LANGUAGES)
+        definition = (f"CREATE TABLE digest_options (id INTEGER PRIMARY KEY CHECK(id=1), "
+                      f"language TEXT NOT NULL CHECK(language IN ({languages})))")
+        previous = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='digest_options'").fetchone()
+        if previous is None:
+            db.execute(definition)
+        elif previous[0] != definition:
+            db.execute("ALTER TABLE digest_options RENAME TO prior_digest_options")
+            db.execute(definition)
+            db.execute("INSERT INTO digest_options SELECT id,language FROM prior_digest_options "
+                       f"WHERE language IN ({languages})")
+            db.execute("DROP TABLE prior_digest_options")
 
     @contextmanager
     def db(self):

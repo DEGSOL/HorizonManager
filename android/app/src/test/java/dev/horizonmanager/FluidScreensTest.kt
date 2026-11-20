@@ -2,6 +2,7 @@ package dev.horizonmanager
 
 import android.graphics.Bitmap
 import android.util.LruCache
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.lifecycle.ViewModelProvider
@@ -38,7 +39,7 @@ class FluidScreensTest {
     private fun bytes(name: String) =
         requireNotNull(javaClass.getResourceAsStream("/fluid/" + name)).use { it.readBytes() }
 
-    private fun snapshot(name: String) {
+    private fun snapshot(name: String): Bitmap {
         compose.waitForIdle()
         val bmp =
             compose.runOnIdle {
@@ -58,6 +59,7 @@ class FluidScreensTest {
         val target = File("build/reports/fluid/" + name + ".png")
         target.parentFile!!.mkdirs()
         target.outputStream().use { check(bmp.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+        return bmp
     }
 
     private fun text(id: Int) = compose.onAllNodesWithText(ui(id)).onFirst()
@@ -165,7 +167,7 @@ class FluidScreensTest {
                     schema = cfg.getJSONObject("schema"),
                     schedule = JSONObject().put("spec", JSONObject()
                         .put("mode", "calendar").put("hour", 9).put("minute", 0)
-                        .put("zone", "Asia/Yekaterinburg").put("days", JSONArray((0..6).toList())))
+                        .put("zone", "UTC").put("days", JSONArray((0..6).toList())))
                         .put("next", now.plusSeconds(3600).epochSecond),
                     archive = listOf(issue) + archive,
                     status = JSONObject().put("agent", "0.1.4").put("media_search", false),
@@ -286,6 +288,28 @@ class FluidScreensTest {
     }
 
     @Test
+    fun appIconSettingsSaveAndBackupsOfferTwoTargets() {
+        loadIssue()
+        tab(R.string.settings)
+        text(R.string.mr_interface).performClick()
+        text(R.string.hovq_icon).performClick()
+        text(R.string.hovq_icon_dark).performClick()
+        assertEquals(LauncherAppearance.Dark, LauncherAppearance.current(compose.activity))
+        text(R.string.hovq_settings_saved).assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(3300)
+        text(R.string.hovq_settings_saved).assertDoesNotExist()
+        back()
+        back()
+        text(R.string.ui_maintenance).performClick()
+        text(R.string.settings_transfer).performClick()
+        text(R.string.hovq_vps_backup).assertIsDisplayed()
+        text(R.string.hovq_device_backup).assertIsDisplayed()
+        assertEquals(2, compose.onAllNodesWithText(ui(R.string.hovq_export)).fetchSemanticsNodes().size)
+        assertEquals(2, compose.onAllNodesWithText(ui(R.string.hovq_import)).fetchSemanticsNodes().size)
+        snapshot("12-backup-targets")
+    }
+
+    @Test
     fun realScreensAndBackStack() {
         val heading = loadIssue()
         compose.onNodeWithText(heading).assertExists()
@@ -299,7 +323,12 @@ class FluidScreensTest {
         compose.onNodeWithText(headlines[0]).performClick()
         compose.onNodeWithContentDescription(ui(R.string.ui_original_source)).assertExists()
         compose.onNodeWithContentDescription(ui(R.string.settings)).assertIsNotEnabled()
-        snapshot("03-article")
+        val openArticle = snapshot("03-article")
+        // Sample the narrow left margin beside the text in the fixed portrait fixture.
+        val x = openArticle.width / 25
+        val y = openArticle.height * 51 / 100
+        assertEquals("Article art must be clipped to its header", ThemePreset.Graphite.surface.toArgb(),
+            openArticle.getPixel(x, y))
         back()
         val scrollable = compose.onNode(hasScrollAction())
         scrollable.performTouchInput { swipeUp() }

@@ -1,17 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="server_remove_named">Remove %1$s</string>
-    <string name="server_remove_message">Remove %1$s from MRizon? Its saved connection credentials and background checks on this phone will be removed. Horizon and its data remain on the VPS.</string>
-    <string name="transfer_backup_export_detail">Download an encrypted file with settings, profiles, secrets, and schedule.</string>
-    <string name="transfer_backup_restore_detail">Select a backup and enter its password. It replaces the current server settings.</string>
-    <string name="transfer_json_title">Settings and profiles in JSON</string>
-    <string name="transfer_config_import_detail">Apply settings from a Horizon configuration file to this server.</string>
-    <string name="transfer_config_export_detail">Save the current configuration as text. The values of saved secrets are omitted.</string>
-    <string name="transfer_profiles_import_detail">Replace the profile list with profiles from a compatible MRizon file.</string>
-    <string name="transfer_profiles_export_detail">Export profile definitions and prompts to use on another server.</string>
-    <string name="transfer_server_title">Copy from an existing Horizon installation</string>
-    <string name="transfer_server_detail">Enter the absolute folder path on the VPS. MRizon reads data/config.json from that folder and applies the settings to the active instance.</string>
-    <string name="transfer_rollback_detail">Restore the previous configuration saved by the agent, including its secrets.</string>
+    <string name="server_remove_message">Remove %1$s from Hovq? Its saved connection credentials and background checks on this phone will be removed. Horizon and its data remain on the VPS.</string>
     <string name="digest_basic_title">What goes into an issue</string>
     <string name="digest_window_hint">Enter 1 to 8,760 hours. For example, 24 means the last day.</string>
     <string name="digest_max_hint">Leave blank to apply only the source, profile, and group limits.</string>

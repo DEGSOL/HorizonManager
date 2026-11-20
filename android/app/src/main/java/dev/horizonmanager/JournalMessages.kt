@@ -13,7 +13,7 @@ internal fun journalLevel(level: String) = when (level) {
 internal fun journalComponent(component: String) = when (component) {
     "vps" -> ui(R.string.journal_component_vps)
     "agent" -> ui(R.string.journal_component_agent)
-    "android" -> "MRizon"
+    "android" -> ui(R.string.app_name)
     "horizon" -> "Horizon"
     "scheduler" -> ui(R.string.journal_component_scheduler)
     "delivery", "push" -> ui(R.string.journal_component_delivery)
@@ -135,7 +135,7 @@ private fun describeFailure(code: String, row: JSONObject): Pair<String, String>
         code in setOf("SOURCE_INDEX", "SOURCE_MISSING", "SOURCE_UNKNOWN") -> R.string.journal_source_failed
         code in setOf("AGENT_PROTOCOL", "AGENT_UPDATE_REQUIRED", "SSH_STAGE", "HZ_HORIZON_NOT_FOUND", "HZ_INVALID_HORIZON_PATH") ->
             R.string.journal_connection_guide
-        code == "EXISTING_CONFIG" || code == "EXISTING_PATH" -> R.string.transfer_server_detail
+        code == "EXISTING_CONFIG" || code == "EXISTING_PATH" -> R.string.journal_request_guide
         else -> null
     }
     return when {

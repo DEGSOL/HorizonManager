@@ -201,23 +201,6 @@ internal object Ssh {
         }
     }
 
-    fun existingConfig(session: Session, directory: String): JSONObject {
-        if (!directory.startsWith("/") || directory.any { it == '\n' || it == '\u0000' })
-            throw Problem("EXISTING_PATH")
-        val channel = session.openChannel("sftp") as ChannelSftp
-        val timeout = deadlines.schedule({ channel.disconnect() }, 20, TimeUnit.SECONDS)
-        return try {
-            channel.connect(10_000)
-            JSONObject(channel.get(directory.trimEnd('/') + "/data/config.json")
-                .use { it.readBounded(1024 * 1024).decodeToString() })
-        } catch (_: Exception) {
-            throw Problem("EXISTING_CONFIG")
-        } finally {
-            timeout.cancel(false)
-            channel.disconnect()
-        }
-    }
-
     fun http(session: Session, token: String, method: String, path: String, data: ByteArray): Pair<Int, String> {
         val channel = session.openChannel("direct-tcpip") as ChannelDirectTCPIP
         channel.setHost("127.0.0.1")

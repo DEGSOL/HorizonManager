@@ -47,7 +47,6 @@
     <string name="ui_no_response">"no response"</string>
     <string name="ui_running">"running"</string>
     <string name="ui_not_found">"not found"</string>
-    <string name="ui_horizon_found_at_you_can_copy">"Horizon found at %1$s. You can copy its configuration in Manager settings."</string>
     <string name="ui_a_container_with_horizon_in_its">"A container with Horizon in its name or image was found."</string>
     <string name="ui_check_server">"Check server"</string>
     <string name="ui_prepare_packages">"Prepare packages"</string>
@@ -105,7 +104,7 @@
     <string name="ui_the_apify_mode_is_available_playwright">"The Apify mode is available. Playwright is unavailable on this setup."</string>
     <string name="ui_signing_in_to_wechat_from_the">"Signing in to WeChat from the app is currently unavailable."</string>
     <string name="ui_add_the_secrets_referenced_by_the">"Add the secrets referenced by the configuration."</string>
-    <string name="ui_english_simplified_chinese_and_russian_are">"English, Simplified Chinese and Russian are supported."</string>
+    <string name="ui_english_simplified_chinese_and_russian_are">Select a supported digest language.</string>
     <string name="ui_sources_are_unavailable_or_disabled_check">"Sources are unavailable or disabled. Check the journal and source settings."</string>
     <string name="ui_check_the_ai_model_and_missing">"Check the AI model and missing keys in settings."</string>
     <string name="ui_a_source_or_ai_provider_rejected">"A source or AI provider rejected the request. Check the key, account or permissions."</string>
@@ -247,7 +246,6 @@
     <string name="ui_https_domain_optional">"HTTPS domain (optional)"</string>
     <string name="ui_leave_blank_to_use_ssh_https">"Leave blank to use SSH. HTTPS requires a configured reverse proxy with a valid TLS certificate."</string>
     <string name="ui_background_news_checks">"Background news checks"</string>
-    <string name="ui_for_faster_alerts_connect_ntfy_through">"For faster alerts, connect ntfy through UnifiedPush. Without it, Android checks the VPS roughly every 30 minutes."</string>
     <string name="ui_connect_push_notifications">"Connect push notifications"</string>
     <string name="ui_push_notifications_connected">"Push notifications connected"</string>
     <string name="ui_disconnect_push_notifications">"Disconnect push notifications"</string>
@@ -261,9 +259,6 @@
     <string name="ui_export_profiles">"Export profiles"</string>
     <string name="ui_restore_the_previous_configuration_and_its">"Restore the previous configuration and its secrets?"</string>
     <string name="ui_roll_back_settings">"Roll back settings"</string>
-    <string name="ui_existing_horizon_folder_on_the_vps">"Existing Horizon folder on the VPS"</string>
-    <string name="ui_copy_settings_from_this_folder_into">"Copy settings from this folder into Manager? Secrets and profile files will stay in the original folder."</string>
-    <string name="ui_copy_configuration_from_vps">"Copy configuration from VPS"</string>
     <string name="ui_secrets_on_the_vps">"Secrets on the VPS"</string>
     <string name="ui_known_variables">"Known variables"</string>
     <string name="ui_variable_name">"Variable name"</string>
@@ -286,7 +281,6 @@
     <string name="ui_add_the_key_under_secrets">"Add the %1$s key under Secrets."</string>
     <string name="ui_enter_the_model_id_from_your">"Enter the model ID from your provider dashboard. The test uses the saved configuration."</string>
     <string name="ui_advanced_ai_options">"Advanced AI options"</string>
-    <string name="ui_the_reading_language_follows_android_new">"The reading language follows Android. New digests are prepared in all three languages."</string>
     <string name="ui_test_saved_model">"Test saved model"</string>
     <string name="ui_save_settings">"Save settings"</string>
     <string name="ui_vps_schedule">"VPS schedule"</string>

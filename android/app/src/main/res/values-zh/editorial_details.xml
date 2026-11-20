@@ -1,17 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="server_remove_named">移除服务器“%1$s”</string>
-    <string name="server_remove_message">从 MRizon 移除“%1$s”吗？此手机上的连接凭据和后台检查将被移除。Horizon 及其数据仍保留在 VPS 上。</string>
-    <string name="transfer_backup_export_detail">下载包含设置、配置档案、密钥和计划的加密文件。</string>
-    <string name="transfer_backup_restore_detail">选择备份并输入密码。备份内容将替换当前服务器设置。</string>
-    <string name="transfer_json_title">JSON 格式的设置与配置档案</string>
-    <string name="transfer_config_import_detail">将 Horizon 配置文件中的设置应用到此 VPS。</string>
-    <string name="transfer_config_export_detail">以可读文件保存当前设置。文件不包含已保存密钥的值。</string>
-    <string name="transfer_profiles_import_detail">用兼容的 MRizon 文件替换配置档案列表。</string>
-    <string name="transfer_profiles_export_detail">导出配置档案与提示词，以便在其他服务器上使用。</string>
-    <string name="transfer_server_title">从已有的 Horizon 安装复制设置</string>
-    <string name="transfer_server_detail">输入 VPS 上文件夹的绝对路径。MRizon 会读取其中的 data/config.json 并应用到当前实例。</string>
-    <string name="transfer_rollback_detail">恢复代理保存的上一份配置及其密钥。</string>
+    <string name="server_remove_message">从 Hovq 移除“%1$s”吗？此手机上的连接凭据和后台检查将被移除。Horizon 及其数据仍保留在 VPS 上。</string>
     <string name="digest_basic_title">摘要包含哪些内容</string>
     <string name="digest_window_hint">输入 1 至 8760 小时。24 表示最近一天。</string>
     <string name="digest_max_hint">留空时只应用来源、配置档案和分组限制。</string>

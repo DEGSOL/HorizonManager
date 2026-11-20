@@ -18,7 +18,6 @@ import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.util.Locale
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -35,7 +34,7 @@ private fun JSONObject.scheduleDayMask(): Int = optJSONArray("days")?.let { arra
 } ?: 127
 
 private fun targetTime(hour: Int, minute: Int): String =
-    LocalTime.of(hour, minute).format(DateTimeFormatter.ofPattern("HH:mm", Locale.getDefault()))
+    LocalTime.of(hour, minute).format(DateTimeFormatter.ofPattern("HH:mm", appLocale()))
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -87,7 +86,7 @@ internal fun ScheduleForm(panel: Panel, model: ManagerModel, dirtyChange: (Boole
     Tile(accented = true) {
         Text(ui(if (panel.connectionProblem.isBlank()) R.string.schedule_next else R.string.schedule_last_known),
             style = MaterialTheme.typography.labelLarge, color = palette.muted)
-        val nextTime = nextRun?.format(DateTimeFormatter.ofPattern("EEE, d MMM · HH:mm", Locale.getDefault()))
+        val nextTime = nextRun?.format(DateTimeFormatter.ofPattern("EEE, d MMM · HH:mm", appLocale()))
         Text(nextTime ?: ui(if (savedMode == "off") R.string.schedule_manual else R.string.schedule_unavailable),
             style = MaterialTheme.typography.titleMedium)
         if (nextRun != null) Text(zoneLabel(nextRun.zone.id, at = nextRun.toInstant()), color = palette.muted,
@@ -185,7 +184,7 @@ private fun ScheduleTimePicker(hour: Int, minute: Int, close: () -> Unit, choose
 }
 
 private fun zoneLabel(id: String, at: Instant = Instant.now(),
-                      names: TimeZoneNames = TimeZoneNames.getInstance(Locale.getDefault())): String {
+                      names: TimeZoneNames = TimeZoneNames.getInstance(appLocale())): String {
     val zone = runCatching { ZoneId.of(id) }.getOrNull() ?: return id
     val city = names.getExemplarLocationName(id) ?: id.substringAfterLast('/').replace('_', ' ')
     val offset = zone.rules.getOffset(at).id
@@ -197,12 +196,12 @@ private fun zoneLabel(id: String, at: Instant = Instant.now(),
 private fun ScheduleZonePicker(current: String, close: () -> Unit, choose: (String) -> Unit) {
     val available = remember { ZoneId.getAvailableZoneIds() }
     val device = ZoneId.systemDefault().id.takeIf { it in available }
-    val locale = Locale.getDefault()
+    val locale = appLocale()
     var query by rememberSaveable { mutableStateOf("") }
     val zones = remember(current, device, locale) {
         val now = Instant.now()
         val names = TimeZoneNames.getInstance(locale)
-        (listOfNotNull(device, current, "UTC", "Europe/Moscow", "Asia/Yekaterinburg") + available.sorted())
+        (listOfNotNull(device, current, "UTC") + available.sorted())
             .distinct()
             .map { it to zoneLabel(it, now, names) }
     }

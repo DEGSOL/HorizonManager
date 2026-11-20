@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="hovq_settings_saved">Einstellungen gespeichert</string>
+    <string name="hovq_icon">App-Symbol</string>
+    <string name="hovq_icon_detail">Wähle das Hovq-Symbol für den Android-Startbildschirm.</string>
+    <string name="hovq_icon_light">Hell</string>
+    <string name="hovq_icon_dark">Dunkel</string>
+    <string name="hovq_icon_error">Android konnte das Symbol nicht ändern.</string>
+    <string name="hovq_language_upgrade">Aktualisiere den VPS-Agenten, um alle 11 Digest-Sprachen zu nutzen.</string>
+    <string name="hovq_vps_backup">Horizon auf dem VPS</string>
+    <string name="hovq_vps_backup_detail">Eine verschlüsselte Datei mit Quellen, Profilen, KI-Einstellungen, Schlüsseln, Zeitplan und Digest-Optionen.</string>
+    <string name="hovq_backup_connect_first">Verbinde dich mit Horizon, um dessen Einstellungen zu übertragen.</string>
+    <string name="hovq_device_backup">Hovq auf diesem Gerät</string>
+    <string name="hovq_device_backup_detail">Eine verschlüsselte Datei mit VPS-Verbindungen und Zugangsdaten, Benachrichtigungseinstellungen, Design, Sortierung und Symbol.</string>
+    <string name="hovq_transfer_detail">Übertrage Horizon- oder Hovq-Einstellungen in verschlüsselten Dateien.</string>
+    <string name="hovq_export">Exportieren</string>
+    <string name="hovq_import">Importieren</string>
+    <string name="hovq_device_restore_password">Gib das Passwort der Hovq-Sicherung ein. Passende Verbindungen werden aktualisiert. Andere gespeicherte Verbindungen bleiben erhalten.</string>
+    <string name="hovq_vps_restore_password">Gib das Passwort der Horizon-Sicherung ein. Der Import ersetzt die Einstellungen und den Zeitplan auf dem aktiven VPS.</string>
+    <string name="hovq_digest_channel">Neue Digests</string>
+    <string name="hovq_digest_channel_detail">Benachrichtigungen, wenn Horizon eine neue Ausgabe fertigstellt.</string>
+    <string name="hovq_push_active">Push ist aktiv. Hovq prüft den VPS gelegentlich als Ersatz.</string>
+    <string name="hovq_polling_active">Automatische Prüfung alle 15 Minuten, wenn Android sie ausführen kann. Mit Push kommen Meldungen schneller.</string>
+    <string name="hovq_alerts_blocked">Benachrichtigungen sind in Android deaktiviert.</string>
+    <string name="hovq_android_alert_settings">Android-Benachrichtigungseinstellungen</string>
+    <string name="hovq_existing_horizon">Horizon wurde unter %1$s gefunden.</string>
+</resources>

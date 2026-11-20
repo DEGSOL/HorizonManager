@@ -2,6 +2,7 @@ import copy
 import re
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Literal, get_args
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -18,7 +19,8 @@ SECRET_NAMES = frozenset({
 })
 SECRET_ALIAS = re.compile(r"HM_SECRET_[A-Z0-9_]{1,48}")
 ENV_REFERENCE = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)\}")
-DIGEST_LANGUAGES = ("en", "zh", "ru")
+DigestLanguageCode = Literal["en", "ru", "de", "fr", "it", "es", "ja", "ko", "zh", "kk", "tt"]
+DIGEST_LANGUAGES = get_args(DigestLanguageCode)
 LANGUAGES = frozenset(DIGEST_LANGUAGES)
 
 
@@ -47,7 +49,7 @@ def builtin_profiles():
 
 def initial_config():
     return Config.model_validate({
-        "ai": {"provider": "openai", "model": "", "api_key_env": "OPENAI_API_KEY", "languages": list(DIGEST_LANGUAGES)},
+        "ai": {"provider": "openai", "model": "", "api_key_env": "OPENAI_API_KEY", "languages": ["en", "zh", "ru"]},
         "sources": {
             "hackernews": {"enabled": False}, "reddit": {"enabled": False},
             "telegram": {"enabled": False},

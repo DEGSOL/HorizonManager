@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="hovq_settings_saved">Impostazioni salvate</string>
+    <string name="hovq_icon">Icona dell’app</string>
+    <string name="hovq_icon_detail">Scegli l’icona di Hovq nella schermata Home di Android.</string>
+    <string name="hovq_icon_light">Chiara</string>
+    <string name="hovq_icon_dark">Scura</string>
+    <string name="hovq_icon_error">Android non ha potuto cambiare l’icona.</string>
+    <string name="hovq_language_upgrade">Aggiorna l’agente VPS per usare tutte le 11 lingue della rassegna.</string>
+    <string name="hovq_vps_backup">Horizon sul VPS</string>
+    <string name="hovq_vps_backup_detail">Un file cifrato con fonti, profili, impostazioni IA, chiavi, pianificazione e opzioni della rassegna.</string>
+    <string name="hovq_backup_connect_first">Connettiti a Horizon per trasferirne le impostazioni.</string>
+    <string name="hovq_device_backup">Hovq su questo dispositivo</string>
+    <string name="hovq_device_backup_detail">Un file cifrato con connessioni e credenziali VPS, notifiche, tema, ordinamento e icona.</string>
+    <string name="hovq_transfer_detail">Trasferisci le impostazioni di Horizon o Hovq con file cifrati.</string>
+    <string name="hovq_export">Esporta</string>
+    <string name="hovq_import">Importa</string>
+    <string name="hovq_device_restore_password">Inserisci la password del backup Hovq. Le connessioni corrispondenti verranno aggiornate. Le altre verranno conservate.</string>
+    <string name="hovq_vps_restore_password">Inserisci la password del backup Horizon. L’importazione sostituisce impostazioni e pianificazione sul VPS attivo.</string>
+    <string name="hovq_digest_channel">Nuove rassegne</string>
+    <string name="hovq_digest_channel_detail">Avvisi quando Horizon completa una nuova edizione.</string>
+    <string name="hovq_push_active">Push attivo. Hovq controlla il VPS occasionalmente come riserva.</string>
+    <string name="hovq_polling_active">Controllo ogni 15 minuti quando Android lo permette. Attiva il push per ricevere avvisi più rapidi.</string>
+    <string name="hovq_alerts_blocked">Le notifiche sono disattivate in Android.</string>
+    <string name="hovq_android_alert_settings">Impostazioni notifiche Android</string>
+    <string name="hovq_existing_horizon">Horizon rilevato in %1$s.</string>
+</resources>

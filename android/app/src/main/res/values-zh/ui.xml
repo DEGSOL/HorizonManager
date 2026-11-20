@@ -47,7 +47,6 @@
     <string name="ui_no_response">"无响应"</string>
     <string name="ui_running">"运行中"</string>
     <string name="ui_not_found">"未检测到"</string>
-    <string name="ui_horizon_found_at_you_can_copy">"在 %1$s 找到 Horizon。可在 Manager 设置中复制其配置。"</string>
     <string name="ui_a_container_with_horizon_in_its">"检测到名称或镜像包含 Horizon 的容器。"</string>
     <string name="ui_check_server">"检查服务器"</string>
     <string name="ui_prepare_packages">"准备软件包"</string>
@@ -105,7 +104,7 @@
     <string name="ui_the_apify_mode_is_available_playwright">"此环境支持 Apify 模式。Playwright 不可用。"</string>
     <string name="ui_signing_in_to_wechat_from_the">"暂不支持在应用中登录微信。"</string>
     <string name="ui_add_the_secrets_referenced_by_the">"请添加配置中引用的密钥。"</string>
-    <string name="ui_english_simplified_chinese_and_russian_are">"支持英语、简体中文和俄语。"</string>
+    <string name="ui_english_simplified_chinese_and_russian_are">请选择受支持的摘要语言。</string>
     <string name="ui_sources_are_unavailable_or_disabled_check">"来源不可用或未启用。请检查日志和来源设置。"</string>
     <string name="ui_check_the_ai_model_and_missing">"请在设置中检查 AI 模型和缺少的密钥。"</string>
     <string name="ui_a_source_or_ai_provider_rejected">"来源或 AI 提供方拒绝了请求。请检查密钥、账户或权限。"</string>
@@ -247,7 +246,6 @@
     <string name="ui_https_domain_optional">"HTTPS 域名（可选）"</string>
     <string name="ui_leave_blank_to_use_ssh_https">"留空将使用 SSH。使用 HTTPS 需要已配置的反向代理和有效的 TLS 证书。"</string>
     <string name="ui_background_news_checks">"后台检查新闻"</string>
-    <string name="ui_for_faster_alerts_connect_ntfy_through">"要更快收到通知，请通过 UnifiedPush 连接 ntfy。否则 Android 大约每 30 分钟检查一次 VPS。"</string>
     <string name="ui_connect_push_notifications">"连接推送通知"</string>
     <string name="ui_push_notifications_connected">"推送通知已连接"</string>
     <string name="ui_disconnect_push_notifications">"断开推送通知"</string>
@@ -261,9 +259,6 @@
     <string name="ui_export_profiles">"导出配置"</string>
     <string name="ui_restore_the_previous_configuration_and_its">"恢复旧版配置及其密钥？"</string>
     <string name="ui_roll_back_settings">"回滚设置"</string>
-    <string name="ui_existing_horizon_folder_on_the_vps">"VPS 上现有的 Horizon 文件夹"</string>
-    <string name="ui_copy_settings_from_this_folder_into">"将此文件夹中的设置复制到 Manager？密钥和配置文件会保留在原文件夹中。"</string>
-    <string name="ui_copy_configuration_from_vps">"从 VPS 复制配置"</string>
     <string name="ui_secrets_on_the_vps">"VPS 上的密钥"</string>
     <string name="ui_known_variables">"已知变量"</string>
     <string name="ui_variable_name">"变量名"</string>
@@ -286,7 +281,6 @@
     <string name="ui_add_the_key_under_secrets">"请在“密钥”中添加 %1$s。"</string>
     <string name="ui_enter_the_model_id_from_your">"请输入提供方控制台中的模型 ID。测试使用已保存的配置。"</string>
     <string name="ui_advanced_ai_options">"高级 AI 选项"</string>
-    <string name="ui_the_reading_language_follows_android_new">"阅读语言随 Android 系统而定。新简报会生成三种语言版本。"</string>
     <string name="ui_test_saved_model">"测试已保存的模型"</string>
     <string name="ui_save_settings">"保存设置"</string>
     <string name="ui_vps_schedule">"VPS 计划"</string>

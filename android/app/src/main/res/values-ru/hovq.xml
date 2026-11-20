@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="hovq_settings_saved">Настройки сохранены</string>
+    <string name="hovq_icon">Значок приложения</string>
+    <string name="hovq_icon_detail">Выбери значок Hovq на главном экране Android.</string>
+    <string name="hovq_icon_light">Светлый</string>
+    <string name="hovq_icon_dark">Тёмный</string>
+    <string name="hovq_icon_error">Android не удалось изменить значок.</string>
+    <string name="hovq_language_upgrade">Обнови агент на VPS, чтобы выбрать любой из 11 языков дайджеста.</string>
+    <string name="hovq_vps_backup">Horizon на VPS</string>
+    <string name="hovq_vps_backup_detail">Один зашифрованный файл с источниками, профилями, настройками ИИ, ключами, расписанием и параметрами дайджеста.</string>
+    <string name="hovq_backup_connect_first">Подключись к Horizon, чтобы перенести его настройки.</string>
+    <string name="hovq_device_backup">Hovq на этом устройстве</string>
+    <string name="hovq_device_backup_detail">Один зашифрованный файл с подключениями к VPS и их данными доступа, настройками уведомлений, темой, сортировкой и значком.</string>
+    <string name="hovq_transfer_detail">Перенос настроек Horizon или Hovq в зашифрованных файлах.</string>
+    <string name="hovq_export">Экспорт</string>
+    <string name="hovq_import">Импорт</string>
+    <string name="hovq_device_restore_password">Введи пароль от файла Hovq. Совпадающие подключения обновятся, а остальные сохранённые подключения останутся в списке.</string>
+    <string name="hovq_vps_restore_password">Введи пароль от файла Horizon. Импорт заменит настройки и расписание на выбранном VPS.</string>
+    <string name="hovq_digest_channel">Новые дайджесты</string>
+    <string name="hovq_digest_channel_detail">Уведомления, когда Horizon заканчивает подготовку выпуска.</string>
+    <string name="hovq_push_active">Push подключён. Hovq изредка проверяет VPS на случай, если push не придёт.</string>
+    <string name="hovq_polling_active">Проверка каждые 15 минут, когда Android позволяет её выполнить. Подключи push, чтобы получать уведомления быстрее.</string>
+    <string name="hovq_alerts_blocked">Уведомления выключены в настройках Android.</string>
+    <string name="hovq_android_alert_settings">Настройки уведомлений Android</string>
+    <string name="hovq_existing_horizon">Horizon обнаружен по пути %1$s.</string>
+</resources>

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="journal_activity_title">История работы</string>
-    <string name="journal_activity_help">Здесь видно, что сделали MRizon, VPS и Horizon. Открой запись, чтобы прочитать пояснение, увидеть код или посмотреть остальные события этого задания.</string>
+    <string name="journal_activity_help">Здесь видно, что сделали Hovq, VPS и Horizon. Открой запись, чтобы прочитать пояснение, увидеть код или посмотреть остальные события этого задания.</string>
     <string name="journal_technical">Технические сведения</string>
     <string name="journal_level_error">Ошибка</string>
     <string name="journal_level_warning">Предупреждение</string>
@@ -14,7 +14,7 @@
     <string name="journal_filter_detail">Horizon применяет пороги профилей, проверяет повторяющиеся темы и учитывает лимиты групп и выпуска.</string>
     <string name="journal_enrich_detail">Horizon запрашивает дополнительный контекст для одной статьи или для отобранных материалов в автоматическом режиме.</string>
     <string name="journal_generate_detail">Horizon готовит материалы на выбранном языке и собирает текст выпуска.</string>
-    <string name="journal_save_detail">Агент записывает выпуск на VPS, откуда MRizon сможет его загрузить.</string>
+    <string name="journal_save_detail">Агент записывает выпуск на VPS, откуда Hovq сможет его загрузить.</string>
     <string name="journal_delivery_detail">Horizon пытается отправить выпуск по настроенной почте или через вебхук.</string>
     <string name="journal_install_preflight">Проверка VPS</string>
     <string name="journal_install_packages">Системные пакеты</string>
@@ -66,7 +66,7 @@
     <string name="journal_media_unavailable_detail">Агент не смог подготовить или передать обложку. Текст статьи доступен, если выпуск загружен.</string>
     <string name="journal_enrich_failed">Дополнительный контекст получить не удалось. Horizon может сохранить основной текст после первичного анализа.</string>
     <string name="journal_localization_recovered">Повторный запрос восстановил переводы, пропущенные в исходном ответе.</string>
-    <string name="journal_backup_exported">Агент подготовил зашифрованную копию. MRizon сохраняет её в выбранный файл.</string>
+    <string name="journal_backup_exported">Агент подготовил зашифрованную копию. Hovq сохраняет её в выбранный файл.</string>
     <string name="journal_backup_restored">Агент применил настройки из зашифрованного файла.</string>
     <string name="journal_cleared_detail">Выбранные записи журнала удалены.</string>
     <string name="journal_push_problem">Фоновая проверка или доставка уведомления завершилась с ошибкой. Проверь соединение и настройки уведомлений.</string>
@@ -76,7 +76,7 @@
     <string name="journal_config_action">Открой изменённый раздел, проверь значения и привязки к профилям, затем повтори сохранение.</string>
     <string name="journal_check_related">Открой другие записи этого задания, чтобы увидеть, что было до и после события.</string>
     <string name="journal_access_model">Проверь провайдера, ключ и модель в «Обработке AI». Перед повторным запуском проверь модель.</string>
-    <string name="journal_vault_guide">Android не смог открыть защищённое хранилище подключений. Разблокируй телефон и снова открой MRizon.</string>
+    <string name="journal_vault_guide">Android не смог открыть защищённое хранилище подключений. Разблокируй телефон и снова открой Hovq.</string>
     <string name="journal_backup_version">Агент не поддерживает формат этой копии или указанную в ней версию Horizon.</string>
     <string name="journal_upstream_failure">Подключённый сервис сообщил об ошибке. Связанные события помогут определить, на каком этапе она возникла.</string>
     <string name="journal_request_guide">Агент не смог принять запрос. Обнови состояние сервера и проверь параметры перед повтором.</string>

@@ -1,17 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="server_remove_named">Удалить сервер «%1$s»</string>
-    <string name="server_remove_message">Удалить «%1$s» из MRizon? Приложение уберёт данные подключения и фоновые проверки на этом телефоне. Horizon и его данные останутся на VPS.</string>
-    <string name="transfer_backup_export_detail">Скачать зашифрованный файл с настройками, профилями, секретами и расписанием.</string>
-    <string name="transfer_backup_restore_detail">Выбрать копию и ввести пароль. Настройки на сервере будут заменены содержимым копии.</string>
-    <string name="transfer_json_title">Настройки и профили в JSON</string>
-    <string name="transfer_config_import_detail">Применить настройки из файла конфигурации Horizon на этом VPS.</string>
-    <string name="transfer_config_export_detail">Сохранить текущие настройки в читаемом файле. Значения сохранённых секретов в него не входят.</string>
-    <string name="transfer_profiles_import_detail">Заменить список профилей профилями из совместимого файла MRizon.</string>
-    <string name="transfer_profiles_export_detail">Сохранить профили и промпты для переноса на другой сервер.</string>
-    <string name="transfer_server_title">Скопировать настройки существующего Horizon</string>
-    <string name="transfer_server_detail">Укажи полный путь к папке на VPS. MRizon прочитает из неё data/config.json и применит настройки к активному экземпляру.</string>
-    <string name="transfer_rollback_detail">Вернуть предыдущую конфигурацию, сохранённую агентом, вместе с её секретами.</string>
+    <string name="server_remove_message">Удалить «%1$s» из Hovq? Приложение уберёт данные подключения и фоновые проверки на этом телефоне. Horizon и его данные останутся на VPS.</string>
     <string name="digest_basic_title">Какие материалы брать в выпуск</string>
     <string name="digest_window_hint">От 1 до 8 760 часов. Например, 24 — за последние сутки.</string>
     <string name="digest_max_hint">Оставь пустым, чтобы действовали только ограничения источников, профилей и групп.</string>

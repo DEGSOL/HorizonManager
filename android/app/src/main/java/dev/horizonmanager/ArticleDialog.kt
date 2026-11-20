@@ -186,7 +186,8 @@ internal fun ArticleDialog(
                 }
             }
             Column(
-                Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
+                Modifier.fillMaxWidth().background(theme.surface)
+                    .padding(horizontal = 20.dp, vertical = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(13.dp),
             ) {
                 Text(

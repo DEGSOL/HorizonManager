@@ -135,6 +135,7 @@ internal fun Choice(
     labelOf: (String) -> String = ::label, enabled: Boolean = true,
     row: Boolean = false,
     help: Int? = null,
+    entryEnabled: (String) -> Boolean = { true },
 ) {
     var expanded by remember { mutableStateOf(false) }
     val selected = if (current.isBlank() && "" !in entries) ui(R.string.ui_select) else labelOf(current)
@@ -147,7 +148,8 @@ internal fun Choice(
         }
         DropdownMenu(expanded = expanded && enabled, onDismissRequest = { expanded = false }) {
             entries.forEach { value ->
-                DropdownMenuItem(text = { Text(labelOf(value)) }, onClick = { change(value); expanded = false })
+                DropdownMenuItem(text = { Text(labelOf(value)) }, enabled = entryEnabled(value),
+                    onClick = { expanded = false; change(value) })
             }
         }
     }

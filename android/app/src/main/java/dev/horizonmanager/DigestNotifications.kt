@@ -86,13 +86,14 @@ internal object DigestNotifications {
     fun existingSecret(app: Context, id: String) = Vault(app).pushSecret(id)
     fun endpoint(app: Context, id: String) = value(app, id, "endpoint")
     fun registration(app: Context, id: String) = value(app, id, "registered")
+    fun hasPush(app: Context, id: String) = endpoint(app, id).let { it.isNotEmpty() && it == registration(app, id) }
     fun observeRegistration(app: Context, id: String) = callbackFlow {
         val storage = prefs(app)
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key == "$id:registered") trySend(registration(app, id))
+            if (key == "$id:registered" || key == "$id:endpoint") trySend(hasPush(app, id))
         }
         storage.registerOnSharedPreferenceChangeListener(listener)
-        trySend(registration(app, id))
+        trySend(hasPush(app, id))
         awaitClose { storage.unregisterOnSharedPreferenceChangeListener(listener) }
     }
 
@@ -107,9 +108,11 @@ internal object DigestNotifications {
         val now = System.currentTimeMillis()
         val key = "$id:last_reconcile"
         val last = prefs(app).getLong(key, 0)
-        if (now - last in 0 until 6 * 60 * 60 * 1000L) return false
-        prefs(app).edit().putLong(key, now).apply()
-        return true
+        return now - last !in 0 until 5 * 60 * 60 * 1000L
+    }
+
+    fun reconciled(app: Context, id: String) {
+        prefs(app).edit().putLong("$id:last_reconcile", System.currentTimeMillis()).apply()
     }
 
     fun register(app: Context, distributor: String, server: String) {
@@ -140,7 +143,8 @@ internal object DigestNotifications {
         val key = server.id + ":digest"
         val previous = prefs(app).getString(key, null)
         if (id.isNotEmpty() && previous != null && previous != id) publish(app, server, id)
-        if (previous == null || id.isNotEmpty()) prefs(app).edit().putString(key, id).apply()
+        if (previous == null || id.isNotEmpty() && (previous == id || deliveryAllowed(app)))
+            prefs(app).edit().putString(key, id).apply()
     }
 
     @Synchronized
@@ -151,23 +155,36 @@ internal object DigestNotifications {
     private fun publish(app: Context, server: Server, id: String) {
         val seen = runCatching { JSONArray(value(app, server.id, "seen")).strings() }.getOrDefault(emptyList())
         if (id in seen) return
-        if (notify(app, server.id, server.name, app.getString(R.string.digest_ready))) {
+        if (notify(app, server.id, server.name, ui(R.string.digest_ready))) {
             put(app, server.id, "seen", JSONArray((seen + id).takeLast(32)).toString())
         }
     }
 
-    fun notify(context: Context, server: String, title: String, text: String): Boolean {
+    private const val CHANNEL = "horizon"
+
+    fun deliveryAllowed(context: Context): Boolean {
         if (Build.VERSION.SDK_INT >= 33 &&
             context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return false
         val manager = context.getSystemService(NotificationManager::class.java)
-        if (!manager.areNotificationsEnabled()) return false
-        manager.createNotificationChannel(NotificationChannel("horizon", context.getString(R.string.news), NotificationManager.IMPORTANCE_DEFAULT))
+        return manager.areNotificationsEnabled() &&
+            manager.getNotificationChannel(CHANNEL)?.importance != NotificationManager.IMPORTANCE_NONE
+    }
+
+    fun notify(context: Context, server: String, title: String, text: String): Boolean {
+        if (!deliveryAllowed(context)) return false
+        val manager = context.getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(NotificationChannel(CHANNEL,
+            ui(R.string.hovq_digest_channel), NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = ui(R.string.hovq_digest_channel_detail)
+            })
         val target = Intent(context, MainActivity::class.java)
             .setData(Uri.parse("horizon-manager://server/$server"))
-            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         val intent = PendingIntent.getActivity(context, 0, target, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        manager.notify(server.hashCode(), NotificationCompat.Builder(context, "horizon")
-            .setSmallIcon(R.drawable.ic_radar).setContentTitle(title).setContentText(text)
+        manager.notify(server.hashCode(), NotificationCompat.Builder(context, CHANNEL)
+            .setSmallIcon(R.drawable.ic_hovq_notification).setContentTitle(title).setContentText(text)
+            .setCategory(NotificationCompat.CATEGORY_STATUS).setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setContentIntent(intent).setAutoCancel(true).build())
         return true
     }

@@ -11,6 +11,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -113,7 +114,7 @@ internal class ArtworkCache(context: Context) {
             if (u.host.contains(':') || u.host.matches(Regex("[0-9.]+"))) {
                 if (!publicPhotoAddress(InetAddress.getByName(u.host))) return null
             }
-            val request = Request.Builder().url(u).header("User-Agent", "MRizon/0.3").build()
+            val request = Request.Builder().url(u).header("User-Agent", "Hovq/0.3").build()
             val response =
                 try {
                     http.newCall(request).execute()
@@ -363,7 +364,7 @@ private fun DrawScope.crop(image: ImageBitmap) {
 @Composable
 internal fun CoverSurface(cover: Cover?, seed: String, textHeight: Float, modifier: Modifier) {
     val palette = LocalHorizonPalette.current
-    Canvas(modifier) {
+    Canvas(modifier.clipToBounds()) {
         val tone =
             listOf(
                     Color(0xff835941),

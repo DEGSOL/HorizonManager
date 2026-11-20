@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 from horizon_manager.api import REVISION, create_app
 from horizon_manager.article_context import key_for
 from horizon_manager.backup import pack, unpack
-from horizon_manager.configuration import only_source
+from horizon_manager.configuration import DIGEST_LANGUAGES, only_source
 from horizon_manager.push import enqueue_digest, signed_message, valid_endpoint
 from horizon_manager.scheduler import Schedule, next_run
 from horizon_manager.store import Store
@@ -84,6 +84,7 @@ class Fixture(BaseHTTPRequestHandler):
                 "Russian": ("Тестовая инженерная статья", "Краткое описание новости на русском."),
                 "Simplified Chinese": ("工程测试文章", "简体中文新闻摘要。"),
                 "English": ("Fixture engineering article", "Fixture AI summary"),
+                "French": ("Article technique de test", "Résumé français de l’article."),
             }
             title, article = next(value for language, value in texts.items() if language in instructions)
             entries = json.loads(request["messages"][1]["content"])
@@ -193,6 +194,41 @@ class AgentTests(unittest.TestCase):
         status = self.client.get("/v1/status").json()
         self.assertTrue(status["media_search"])
         self.assertEqual(status["digest_language"], "ru")
+
+    def test_digest_language_upgrade_keeps_old_choice_and_accepts_all_new_codes(self):
+        import sqlite3
+
+        with TemporaryDirectory() as folder:
+            root = Path(folder)
+            with sqlite3.connect(root / "manager.sqlite3") as db:
+                db.execute("CREATE TABLE digest_options (id INTEGER PRIMARY KEY CHECK(id=1), "
+                           "language TEXT NOT NULL CHECK(language IN ('en', 'ru', 'zh')))")
+                db.execute("INSERT INTO digest_options VALUES (1, 'zh')")
+            store = Store(root)
+            with store.db() as db:
+                self.assertEqual(store.digest_language(db), ("zh", True))
+                store.set_digest_language(db, "tt")
+            with Store(root).db() as db:
+                self.assertEqual(store.digest_language(db), ("tt", True))
+
+        self.assertEqual(set(self.client.get("/v1/status").json()["digest_languages"]), set(DIGEST_LANGUAGES))
+        for code in DIGEST_LANGUAGES:
+            self.assertEqual(self.client.put("/v1/digest-language", json={"language": code}).json(), {"language": code})
+        self.assertEqual(self.client.put("/v1/digest-language", json={"language": "nl"}).status_code, 422)
+
+    def test_generation_uses_one_new_language(self):
+        self.assertEqual(self.client.put("/v1/config", json=self.config()).status_code, 200)
+        self.assertEqual(self.client.put("/v1/digest-language", json={"language": "fr"}).status_code, 200)
+        run = uuid4()
+        self.assertLess(self.client.post("/v1/jobs", json={"id": str(run)}).status_code, 300)
+        job = self.wait(run.hex)
+        self.assertEqual(job["state"], "success", job)
+        self.assertEqual(job["result"]["languages"], ["fr"])
+        self.assertEqual(len(self.fixture.translation_requests), 1)
+        self.assertIn("into French", self.fixture.translation_requests[0])
+        digest = self.client.get(f"/v1/digests/{run.hex}/fr").json()
+        self.assertIn("Revue du jour Horizon", digest["markdown"])
+        self.assertEqual(digest["items"][0]["title"], "Article technique de test")
 
     def test_config_atomic_and_backup_integrity(self):
         expected = self.config()

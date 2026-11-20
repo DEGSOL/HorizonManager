@@ -55,6 +55,7 @@ internal data class Panel(
     val articles: List<JSONObject> = emptyList(),
     val total: Int = 0,
     val file: String? = null,
+    val deviceFile: Boolean = false,
     val updatingAgent: Boolean = false,
 )
 
@@ -65,6 +66,10 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     private val cache = ManagerDb.get(app).cache()
     private val mutable = MutableStateFlow(Panel())
     val state = mutable.asStateFlow()
+    private val saved = MutableStateFlow(0)
+    val settingsSaved = saved.asStateFlow()
+
+    private fun settingsSaved() { saved.update { it + 1 } }
     private var candidate: Server? = null
     private var flagObserver: Job? = null
     private var eventObserver: Job? = null
@@ -228,6 +233,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         if (panel.servers.none { it.id == id }) return@operation
         val remaining = panel.servers.filterNot { it.id == id }
         vault.save(remaining)
+        settingsSaved()
         // The connection is removed locally. The remote service and its data are untouched.
         runCatching { DigestNotifications.forget(app, id) }
         runCatching { DigestWorker.remove(app, id, remaining) }
@@ -247,7 +253,9 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         } else if (profile.id != state.value.server?.id) {
             select(profile)
         } else {
-            showFeed()
+            archiveRun = null
+            pageRequest = null
+            operation { synchronize(profile, everything = false) }
         }
     }
 
@@ -413,7 +421,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         if (state.value.server?.id != server.id) return
         mutable.update { it.copy(archive = history, hasMoreDigests = history.size >= DIGEST_PAGE_SIZE) }
         state.value.feedIssue(history)?.let { latest ->
-            val lang = digestLanguage(latest.getJSONArray("languages").strings()) ?: return@let
+            val lang = digestLanguage(latest.getJSONArray("languages").strings(), state.value.preferredDigestLanguage()) ?: return@let
             val run = latest.getString("id")
             showCached(server.id, run, lang)
         }
@@ -457,9 +465,14 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         val remote = withAgent(server) { api ->
             val status = api.get("status") as JSONObject
             if (status.has("digest_language") && !status.optBoolean("digest_language_chosen")) {
-                val selected = api.put("digest-language", JSONObject()
-                    .put("language", digestLocale()).put("initialize", true)) as JSONObject
-                status.put("digest_language", selected.getString("language")).put("digest_language_chosen", true)
+                val accepted = status.optJSONArray("digest_languages")?.strings() ?: legacyDigestLanguages
+                val language = digestLocale()
+                // Leave an old agent's default uncommitted so the next upgrade can use the device language.
+                if (language in accepted) {
+                    val selected = api.put("digest-language", JSONObject()
+                        .put("language", language).put("initialize", true)) as JSONObject
+                    status.put("digest_language", selected.getString("language")).put("digest_language_chosen", true)
+                }
             }
             val head = (api.get("digests?limit=$DIGEST_PAGE_SIZE") as JSONArray).objects()
             val panel = state.value
@@ -745,7 +758,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         val server = state.value.server?.takeIf { it.id == serverId }
             ?: throw Problem("AGENT_UNREACHABLE")
         if (!Regex("(?:[a-f0-9]{32}|run-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{8})").matches(run) ||
-            language !in setOf("en", "zh", "ru") || article.isBlank()) {
+            language !in digestLanguages || article.isBlank()) {
             throw Problem("ARTICLE_UNKNOWN")
         }
         val articleKey = contextHash(article)
@@ -777,49 +790,25 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         result
     }
 
-    fun setDigestLanguage(language: String) = mutate { api ->
+    fun setDigestLanguage(language: String) = mutate(setting = true) { api ->
+        val supported = state.value.status.optJSONArray("digest_languages")?.strings() ?: legacyDigestLanguages
+        if (language !in supported) throw Problem("AGENT_UPDATE_REQUIRED")
         api.put("digest-language", JSONObject().put("language", language))
     }
 
-    fun enrichmentMode(mode: String) = mutate { api ->
+    fun enrichmentMode(mode: String) = mutate(setting = true) { api ->
         api.put("enrichment-mode", JSONObject().put("mode", mode))
     }
 
-    fun mediaSearch(enabled: Boolean) = mutate(false) { api ->
+    fun mediaSearch(enabled: Boolean) = mutate(setting = true) { api ->
         api.put("media-search", JSONObject().put("enabled", enabled))
     }
 
     fun saveConfig(config: JSONObject, profiles: JSONArray, secrets: JSONObject = JSONObject()) {
-        mutate(true) { api ->
+        mutate(full = true, setting = true) { api ->
             api.put("config", JSONObject().put("revision", state.value.config.getInt("revision"))
                 .put("config", config).put("profiles", profiles).put("secrets", secrets))
         }
-    }
-
-    fun importConfig(incoming: JSONObject) {
-        val original = state.value.config
-        val current = original.optJSONObject("config")?.copyObject() ?: return
-        for (key in incoming.keys()) current.put(key, incoming.get(key))
-        saveConfig(current, original.getJSONArray("profiles"))
-    }
-
-    fun copyExisting(path: String) {
-        val server = state.value.server ?: return
-        operation {
-            val incoming = Ssh.withSession(server) { Ssh.existingConfig(it, path) }
-            val current = state.value.config
-            val config = current.getJSONObject("config").copyObject()
-            for (key in incoming.keys()) config.put(key, incoming.get(key))
-            withAgent(server) { api ->
-                api.put("config", JSONObject().put("revision", current.getInt("revision"))
-                    .put("config", config).put("profiles", current.getJSONArray("profiles")))
-            }
-            synchronize(server, everything = true)
-        }
-    }
-
-    fun revert() = mutate(true) {
-        it.post("config/revert", JSONObject().put("revision", state.value.config.getInt("revision")))
     }
 
     fun check() = inspect {
@@ -851,6 +840,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         val server = state.value.server ?: return
         operation {
             val saved = withAgent(server) { it.put("schedule", spec) as JSONObject }
+            settingsSaved()
             mutable.update {
                 if (it.server?.id != server.id) it
                 else it.copy(schedule = saved, status = it.status.copyObject().put("next", saved.opt("next")))
@@ -860,12 +850,43 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
 
     fun export(password: String) = mutate {
         val result = it.post("backup", JSONObject().put("password", password)) as JSONObject
-        mutable.update { panel -> panel.copy(file = result.getString("archive")) }
+        mutable.update { panel -> panel.copy(file = result.getString("archive"), deviceFile = false) }
     }
 
-    fun restore(file: String, password: String) = mutate(true) {
+    fun restore(file: String, password: String) = mutate(full = true, setting = true) {
         it.post("restore", JSONObject().put("password", password).put("archive", file)
             .put("revision", state.value.config.getInt("revision")))
+    }
+
+    fun exportDevice(password: String) = operation {
+        val panel = state.value
+        val settings = DeviceBackup.read(app, vault.load(), panel.server?.id.orEmpty())
+        val encoded = DeviceBackup.pack(settings, password)
+        mutable.update { it.copy(file = encoded, deviceFile = true) }
+    }
+
+    fun restoreDevice(file: String, password: String) = operation {
+        val incoming = DeviceBackup.unpack(file, password)
+        val previous = vault.load()
+        val profiles = (previous + incoming.servers).associateBy { it.id }.values.toList()
+        vault.save(profiles)
+        val next = profiles.find { it.id == incoming.selected } ?: state.value.server
+        withContext(Dispatchers.Main.immediate) {
+            app.getSharedPreferences("appearance", 0).edit().putString("preset", incoming.theme.id).apply()
+            app.getSharedPreferences("reading", 0).edit().putString("default_order", incoming.order.name).apply()
+            incoming.icon.apply(app)
+            selectLocally(next, profiles)
+        }
+        DigestWorker.schedule(app, profiles)
+        val previouslyEnabled = previous.filter { it.background }.map(Server::id).toSet()
+        for (profile in profiles.filter { it.installed }) {
+            if (!profile.background && profile.id in previouslyEnabled) {
+                DigestNotifications.unregister(app, profile.id)
+            }
+            if (profile.background || profile.id in previouslyEnabled) DigestWorker.sync(app, profile.id)
+        }
+        settingsSaved()
+        if (next != null) loadSelected(next)
     }
 
     fun clearEvents() {
@@ -888,6 +909,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                 if (health.optInt("api") != 1) throw Problem("AGENT_PROTOCOL")
             }
             store(updated)
+            settingsSaved()
             if (!background && server.background) DigestNotifications.unregister(app, server.id)
             DigestWorker.schedule(app, state.value.servers)
             if (background || server.background) DigestWorker.sync(app, server.id)
@@ -914,13 +936,20 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         }
     }
 
-    private fun mutate(full: Boolean = false, action: (AgentApi) -> Unit) {
+    private fun mutate(full: Boolean = false, setting: Boolean = false, action: (AgentApi) -> Unit) {
         val server = state.value.server ?: return
         operation {
             withAgent(server, action = action)
+            if (setting) settingsSaved()
             synchronize(server, everything = full)
         }
     }
+
+    private var exportDocument: String? = null
+
+    fun prepareExportDocument(content: String) { exportDocument = content }
+
+    fun takeExportDocument(): String? = exportDocument.also { exportDocument = null }
 
     fun clearFile() = mutable.update { it.copy(file = null) }
     fun consumeProblem(problem: String) = mutable.update {

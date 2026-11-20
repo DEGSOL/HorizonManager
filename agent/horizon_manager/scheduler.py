@@ -12,7 +12,7 @@ class Schedule(BaseModel):
     hour: int = Field(default=8, ge=0, le=23)
     minute: int = Field(default=0, ge=0, le=59)
     days: list[int] = Field(default_factory=lambda: list(range(7)), min_length=1, max_length=7)
-    zone: str = Field(default="Asia/Yekaterinburg", max_length=80)
+    zone: str = Field(default="UTC", max_length=80)
 
     @field_validator("zone")
     @classmethod

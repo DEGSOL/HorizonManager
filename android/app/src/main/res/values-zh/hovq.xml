@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="hovq_settings_saved">设置已保存</string>
+    <string name="hovq_icon">应用图标</string>
+    <string name="hovq_icon_detail">选择 Android 主屏幕上的 Hovq 图标。</string>
+    <string name="hovq_icon_light">浅色</string>
+    <string name="hovq_icon_dark">深色</string>
+    <string name="hovq_icon_error">Android 无法更改图标。</string>
+    <string name="hovq_language_upgrade">更新 VPS 代理即可使用全部 11 种摘要语言。</string>
+    <string name="hovq_vps_backup">VPS 上的 Horizon</string>
+    <string name="hovq_vps_backup_detail">将来源、配置档案、AI 设置、密钥、计划和摘要选项保存在一个加密文件中。</string>
+    <string name="hovq_backup_connect_first">请先连接 Horizon，再迁移它的设置。</string>
+    <string name="hovq_device_backup">此设备上的 Hovq</string>
+    <string name="hovq_device_backup_detail">将 VPS 连接及凭据、通知偏好、主题、排序和图标保存在一个加密文件中。</string>
+    <string name="hovq_transfer_detail">通过加密文件迁移 Horizon 或 Hovq 的设置。</string>
+    <string name="hovq_export">导出</string>
+    <string name="hovq_import">导入</string>
+    <string name="hovq_device_restore_password">输入 Hovq 备份密码。匹配的连接将更新，其他已保存的连接将保留。</string>
+    <string name="hovq_vps_restore_password">输入 Horizon 备份密码。导入会替换当前 VPS 上的设置与计划。</string>
+    <string name="hovq_digest_channel">新摘要</string>
+    <string name="hovq_digest_channel_detail">Horizon 完成新一期摘要后发送通知。</string>
+    <string name="hovq_push_active">推送已连接。Hovq 会偶尔检查 VPS，以免遗漏通知。</string>
+    <string name="hovq_polling_active">Android 允许时每 15 分钟检查一次。连接推送可更快收到通知。</string>
+    <string name="hovq_alerts_blocked">通知已在 Android 设置中关闭。</string>
+    <string name="hovq_android_alert_settings">Android 通知设置</string>
+    <string name="hovq_existing_horizon">已在 %1$s 发现 Horizon。</string>
+</resources>

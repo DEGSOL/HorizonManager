@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="hovq_settings_saved">Баптаулар сақталды</string>
+    <string name="hovq_icon">Қолданба белгішесі</string>
+    <string name="hovq_icon_detail">Android басты экранындағы Hovq белгішесін таңдаңыз.</string>
+    <string name="hovq_icon_light">Ашық</string>
+    <string name="hovq_icon_dark">Күңгірт</string>
+    <string name="hovq_icon_error">Android белгішені өзгерте алмады.</string>
+    <string name="hovq_language_upgrade">Дайджесттің барлық 11 тілін пайдалану үшін VPS агентін жаңартыңыз.</string>
+    <string name="hovq_vps_backup">VPS-тегі Horizon</string>
+    <string name="hovq_vps_backup_detail">Дереккөздер, профильдер, ЖИ баптаулары, кілттер, кесте және дайджест параметрлері бір шифрланған файлда.</string>
+    <string name="hovq_backup_connect_first">Баптауларды көшіру үшін Horizon жүйесіне қосылыңыз.</string>
+    <string name="hovq_device_backup">Осы құрылғыдағы Hovq</string>
+    <string name="hovq_device_backup_detail">VPS қосылымдары мен кіру деректері, хабарландырулар, тақырып, сұрыптау және белгіше бір шифрланған файлда.</string>
+    <string name="hovq_transfer_detail">Horizon немесе Hovq баптауларын шифрланған файлдар арқылы көшіріңіз.</string>
+    <string name="hovq_export">Экспорттау</string>
+    <string name="hovq_import">Импорттау</string>
+    <string name="hovq_device_restore_password">Hovq сақтық көшірмесінің құпиясөзін енгізіңіз. Сәйкес қосылымдар жаңартылады, қалғандары сақталады.</string>
+    <string name="hovq_vps_restore_password">Horizon сақтық көшірмесінің құпиясөзін енгізіңіз. Импорт белсенді VPS-тегі баптаулар мен кестені ауыстырады.</string>
+    <string name="hovq_digest_channel">Жаңа дайджестер</string>
+    <string name="hovq_digest_channel_detail">Horizon жаңа шығарылымды дайындағанда хабарлама келеді.</string>
+    <string name="hovq_push_active">Push қосулы. Hovq қосымша сақтық үшін VPS-ті анда-санда тексереді.</string>
+    <string name="hovq_polling_active">Android рұқсат бергенде әр 15 минут сайын тексереді. Хабарламаны тез алу үшін push қосыңыз.</string>
+    <string name="hovq_alerts_blocked">Android баптауларында хабарландырулар өшірілген.</string>
+    <string name="hovq_android_alert_settings">Android хабарландыру баптаулары</string>
+    <string name="hovq_existing_horizon">Horizon %1$s жолында табылды.</string>
+</resources>

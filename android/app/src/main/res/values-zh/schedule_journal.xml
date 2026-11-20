@@ -2,7 +2,7 @@
 <resources>
     <string name="schedule_next">下次计划运行</string>
     <string name="schedule_manual">仅手动</string>
-    <string name="schedule_vps_hint">即使 MRizon 已关闭，VPS 也会按计划运行。</string>
+    <string name="schedule_vps_hint">即使 Hovq 已关闭，VPS 也会按计划运行。</string>
     <string name="schedule_unavailable">计划不可用</string>
     <string name="schedule_frequency">何时生成摘要</string>
     <string name="schedule_hours">%1$d 小时</string>

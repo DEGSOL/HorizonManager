@@ -8,7 +8,7 @@
     <string name="setting_find_missing_covers">Find missing covers</string>
     <string name="setting_help_enrichment">On demand adds context when you open an article and request it. Automatic adds context to selected articles while creating the digest. The choice applies to the next run, including scheduled runs.</string>
     <string name="setting_help_profiles">A profile sets the prompts and scoring rules. You can assign a profile to a source or let Horizon choose from the available profiles.</string>
-    <string name="setting_help_secrets">Enter a key or token under its variable name. MRizon saves the value on the VPS and shows only the names of saved secrets.</string>
+    <string name="setting_help_secrets">Enter a key or token under its variable name. Hovq saves the value on the VPS and shows only the names of saved secrets.</string>
     <string name="setting_help_backup">The protected backup contains configuration, profiles, secrets and the schedule. Keep its password for restoration. Digests and the journal are stored separately.</string>
     <string name="setting_help_sort">This order applies by default to the feed and archive. To sort the current view differently, use the filters at the top of the feed.</string>
     <string name="setting_help_offline">Downloaded digests and successfully saved covers are available offline. Covers that could not be retrieved are shown with a background.</string>

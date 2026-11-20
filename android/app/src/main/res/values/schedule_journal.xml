@@ -2,7 +2,7 @@
 <resources>
     <string name="schedule_next">Next scheduled run</string>
     <string name="schedule_manual">Manually only</string>
-    <string name="schedule_vps_hint">The VPS runs the schedule even when MRizon is closed.</string>
+    <string name="schedule_vps_hint">The VPS runs the schedule even when Hovq is closed.</string>
     <string name="schedule_unavailable">Schedule unavailable</string>
     <string name="schedule_frequency">When to create a digest</string>
     <string name="schedule_hours">%1$d h</string>

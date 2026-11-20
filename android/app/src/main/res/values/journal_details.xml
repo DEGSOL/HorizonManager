@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="journal_activity_title">Activity history</string>
-    <string name="journal_activity_help">Entries explain what MRizon, the VPS, and Horizon did. Open an entry to read more, see its code, or show the other entries from the same job.</string>
+    <string name="journal_activity_help">Entries explain what Hovq, the VPS, and Horizon did. Open an entry to read more, see its code, or show the other entries from the same job.</string>
     <string name="journal_technical">Technical details</string>
     <string name="journal_level_error">Error</string>
     <string name="journal_level_warning">Warning</string>
@@ -14,7 +14,7 @@
     <string name="journal_filter_detail">Horizon applies profile thresholds, checks repeated topics, and enforces the group and issue limits.</string>
     <string name="journal_enrich_detail">Horizon requests additional context for an article or for selected items in automatic mode.</string>
     <string name="journal_generate_detail">Horizon prepares the selected issue language and assembles the digest text.</string>
-    <string name="journal_save_detail">The server writes the prepared issue to storage so that MRizon can download it.</string>
+    <string name="journal_save_detail">The server writes the prepared issue to storage so that Hovq can download it.</string>
     <string name="journal_delivery_detail">Horizon attempts to send the digest to the configured email or webhook endpoints.</string>
     <string name="journal_install_preflight">Checking the VPS</string>
     <string name="journal_install_packages">System packages</string>
@@ -66,7 +66,7 @@
     <string name="journal_media_unavailable_detail">The agent could not prepare or return a cover. The article text is still available if it was downloaded.</string>
     <string name="journal_enrich_failed">Additional context was unavailable. Horizon can still publish the base article from the first analysis.</string>
     <string name="journal_localization_recovered">The retry filled in translations missing from the initial response.</string>
-    <string name="journal_backup_exported">The agent prepared an encrypted backup. MRizon saves it to the file you choose.</string>
+    <string name="journal_backup_exported">The agent prepared an encrypted backup. Hovq saves it to the file you choose.</string>
     <string name="journal_backup_restored">The agent applied the settings from the encrypted file.</string>
     <string name="journal_cleared_detail">The requested journal entries were removed.</string>
     <string name="journal_push_problem">Background checking or notification delivery failed. Check connection and notification settings.</string>
@@ -76,7 +76,7 @@
     <string name="journal_config_action">Open the settings you last edited, check the selected values and links to profiles, then try saving again.</string>
     <string name="journal_check_related">Open the other records for this job to see what happened before and after this event.</string>
     <string name="journal_access_model">Check the provider, key, and model in AI processing. Run a model test before repeating the job.</string>
-    <string name="journal_vault_guide">Android could not access the protected connection storage. Unlock the phone and reopen MRizon.</string>
+    <string name="journal_vault_guide">Android could not access the protected connection storage. Unlock the phone and reopen Hovq.</string>
     <string name="journal_backup_version">The active agent does not support this backup format or Horizon version.</string>
     <string name="journal_upstream_failure">A connected service returned an error. The records from the same job help identify which stage failed.</string>
     <string name="journal_request_guide">The agent could not accept the request. Refresh the server state and check the values before retrying.</string>

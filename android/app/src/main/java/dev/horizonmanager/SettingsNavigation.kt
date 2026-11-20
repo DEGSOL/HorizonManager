@@ -61,6 +61,7 @@ internal fun SettingsHome(panel: Panel, preset: ThemePreset, open: (String) -> U
         "interface" -> {
             SettingsSection(R.string.setting_group_reading) {
                 GlassSettingRow(ui(R.string.theme), ui(preset.title), open = rowPage("theme"))
+                GlassSettingRow(ui(R.string.hovq_icon), ui(R.string.hovq_icon_detail), open = rowPage("icon"))
                 GlassSettingRow(ui(R.string.editorial_feed_behavior), ui(R.string.editorial_feed_behavior_detail), open = rowPage("reading"))
             }
             if (panel.ready) SettingsSection(R.string.setting_group_device) {
@@ -97,14 +98,15 @@ internal fun AiSettings(panel: Panel, model: ManagerModel, open: (String) -> Uni
     val supportsLanguage = panel.status.has("digest_language")
     Tile {
         GlassSettingRow(ui(R.string.settings_ai_model), ui(R.string.ui_model_api_address_and_request_limits)) { open("ai") }
-        Choice(ui(R.string.digest_output_language), digestLanguages, panel.preferredDigestLanguage(),
-            model::setDigestLanguage, {
-                ui(when (it) {
-                    "ru" -> R.string.digest_language_russian
-                    "zh" -> R.string.digest_language_chinese
-                    else -> R.string.digest_language_english
-                })
-            }, enabled = supportsLanguage && !panel.busy, row = true, help = R.string.digest_language_detail)
+        val availableLanguages = panel.status.optJSONArray("digest_languages")?.strings() ?: legacyDigestLanguages
+        Choice(ui(R.string.digest_output_language), digestLanguages, panel.preferredDigestLanguage(), { language ->
+            model.setDigestLanguage(language)
+        }, ::digestLanguageLabel, enabled = supportsLanguage && !panel.busy, row = true,
+            help = R.string.digest_language_detail, entryEnabled = { it in availableLanguages })
+        if (!availableLanguages.containsAll(digestLanguages)) {
+            Text(ui(R.string.hovq_language_upgrade), color = LocalHorizonPalette.current.muted,
+                style = MaterialTheme.typography.bodySmall)
+        }
         Choice(ui(R.string.enrichment_mode), listOf("on_demand", "automatic"),
             mode.ifBlank { "on_demand" }, model::enrichmentMode, {
                 ui(if (it == "automatic") R.string.enrichment_automatic else R.string.enrichment_on_demand)
@@ -176,8 +178,19 @@ internal fun ConnectionSettings(panel: Panel, model: ManagerModel, dirtyChange: 
 internal fun NotificationSettings(panel: Panel, model: ManagerModel, permission: () -> Unit, delivery: () -> Unit) {
     val server = panel.server ?: return
     val context = LocalContext.current
-    val registration by remember(context, server.id) { DigestNotifications.observeRegistration(context, server.id) }
-        .collectAsState(initial = DigestNotifications.registration(context, server.id))
+    val pushReady by remember(context, server.id) { DigestNotifications.observeRegistration(context, server.id) }
+        .collectAsState(initial = DigestNotifications.hasPush(context, server.id))
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    var allowed by remember { mutableStateOf(DigestNotifications.deliveryAllowed(context)) }
+    DisposableEffect(lifecycle, context) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                allowed = DigestNotifications.deliveryAllowed(context)
+            }
+        }
+        lifecycle.lifecycle.addObserver(observer)
+        onDispose { lifecycle.lifecycle.removeObserver(observer) }
+    }
     var chooseDistributor by remember { mutableStateOf(false) }
     if (chooseDistributor) {
         val distributors = UnifiedPush.getDistributors(context)
@@ -203,17 +216,24 @@ internal fun NotificationSettings(panel: Panel, model: ManagerModel, permission:
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(ui(R.string.ui_background_news_checks), Modifier.weight(1f))
-            SettingHelp(ui(R.string.ui_background_news_checks), R.string.ui_for_faster_alerts_connect_ntfy_through)
+            SettingHelp(ui(R.string.ui_background_news_checks), R.string.hovq_polling_active)
             Switch(server.background, enabled = !panel.busy, onCheckedChange = { checked ->
                 if (checked) permission()
                 model.settings(server.https, checked)
             })
         }
         Reveal(server.background) {
-            if (registration.isNotEmpty()) Text(ui(R.string.ui_push_notifications_connected))
+            Text(ui(if (pushReady) R.string.hovq_push_active else R.string.hovq_polling_active),
+                style = MaterialTheme.typography.bodyMedium, color = LocalHorizonPalette.current.muted)
+            if (!allowed) Text(ui(R.string.hovq_alerts_blocked), color = LocalHorizonPalette.current.warning)
+            TextButton(onClick = {
+                val intent = android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+                context.startActivity(intent)
+            }) { Text(ui(R.string.hovq_android_alert_settings)) }
             FlowRow {
                 TextButton(onClick = { chooseDistributor = true }) { Text(ui(R.string.ui_connect_push_notifications)) }
-                if (registration.isNotEmpty()) {
+                if (pushReady || DigestNotifications.endpoint(context, server.id).isNotEmpty()) {
                     TextButton(onClick = {
                         DigestNotifications.unregister(context, server.id)
                         DigestWorker.sync(context, server.id)
@@ -238,9 +258,8 @@ internal fun ServerMaintenance(panel: Panel, model: ManagerModel, open: (String)
         close = { upgrade = false }) { password -> upgrade = false; model.updateAgent(password) }
     Tile {
         GlassSettingRow(ui(R.string.journal), ui(R.string.settings_journal_detail)) { open("journal") }
+        GlassSettingRow(ui(R.string.settings_transfer), ui(R.string.hovq_transfer_detail)) { open("transfer") }
         if (panel.ready && panel.config.length() > 0 && panel.schema.length() > 0) {
-            GlassSettingRow(ui(R.string.settings_transfer), ui(R.string.settings_transfer_detail),
-                help = R.string.setting_help_backup) { open("transfer") }
             GlassSettingRow(ui(R.string.ui_secrets), ui(R.string.ui_ai_keys_and_integration_tokens),
                 help = R.string.setting_help_secrets) { open("secrets") }
             GlassSettingRow(ui(R.string.ui_advanced_settings), ui(R.string.ui_extractors_and_display)) { open("advanced") }
@@ -266,44 +285,24 @@ internal fun ServerMaintenance(panel: Panel, model: ManagerModel, open: (String)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun TransferSettings(panel: Panel, model: ManagerModel, backup: () -> Unit, restore: () -> Unit,
-                              importFile: (String) -> Unit, export: (String, String) -> Unit,
-                              confirm: (String, () -> Unit) -> Unit) {
-    val config = panel.config.optJSONObject("config") ?: return
+internal fun TransferSettings(panel: Panel, backup: (Boolean) -> Unit, restore: (Boolean) -> Unit) {
+    val connected = panel.ready && panel.config.has("revision")
     Tile {
-        SettingHeading(ui(R.string.ui_backup), R.string.setting_help_backup)
-        GlassSettingRow(ui(R.string.ui_export_backup), ui(R.string.transfer_backup_export_detail),
-            enabled = !panel.busy, open = backup)
-        GlassSettingRow(ui(R.string.ui_restore_backup_4afed2), ui(R.string.transfer_backup_restore_detail),
-            enabled = !panel.busy, open = restore)
-    }
-    Tile {
-        Text(ui(R.string.transfer_json_title), style = MaterialTheme.typography.titleMedium)
-        GlassSettingRow(ui(R.string.ui_import_horizon_config), ui(R.string.transfer_config_import_detail), enabled = !panel.busy) {
-            importFile("config")
-        }
-        GlassSettingRow(ui(R.string.ui_export_settings), ui(R.string.transfer_config_export_detail), enabled = !panel.busy) {
-            export("horizon-settings.json", config.toString(2))
-        }
-        GlassSettingRow(ui(R.string.ui_import_manager_profiles), ui(R.string.transfer_profiles_import_detail), enabled = !panel.busy) {
-            importFile("profiles")
-        }
-        GlassSettingRow(ui(R.string.ui_export_profiles), ui(R.string.transfer_profiles_export_detail), enabled = !panel.busy) {
-            export("horizon-profiles.json", panel.config.getJSONArray("profiles").toString(2))
+        Text(ui(R.string.hovq_vps_backup), style = MaterialTheme.typography.titleMedium)
+        Text(ui(R.string.hovq_vps_backup_detail), color = LocalHorizonPalette.current.muted)
+        if (!connected) Text(ui(R.string.hovq_backup_connect_first), style = MaterialTheme.typography.bodySmall)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            TextButton(enabled = connected && !panel.busy, onClick = { backup(false) }) { Text(ui(R.string.hovq_export)) }
+            TextButton(enabled = connected && !panel.busy, onClick = { restore(false) }) { Text(ui(R.string.hovq_import)) }
         }
     }
     Tile {
-        Text(ui(R.string.transfer_server_title), style = MaterialTheme.typography.titleMedium)
-        Text(ui(R.string.transfer_server_detail), color = LocalHorizonPalette.current.muted)
-        var path by remember { mutableStateOf(panel.probe["existing"].orEmpty()) }
-        ValueField(ui(R.string.ui_existing_horizon_folder_on_the_vps), path, { path = it })
-        TextButton(enabled = !panel.busy && path.trim().startsWith("/"), onClick = {
-            confirm(ui(R.string.ui_copy_settings_from_this_folder_into)) { model.copyExisting(path.trim()) }
-        }) { Text(ui(R.string.ui_copy_configuration_from_vps)) }
-    }
-    Tile {
-        GlassSettingRow(ui(R.string.ui_roll_back_settings), ui(R.string.transfer_rollback_detail),
-            enabled = !panel.busy) { confirm(ui(R.string.ui_restore_the_previous_configuration_and_its)) { model.revert() } }
+        Text(ui(R.string.hovq_device_backup), style = MaterialTheme.typography.titleMedium)
+        Text(ui(R.string.hovq_device_backup_detail), color = LocalHorizonPalette.current.muted)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            TextButton(enabled = !panel.busy, onClick = { backup(true) }) { Text(ui(R.string.hovq_export)) }
+            TextButton(enabled = !panel.busy, onClick = { restore(true) }) { Text(ui(R.string.hovq_import)) }
+        }
     }
 }
 

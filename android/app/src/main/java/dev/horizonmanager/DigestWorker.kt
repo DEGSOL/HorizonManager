@@ -22,6 +22,7 @@ internal class DigestWorker(context: Context, params: WorkerParameters) : Corout
     override suspend fun doWork() = withContext(Dispatchers.IO) {
         val app = applicationContext
         val id = inputData.getString("server")
+        if (id == null && !DigestNotifications.deliveryAllowed(app)) return@withContext Result.success()
         val profiles = try {
             Vault(app).load()
         } catch (_: Exception) {
@@ -52,6 +53,10 @@ internal class DigestWorker(context: Context, params: WorkerParameters) : Corout
                     }
                 }
                 DigestNotifications.marker(app, server, marker)
+                if (endpoint.isNotEmpty() && server.background &&
+                    DigestNotifications.registration(app, server.id) == endpoint) {
+                    DigestNotifications.reconciled(app, server.id)
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -60,7 +65,7 @@ internal class DigestWorker(context: Context, params: WorkerParameters) : Corout
                 if (code in setOf("PUSH_ENDPOINT", "API_404") && endpoint.isNotEmpty()) {
                     DigestNotifications.setEndpoint(app, server.id, "")
                 }
-                retry = immediate && runAttemptCount < 3 &&
+                retry = retry || immediate && runAttemptCount < 3 &&
                     code !in setOf("AUTH_REQUIRED", "PUSH_ENDPOINT", "API_404")
             }
         }
@@ -89,8 +94,9 @@ internal class DigestWorker(context: Context, params: WorkerParameters) : Corout
                 manager.cancelUniqueWork("horizon-digests")
                 return
             }
-            val minutes = if (enabled.all { DigestNotifications.registration(app, it.id).isNotEmpty() }) 360L else 30L
-            val work = PeriodicWorkRequestBuilder<DigestWorker>(minutes, TimeUnit.MINUTES, 10, TimeUnit.MINUTES)
+            val minutes = if (enabled.all { DigestNotifications.hasPush(app, it.id) }) 360L else 15L
+            val flex = if (minutes == 15L) 5L else 30L
+            val work = PeriodicWorkRequestBuilder<DigestWorker>(minutes, TimeUnit.MINUTES, flex, TimeUnit.MINUTES)
                 .setConstraints(network).build()
             manager.enqueueUniquePeriodicWork("horizon-digests", ExistingPeriodicWorkPolicy.UPDATE, work)
         }

@@ -25,7 +25,7 @@ from src.processing.content import split_content
 
 from . import VERSION, backup, jobs, push, router_catalog
 from .article_context import find_item, key_for, localized_context, previous_context, read_json
-from .configuration import DIGEST_LANGUAGES, ai_missing, schema, secret_name_allowed, validate
+from .configuration import DIGEST_LANGUAGES, DigestLanguageCode, ai_missing, schema, secret_name_allowed, validate
 from .localized_digest import LocalizedSummarizer, restore_original_cards
 from .media import relay_cover
 from .scheduler import Schedule, next_run
@@ -69,7 +69,7 @@ class EnrichmentMode(Body):
 
 
 class DigestLanguage(Body):
-    language: Literal["en", "zh", "ru"]
+    language: DigestLanguageCode
     initialize: bool = False
 
 
@@ -204,7 +204,8 @@ def create_app(root, token):
         with store.db() as db:
             next_at = db.execute("SELECT next FROM schedule WHERE id=1").fetchone()[0]
             language, chosen = store.digest_language(db)
-            return {**health(), "digest_language": language, "digest_language_chosen": chosen, "disk_free": disk.free, "disk_total": disk.total,
+            return {**health(), "digest_language": language, "digest_language_chosen": chosen,
+                    "digest_languages": DIGEST_LANGUAGES, "disk_free": disk.free, "disk_total": disk.total,
                     "media_search": store.media_search(db), "cover_relay": True, "enrichment_mode": store.enrichment_mode(db),
                     "load": os.getloadavg()[0], "cpu": os.cpu_count(), "memory": mem, "next": next_at}
 
@@ -558,15 +559,15 @@ def create_app(root, token):
             return {"state": "queued", "job": job}
 
     @app.get("/v1/article-context/{run}/{key}/{language}")
-    def get_article_context(run: str, key: str, language: Literal["en", "zh", "ru"]):
+    def get_article_context(run: str, key: str, language: DigestLanguageCode):
         return access_context(run, key, language, submit=False)
 
     @app.post("/v1/article-context/{run}/{key}/{language}")
-    def request_article_context(run: str, key: str, language: Literal["en", "zh", "ru"]):
+    def request_article_context(run: str, key: str, language: DigestLanguageCode):
         return access_context(run, key, language, submit=True)
 
     @app.get("/v1/digests/{run}/{language}")
-    def digest(run: str, language: Literal["en", "zh", "ru"], offset: int = Query(0, ge=0), limit: int = Query(40, ge=1, le=80)):
+    def digest(run: str, language: DigestLanguageCode, offset: int = Query(0, ge=0), limit: int = Query(40, ge=1, le=80)):
         path = artifacts(run)
         try:
             with (path / f"summary-{language}.md").open(encoding="utf-8") as file:
@@ -631,7 +632,7 @@ def create_app(root, token):
             Store.event(db, "BACKUP_EXPORTED")
         return {"archive": backup.pack({"horizon": REVISION, "settings": settings, "schedule": schedule,
                                         "media_search": media_search, "enrichment_mode": enrichment_mode,
-                                        **({"digest_language": language} if chosen else {})}, body.password)}
+                                        "digest_language": language, "digest_language_chosen": chosen}, body.password)}
 
     @app.post("/v1/restore")
     def restore(body: ImportBackup):
@@ -661,7 +662,9 @@ def create_app(root, token):
             mode = payload.get("enrichment_mode")
             if mode in ("on_demand", "automatic"):
                 Store.set_enrichment_mode(db, mode)
-            if payload.get("digest_language") in DIGEST_LANGUAGES:
+            if payload.get("digest_language_chosen") is False:
+                db.execute("DELETE FROM digest_options WHERE id=1")
+            elif payload.get("digest_language") in DIGEST_LANGUAGES:
                 Store.set_digest_language(db, payload["digest_language"])
             Store.event(db, "BACKUP_RESTORED")
             return public(store.settings(db))

@@ -649,7 +649,7 @@ internal fun articleMetadata(article: JSONObject): String =
             article
                 .optDouble("score")
                 .takeIf(Double::isFinite)
-                ?.let { "%.1f / 10".format(Locale.getDefault(), it) }
+                ?.let { "%.1f / 10".format(appLocale(), it) }
                 .orEmpty(),
         )
         .filter(String::isNotBlank)
