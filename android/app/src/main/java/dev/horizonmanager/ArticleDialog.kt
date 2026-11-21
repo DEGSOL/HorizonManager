@@ -81,8 +81,8 @@ internal fun ArticleDialog(
                 CoverSurface(
                     cover,
                     article.optString("id"),
-                    titleHeight,
                     Modifier.matchParentSize(),
+                    textHeight = titleHeight,
                 )
                 Column {
                     Row(

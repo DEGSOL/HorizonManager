@@ -37,13 +37,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.*
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -541,13 +541,12 @@ internal fun PublicationTile(
     open: () -> Unit,
     save: () -> Unit,
 ) {
-    val p = LocalHorizonPalette.current
     val key = article.optString("id")
     val cover = artwork(artworkServer, article, relay)
-    var height by remember { mutableFloatStateOf(0f) }
+    val photoHeight = 112.dp
     val shape = androidx.compose.foundation.shape.RoundedCornerShape(19.dp)
     Box(modifier.fillMaxWidth().clip(shape).clickable(role = Role.Button, onClick = open)) {
-        CoverSurface(cover, key, height, Modifier.matchParentSize())
+        CoverSurface(cover, key, Modifier.matchParentSize(), photoHeight = photoHeight)
         Column {
             Row(
                 Modifier.fillMaxWidth().padding(start = 9.dp, end = 1.dp),
@@ -586,18 +585,18 @@ internal fun PublicationTile(
                     save()
                 }
             }
-            Spacer(Modifier.height(50.dp))
+            Spacer(Modifier.height(photoHeight - 48.dp))
             Column(
-                Modifier.onSizeChanged { height = it.height.toFloat() }
-                    .padding(start = 12.dp, end = 12.dp, bottom = 14.dp, top = 9.dp)
+                Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 14.dp, top = 9.dp)
             ) {
                 Text(
                     articleField(article, "title"),
                     color = if (flag?.read == true) Color(0xffd7d9da) else Color.White,
                     style =
                         MaterialTheme.typography.titleLarge.copy(
-                            lineHeight = 23.sp,
                             letterSpacing = (-.55).sp,
+                            lineBreak = LineBreak.Paragraph,
+                            platformStyle = PlatformTextStyle(includeFontPadding = true),
                         ),
                 )
                 val source = if (isTelegram(article)) telegramPublisher(article) else articleField(article, "source")

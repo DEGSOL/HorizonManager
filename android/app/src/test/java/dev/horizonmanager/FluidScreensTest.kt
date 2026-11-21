@@ -3,8 +3,10 @@ package dev.horizonmanager
 import android.graphics.Bitmap
 import android.util.LruCache
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.lifecycle.ViewModelProvider
 import java.io.File
 import java.time.Instant
@@ -73,7 +75,7 @@ class FluidScreensTest {
 
     // Only the test owns this snapshot. The released app reads ManagerModel's agent/cache flow.
     @Suppress("UNCHECKED_CAST")
-    private fun loadIssue(): String {
+    private fun loadIssue(longHeadline: String? = null): String {
         val now = Instant.now()
         val date = now.minusSeconds(900).toString()
         val server =
@@ -119,7 +121,11 @@ class FluidScreensTest {
                 val img = "https://images-assets.nasa.gov/image/" + slug + "/" + slug + "~small.jpg"
                 JSONObject()
                     .put("id", "n" + n)
-                    .put("title", if (n < 4) headlines[k] else headlines[k] + " · " + (n + 1))
+                    .put("title", when {
+                        n == 1 && longHeadline != null -> longHeadline
+                        n < 4 -> headlines[k]
+                        else -> headlines[k] + " · " + (n + 1)
+                    })
                     .put("url", if (n < 6) page else "")
                     .put("time", date)
                     .put("score", 8)
@@ -135,7 +141,8 @@ class FluidScreensTest {
                         "media",
                         if (n < 6) JSONObject().put("kind", "original").put("source", page).put("url", img) else JSONObject(),
                     )
-                    .also { if (n < 6) memory.put(artworkKey(server.id, it), pictures[k]) }
+                    .also { if (n < 6) memory.put(artworkKey(server.id, it),
+                        pictures[if (n == 1 && longHeadline != null) 0 else k]) }
             }
         val cacheDao = ManagerDb.get(compose.activity).cache()
         runBlocking(Dispatchers.IO) {
@@ -307,6 +314,29 @@ class FluidScreensTest {
         assertEquals(2, compose.onAllNodesWithText(ui(R.string.hovq_export)).fetchSemanticsNodes().size)
         assertEquals(2, compose.onAllNodesWithText(ui(R.string.hovq_import)).fetchSemanticsNodes().size)
         snapshot("12-backup-targets")
+    }
+
+    @Test
+    fun longHeadlineExpandsTileAndKeepsTheSameCoverCrop() {
+        val title = "Космический аппарат прислал новые изображения далёкой планеты и подтвердил наличие облаков"
+        loadIssue(longHeadline = title)
+        val long = compose.onNodeWithText(title, useUnmergedTree = true)
+        val shortTile = compose.onNodeWithText(headlines[0], useUnmergedTree = true).onParent()
+            .getUnclippedBoundsInRoot()
+        val longTile = long.onParent().getUnclippedBoundsInRoot()
+        assertTrue(longTile.bottom - longTile.top > shortTile.bottom - shortTile.top)
+        val layouts = mutableListOf<TextLayoutResult>()
+        long.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { assertTrue(it(layouts)) }
+        val layout = layouts.single()
+        assertFalse(layout.hasVisualOverflow)
+        assertEquals(title.length, layout.getLineEnd(layout.lineCount - 1))
+
+        val feed = snapshot("13-headline-and-cover")
+        val density = compose.activity.resources.displayMetrics.density
+        val sampleY = ((shortTile.top.value + 62) * density).toInt()
+        val shortX = ((shortTile.left.value + 66) * density).toInt()
+        val longX = ((longTile.left.value + 66) * density).toInt()
+        assertEquals(feed.getPixel(shortX, sampleY), feed.getPixel(longX, sampleY))
     }
 
     @Test

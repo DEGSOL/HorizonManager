@@ -16,7 +16,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -25,6 +27,7 @@ import java.net.InetAddress
 import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -348,21 +351,74 @@ internal fun artwork(server: String, article: JSONObject, relay: (suspend () -> 
     }
 }
 
-private fun DrawScope.crop(image: ImageBitmap) {
-    val scale = max(size.width / image.width, size.height / image.height)
+private fun DrawScope.crop(image: ImageBitmap, frameHeight: Float = size.height) {
+    val scale = max(size.width / image.width, frameHeight / image.height)
     val w = max(1, (image.width * scale).roundToInt())
     val h = max(1, (image.height * scale).roundToInt())
     drawImage(
         image,
         dstOffset =
-            IntOffset(((size.width - w) / 2).roundToInt(), ((size.height - h) / 2).roundToInt()),
+            IntOffset(((size.width - w) / 2).roundToInt(), ((frameHeight - h) / 2).roundToInt()),
         dstSize = IntSize(w, h),
         filterQuality = FilterQuality.Medium,
     )
 }
 
+private fun DrawScope.drawTilePhoto(cover: Cover, photoBottom: Float, fadeStart: Float) {
+    val frame = photoBottom.roundToInt()
+    val width = size.width.roundToInt()
+    val continuation = size.height.roundToInt() - frame
+    if (frame < 1 || width < 1) return
+
+    // Match the crop in the blurred bitmap and reflect its lower edge across the title area.
+    val soft = cover.soft
+    val cropScale = max(size.width / soft.width, photoBottom / soft.height)
+    val cropWidth = (size.width / cropScale).roundToInt().coerceIn(1, soft.width)
+    val cropHeight = (photoBottom / cropScale).roundToInt().coerceIn(1, soft.height)
+    val left = (soft.width - cropWidth) / 2
+    val top = (soft.height - cropHeight) / 2
+    drawImage(
+        soft,
+        srcOffset = IntOffset(left, top),
+        srcSize = IntSize(cropWidth, cropHeight),
+        dstSize = IntSize(width, frame),
+        filterQuality = FilterQuality.Medium,
+    )
+    if (continuation > 0) {
+        val strip = max(1, cropHeight / 3)
+        scale(1f, -1f, pivot = Offset(0f, frame + continuation / 2f)) {
+            drawImage(
+                soft,
+                srcOffset = IntOffset(left, top + cropHeight - strip),
+                srcSize = IntSize(cropWidth, strip),
+                dstOffset = IntOffset(0, frame),
+                dstSize = IntSize(width, continuation),
+                filterQuality = FilterQuality.Medium,
+            )
+        }
+    }
+
+    val bounds = androidx.compose.ui.geometry.Rect(0f, 0f, size.width, photoBottom)
+    drawContext.canvas.saveLayer(bounds, Paint())
+    clipRect(bottom = photoBottom) {
+        crop(cover.image, frameHeight = photoBottom)
+        drawRect(
+            Brush.verticalGradient(listOf(Color.Black, Color.Transparent), fadeStart, photoBottom),
+            size = androidx.compose.ui.geometry.Size(size.width, photoBottom),
+            blendMode = BlendMode.DstIn,
+        )
+    }
+    drawContext.canvas.restore()
+}
+
 @Composable
-internal fun CoverSurface(cover: Cover?, seed: String, textHeight: Float, modifier: Modifier) {
+internal fun CoverSurface(
+    cover: Cover?,
+    seed: String,
+    modifier: Modifier,
+    textHeight: Float = 0f,
+    photoHeight: Dp? = null,
+) {
     val palette = LocalHorizonPalette.current
     Canvas(modifier.clipToBounds()) {
         val tone =
@@ -374,8 +430,12 @@ internal fun CoverSurface(cover: Cover?, seed: String, textHeight: Float, modifi
                     Color(0xff746745),
                 )
                 .get(Math.floorMod(seed.hashCode(), 5))
-        if (cover != null) crop(cover.image)
-        else {
+        val photoBottom = photoHeight?.toPx()?.let { min(it, size.height) }
+        val start = if (photoBottom == null) (size.height - textHeight - 24.dp.toPx()).coerceAtLeast(0f)
+            else (photoBottom - 34.dp.toPx()).coerceAtLeast(0f)
+        if (cover != null) {
+            if (photoBottom == null) crop(cover.image) else drawTilePhoto(cover, photoBottom, start)
+        } else {
             drawRect(
                 Brush.linearGradient(listOf(tone, palette.surface, lerp(tone, palette.tint, .3f)))
             )
@@ -394,8 +454,7 @@ internal fun CoverSurface(cover: Cover?, seed: String, textHeight: Float, modifi
                 center,
             )
         }
-        val start = (size.height - textHeight - 24.dp.toPx()).coerceAtLeast(0f)
-        if (cover != null) {
+        if (cover != null && photoBottom == null) {
             val paint = Paint()
             drawContext.canvas.saveLayer(
                 androidx.compose.ui.geometry.Rect(0f, start, size.width, size.height),
@@ -414,13 +473,14 @@ internal fun CoverSurface(cover: Cover?, seed: String, textHeight: Float, modifi
             }
             drawContext.canvas.restore()
         }
+        val brightness = cover?.brightness ?: .4f
+        val shadeAt = photoBottom?.let { ((it - start) / (size.height - start)).coerceIn(0f, 1f) } ?: .5f
+        val shade = if (photoBottom == null) .35f + brightness * .42f else .48f + brightness * .30f
         drawRect(
             Brush.verticalGradient(
-                listOf(
-                    Color.Transparent,
-                    Color.Black.copy(alpha = .35f + (cover?.brightness ?: .4f) * .42f),
-                    Color.Black.copy(alpha = .72f),
-                ),
+                0f to Color.Transparent,
+                shadeAt to Color.Black.copy(alpha = shade),
+                1f to Color.Black.copy(alpha = if (photoBottom == null) .72f else .82f),
                 startY = start,
                 endY = size.height,
             )
