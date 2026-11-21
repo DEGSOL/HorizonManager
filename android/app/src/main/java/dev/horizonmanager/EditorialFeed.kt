@@ -33,6 +33,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.*
@@ -482,7 +483,7 @@ internal fun DigestBubble(
                 GlassIconAction(Icons.Default.MoreVert, ui(R.string.editorial_digest_actions)) {
                     menu = true
                 }
-                DropdownMenu(menu, { menu = false }) {
+                GlassDropdownMenu(menu, { menu = false }) {
                     if (!archived) {
                         DropdownMenuItem(
                             { Text(ui(R.string.ui_start_collection)) },
@@ -569,7 +570,7 @@ internal fun PublicationTile(
     modifier: Modifier,
     artworkServer: String,
     relay: (suspend () -> ByteArray?)? = null,
-    movingBorder: State<Float>? = null,
+    movingBorder: State<BorderWaveFrame>? = null,
     open: () -> Unit,
     save: () -> Unit,
 ) {
@@ -581,9 +582,9 @@ internal fun PublicationTile(
     val borderAlpha = androidx.compose.animation.core.animateFloatAsState(
         if (unread) 1f else 0f, tween(280), label = "Unread outline opacity",
     )
+    val showBorder by remember { derivedStateOf { borderAlpha.value > 0f } }
     val unreadLabel = ui(R.string.ui_unread)
     PublicationCover(cover, key, modifier.fillMaxWidth().clip(shape)
-        .unreadOutline(shape, key, borderAlpha, movingBorder)
         .semantics { if (unread) stateDescription = unreadLabel }
         .clickable(role = Role.Button, onClick = open), photoHeight = photoHeight) {
         Column {
@@ -647,6 +648,10 @@ internal fun PublicationTile(
                         color = Color(0xffd1d3d5),
                     )
             }
+        }
+        if (unread || showBorder) {
+            Spacer(Modifier.matchParentSize().graphicsLayer()
+                .unreadOutline(shape, key, borderAlpha, movingBorder))
         }
     }
 }
@@ -827,7 +832,7 @@ internal fun ArchiveScreen(
                     }
                     Box {
                         GlassIconAction(Icons.Default.MoreVert, ui(R.string.archive_issue_actions)) { menu = id }
-                        DropdownMenu(expanded = menu == id, onDismissRequest = { menu = "" }) {
+                        GlassDropdownMenu(expanded = menu == id, onDismissRequest = { menu = "" }) {
                             DropdownMenuItem(
                                 text = { Text(ui(R.string.archive_remove_device)) },
                                 enabled = !panel.busy,

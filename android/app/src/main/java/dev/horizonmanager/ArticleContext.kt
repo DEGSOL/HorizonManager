@@ -3,6 +3,7 @@ package dev.horizonmanager
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
@@ -94,7 +95,15 @@ internal fun ArticleContext(
         }
     }
 
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End,
+        verticalAlignment = Alignment.CenterVertically) {
+        if (active) {
+            CircularProgressIndicator(Modifier.size(15.dp), strokeWidth = 2.dp)
+            Text(ui(R.string.article_context_pending), Modifier.weight(1f, fill = false)
+                .padding(horizontal = 8.dp).semantics {
+                    liveRegion = LiveRegionMode.Polite
+                }, color = theme.muted, style = MaterialTheme.typography.bodySmall)
+        }
         TextButton(enabled = !active && !checking, onClick = {
             if (state == "ready") {
                 show = !show
@@ -113,12 +122,6 @@ internal fun ArticleContext(
             Icon(ImageVector.vectorResource(R.drawable.ic_ai_sparkles), null, Modifier.size(19.dp))
             Spacer(Modifier.width(7.dp))
             Text(ui(R.string.article_more))
-        }
-        if (active) {
-            CircularProgressIndicator(Modifier.size(15.dp), strokeWidth = 2.dp)
-            Text(ui(R.string.article_context_pending), Modifier.padding(start = 8.dp).semantics {
-                liveRegion = LiveRegionMode.Polite
-            }, color = theme.muted, style = MaterialTheme.typography.bodySmall)
         }
     }
     if (state == "failed" && !loading) {

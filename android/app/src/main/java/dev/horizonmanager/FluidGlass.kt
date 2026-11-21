@@ -22,13 +22,18 @@ import androidx.compose.ui.unit.dp
 
 internal class GlassScene(val layer: GraphicsLayer) {
     var origin = Offset.Zero
+    var originOnScreen = Offset.Unspecified
 }
 
 internal val LocalGlassScene = compositionLocalOf<GlassScene?> { null }
+internal val LocalMenuScene = compositionLocalOf<GlassScene?> { null }
 
 // Capture only the underlying content. Sampling siblings avoids recursive glass layers.
 internal fun Modifier.recordScene(scene: GlassScene): Modifier =
-    onGloballyPositioned { scene.origin = it.positionInRoot() }
+    onGloballyPositioned {
+        scene.origin = it.positionInRoot()
+        scene.originOnScreen = it.localToScreen(Offset.Zero)
+    }
         .drawWithContent {
             scene.layer.record { this@drawWithContent.drawContent() }
             drawLayer(scene.layer)
@@ -37,11 +42,13 @@ internal fun Modifier.recordScene(scene: GlassScene): Modifier =
 internal val backdropBlurAvailable: Boolean
     @Composable get() = LocalGlassScene.current != null && Build.VERSION.SDK_INT >= 31
 
-private fun Modifier.glassBackdrop(shape: Shape, radius: Dp, base: Color, monochrome: Boolean): Modifier = composed {
+private fun Modifier.glassBackdrop(
+    shape: Shape, radius: Dp, base: Color, monochrome: Boolean, menu: Boolean,
+): Modifier = composed {
     val scene = LocalGlassScene.current
     if (scene == null || Build.VERSION.SDK_INT < 31) return@composed clip(shape)
-    var position by remember { mutableStateOf(Offset.Zero) }
-    this.onGloballyPositioned { position = it.positionInRoot() }
+    var position by remember { mutableStateOf(if (menu) Offset.Unspecified else Offset.Zero) }
+    this.onGloballyPositioned { position = if (menu) it.localToScreen(Offset.Zero) else it.positionInRoot() }
         .clip(shape)
         .drawWithCache {
             val blur = radius.toPx()
@@ -50,10 +57,13 @@ private fun Modifier.glassBackdrop(shape: Shape, radius: Dp, base: Color, monoch
                 if (monochrome) colorFilter = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
             }
             onDrawWithContent {
-                val shift = scene.origin - position
+                val origin = if (menu) scene.originOnScreen else scene.origin
                 sampled.record {
                     drawRect(base)
-                    translate(shift.x, shift.y) { drawLayer(scene.layer) }
+                    if (origin != Offset.Unspecified && position != Offset.Unspecified) {
+                        val shift = origin - position
+                        translate(shift.x, shift.y) { drawLayer(scene.layer) }
+                    }
                 }
                 drawLayer(sampled)
                 drawContent()
@@ -75,8 +85,19 @@ internal val ThemePreset.glassSelection: Color
 internal fun Modifier.navigationGlass(shape: Shape, outlined: Boolean = true): Modifier =
     glassSurface(shape, backdrop = true, outlined = outlined)
 
+internal fun Modifier.statusBarGlass(): Modifier =
+    graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+        .drawWithCache {
+            val fade = Brush.verticalGradient(.53f to Color.Black, 1f to Color.Transparent)
+            onDrawWithContent {
+                drawContent()
+                drawRect(fade, blendMode = BlendMode.DstIn)
+            }
+        }
+        .navigationGlass(RectangleShape, outlined = false)
+
 internal fun Modifier.glassSurface(
-    shape: Shape, backdrop: Boolean = false, raised: Boolean = false, outlined: Boolean = true,
+    shape: Shape, backdrop: Boolean = false, raised: Boolean = false, outlined: Boolean = true, menu: Boolean = false,
 ): Modifier = composed {
     val palette = LocalHorizonPalette.current
     val blur = backdrop && backdropBlurAvailable
@@ -84,7 +105,7 @@ internal fun Modifier.glassSurface(
     val base = palette.glassBase
     val top = if (raised) palette.glassSelection else palette.glassRaised
     val edge = if (graphite) Color.White else palette.text
-    val surface = if (blur) glassBackdrop(shape, 22.dp, base, monochrome = graphite) else clip(shape)
+    val surface = if (blur) glassBackdrop(shape, 22.dp, base, monochrome = graphite, menu = menu) else clip(shape)
     surface.background(Brush.verticalGradient(listOf(
         top.copy(alpha = if (blur) .66f else .94f),
         base.copy(alpha = if (blur) .77f else .92f),

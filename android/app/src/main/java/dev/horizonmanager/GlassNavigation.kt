@@ -11,6 +11,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -22,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -30,6 +35,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -52,9 +59,9 @@ import kotlin.math.abs
 internal data class HorizonTab(@param:StringRes val label: Int, val icon: ImageVector)
 
 private object NavigationStyle {
-    val height = 54.dp
-    val inset = 3.dp
-    val label = TextStyle(fontSize = 10.sp, lineHeight = 12.sp, fontWeight = FontWeight.Medium,
+    val height = 70.dp
+    val inset = 5.dp
+    val label = TextStyle(fontSize = 11.sp, lineHeight = 14.sp, fontWeight = FontWeight.Medium,
         textAlign = TextAlign.Center)
 }
 
@@ -63,6 +70,43 @@ internal enum class ReadingOverlay { None, Digest, Article }
 internal val navigationBottomGap = 10.dp
 internal val defaultNavigationClearance = NavigationStyle.height + navigationBottomGap + 8.dp
 internal val LocalNavigationClearance = compositionLocalOf { defaultNavigationClearance }
+
+internal fun Modifier.swipeBetweenTabs(
+    enabled: Boolean, selection: Int, count: Int, select: (Int) -> Unit,
+): Modifier = composed {
+    if (!enabled) return@composed this
+    val selectTab by rememberUpdatedState(select)
+    val density = LocalDensity.current
+    val layout = LocalLayoutDirection.current
+    val gestures = WindowInsets.systemGestures
+    val edge = with(density) { 24.dp.toPx() }
+    val left = maxOf(edge, gestures.getLeft(density, layout).toFloat())
+    val right = maxOf(edge, gestures.getRight(density, layout).toFloat())
+    val swipeDistance = with(density) { 54.dp.toPx() }
+    this.pointerInput(selection, count, layout, left, right, swipeDistance) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            if (down.position.x < left || down.position.x > size.width - right) return@awaitEachGesture
+            var distance = 0f
+            val slop = awaitHorizontalTouchSlopOrCancellation(down.id) { change, overSlop ->
+                val delta = change.position - down.position
+                if (abs(delta.x) > abs(delta.y) * 1.3f) {
+                    distance = overSlop
+                    change.consume()
+                }
+            } ?: return@awaitEachGesture
+            val completed = horizontalDrag(slop.id) { change ->
+                distance += change.positionChange().x
+                change.consume()
+            }
+            if (completed && abs(distance) >= swipeDistance) {
+                val movesForward = (distance < 0f) == (layout == LayoutDirection.Ltr)
+                val destination = selection + if (movesForward) 1 else -1
+                if (destination in 0 until count) selectTab(destination)
+            }
+        }
+    }
+}
 
 internal fun unreadBadgeText(count: Int): String? = when {
     count <= 0 -> null
@@ -98,7 +142,6 @@ internal fun GlassNavigation(
             Box(Modifier.align(Alignment.CenterStart).width(segment).fillMaxHeight()
                 .graphicsLayer {
                     translationX = position.value.coerceIn(0f, tabs.lastIndex.toFloat()) * segment.toPx() * direction
-                    scaleX = 1f + .04f * (abs(position.velocity) / 7f).coerceIn(0f, 1f)
                 }
                 .padding(horizontal = 2.dp)
                 .clip(CircleShape)
@@ -144,16 +187,17 @@ private fun GlassNavigationButton(
             .semantics {
                 contentDescription = label
                 if (unreadDescription != null) stateDescription = unreadDescription
-            }.padding(horizontal = 1.dp, vertical = 4.dp),
+            }.padding(horizontal = 2.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
-        Box(Modifier.size(width = 24.dp, height = 22.dp), contentAlignment = Alignment.Center) {
-            Icon(tab.icon, null, Modifier.size(21.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale }, tint = tint)
-            UnreadBadge(unread, Modifier.align(Alignment.TopEnd).offset(x = 7.dp, y = (-2).dp))
+        Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+            Icon(tab.icon, null, Modifier.fillMaxSize().graphicsLayer { scaleX = iconScale; scaleY = iconScale }, tint = tint)
+            UnreadBadge(unread, Modifier.align(Alignment.TopEnd).offset(x = 13.dp, y = (-3).dp))
         }
-        Spacer(Modifier.height(2.dp))
+        Spacer(Modifier.height(4.dp))
         Text(label, Modifier.fillMaxWidth().clearAndSetSemantics {}, color = tint,
-            style = NavigationStyle.label, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            style = NavigationStyle.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

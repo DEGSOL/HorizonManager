@@ -20,6 +20,8 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
@@ -38,10 +40,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -113,6 +117,12 @@ internal fun pushSettingsRoute(current: String, next: String): String = when {
 
 private data class Screen(val page: String, val issueId: String = "") {
     val reading get() = page == "feed" || page == "archived"
+    val tabIndex get() = when (page) {
+        "feed" -> FEED
+        "settings" -> SETTINGS
+        "favorites" -> FAVORITES
+        else -> null
+    }
 }
 
 @Composable
@@ -362,7 +372,8 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     }
 
     val showTabs = panel.ready && !canGoBack && (tab != FEED || navVisible)
-    GlassLayout(tabs, tab, showTabs, unread = unread, overlay = overlay, select = { chosen ->
+    val direction = if (LocalLayoutDirection.current == LayoutDirection.Ltr) 1 else -1
+    fun selectTab(chosen: Int) {
         if (chosen != tab || configPage.isNotEmpty() || openedIssue != null) {
             previousTab = tab
             tab = chosen
@@ -370,7 +381,10 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
             archiveIssue = ""
             if (chosen == FEED) model.showFeed()
         }
-    }) {
+    }
+    val swipeTabs = panel.ready && !canGoBack && overlay == ReadingOverlay.None &&
+        (tab != FEED || !feedFilters.searchOpen && !feedFilters.optionsOpen)
+    GlassLayout(tabs, tab, showTabs, unread = unread, overlay = overlay, select = ::selectTab) {
         val destination = when {
             manageServers -> Screen("servers")
             editServer -> Screen("ssh")
@@ -384,10 +398,20 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         }
         val currentDestination by rememberUpdatedState(destination)
         AnimatedContent(destination,
-            modifier = Modifier.align(Alignment.TopCenter).graphicsLayer { scaleX = 1f - backProgress * .035f; scaleY = scaleX }.widthIn(max = 780.dp).fillMaxSize(),
+            modifier = Modifier.align(Alignment.TopCenter)
+                .graphicsLayer { scaleX = 1f - backProgress * .035f; scaleY = scaleX }
+                .widthIn(max = 780.dp).fillMaxSize().swipeBetweenTabs(swipeTabs, tab, tabs.size, ::selectTab),
             transitionSpec = {
-                (fadeIn(tween(220, delayMillis = 40)) + slideInVertically(tween(260)) { it / 45 }) togetherWith
-                    (fadeOut(tween(130)) + slideOutVertically(tween(160)) { -it / 65 })
+                val from = initialState.tabIndex
+                val to = targetState.tabIndex
+                if (from != null && to != null && from != to) {
+                    val side = if (to > from) direction else -direction
+                    (fadeIn(tween(200)) + slideInHorizontally(tween(230)) { side * it / 4 }) togetherWith
+                        (fadeOut(tween(160)) + slideOutHorizontally(tween(210)) { -side * it / 4 })
+                } else {
+                    (fadeIn(tween(220, delayMillis = 40)) + slideInVertically(tween(260)) { it / 45 }) togetherWith
+                        (fadeOut(tween(130)) + slideOutVertically(tween(160)) { -it / 65 })
+                }
             },
             label = "screen",
         ) { screen ->

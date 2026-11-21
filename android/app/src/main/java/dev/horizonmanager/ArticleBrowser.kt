@@ -115,7 +115,7 @@ private fun WebBrowser(initial: String, onUnavailable: () -> Unit, close: () -> 
     Dialog(onDismissRequest = back, properties = DialogProperties(
         dismissOnClickOutside = false, usePlatformDefaultWidth = false, decorFitsSystemWindows = false,
     )) {
-        DialogNoticeSurface {
+        DialogNoticeSurface(captureMenu = menu) {
             Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).editorialInsets()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     GlassIconAction(Icons.AutoMirrored.Filled.ArrowBack, ui(R.string.ui_back), onClick = back)
@@ -123,7 +123,7 @@ private fun WebBrowser(initial: String, onUnavailable: () -> Unit, close: () -> 
                         style = MaterialTheme.typography.bodySmall)
                     Box {
                         GlassIconAction(Icons.Default.MoreVert, ui(R.string.browser_actions)) { menu = true }
-                        DropdownMenu(menu, { menu = false }) {
+                        GlassDropdownMenu(menu, { menu = false }) {
                             DropdownMenuItem(text = { Text(ui(R.string.browser_open_external)) }, onClick = {
                                 menu = false
                                 linkUri(current)?.let {

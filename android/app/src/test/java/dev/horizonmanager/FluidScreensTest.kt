@@ -234,6 +234,25 @@ class FluidScreensTest {
     }
 
     @Test
+    fun horizontalSwipesFollowTabOrderAndLeaveTheSystemEdgeAlone() {
+        loadIssue(articleCount = 12)
+        val screen = compose.onRoot()
+        val feed = compose.onNodeWithContentDescription(ui(R.string.feed))
+        val settings = compose.onNodeWithContentDescription(ui(R.string.settings))
+        val favorites = compose.onNodeWithContentDescription(ui(R.string.favorites_title))
+        screen.performTouchInput { swipeLeft(startX = width * .85f, endX = width * .15f) }
+        settings.assertIsSelected()
+        screen.performTouchInput { swipeLeft(startX = width * .85f, endX = width * .15f) }
+        favorites.assertIsSelected()
+        screen.performTouchInput { swipeRight(startX = width * .15f, endX = width * .85f) }
+        settings.assertIsSelected()
+        screen.performTouchInput { swipeRight(startX = width * .15f, endX = width * .85f) }
+        feed.assertIsSelected()
+        screen.performTouchInput { swipeLeft(startX = right - 5f, endX = centerX) }
+        feed.assertIsSelected()
+    }
+
+    @Test
     fun bothNavigationBarsUseTheSelectedTheme() {
         val heading = loadIssue(articleCount = 12)
         val title = compose.onNodeWithText(heading).getUnclippedBoundsInRoot()
@@ -279,6 +298,10 @@ class FluidScreensTest {
             beforeScroll.getPixel(x, y) != scrolled.getPixel(x, y)
         }
         assertTrue("Content should remain visible through the status bar glass while scrolling", backdropChanged)
+        val center = beforeScroll.width / 2
+        val top = android.graphics.Color.red(beforeScroll.getPixel(center, 1))
+        val lower = android.graphics.Color.red(beforeScroll.getPixel(center, (23 * density).toInt()))
+        assertTrue("The status glass should fade as it approaches its lower edge", lower < top)
     }
 
     @Test
@@ -439,6 +462,22 @@ class FluidScreensTest {
     }
 
     @Test
+    fun articleMoreIsOnTheRightAndActionsOpenInADismissiblePopup() {
+        loadIssue(articleCount = 12)
+        compose.onNodeWithText(headlines[0]).performClick()
+        val more = text(R.string.article_more).getUnclippedBoundsInRoot()
+        val body = compose.onNode(isDialog()).getUnclippedBoundsInRoot()
+        assertTrue(more.left > (body.left + body.right) / 2)
+        compose.onNodeWithContentDescription(ui(R.string.editorial_article_actions)).performClick()
+        compose.onNode(isPopup()).assertExists()
+        text(R.string.ui_copy).assertIsDisplayed()
+        text(R.string.editorial_share).assertIsDisplayed()
+        text(R.string.ui_copy).performClick()
+        compose.onNode(isPopup()).assertDoesNotExist()
+        compose.onNode(isDialog()).assertExists()
+    }
+
+    @Test
     fun realScreensAndBackStack() {
         val heading = loadIssue()
         compose.onNodeWithText(heading).assertExists()
@@ -571,8 +610,8 @@ class FluidScreensTest {
         val widths = bounds.map { (it.right - it.left).value }
         assertTrue(widths.max() - widths.min() <= 1f)
         assertTrue(bounds.all { it.top == bounds.first().top && it.bottom == bounds.first().bottom })
-        assertTrue("The compact bar should cover about half the viewport", widths.sum() in 177f..200f)
-        assertTrue(bounds.all { it.bottom - it.top in 48.dp..55.dp })
+        assertTrue("The expanded bar should cover about three quarters of the available width", widths.sum() in 265f..291f)
+        assertTrue(bounds.all { it.bottom - it.top in 59.dp..62.dp })
         snapshot("14-glass-navigation")
 
         compose.onNodeWithText(headlines[0]).performClick()

@@ -32,7 +32,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -135,7 +134,7 @@ internal fun GlassLayout(tabs: List<HorizonTab>, selection: Int, showTabs: Boole
         Box(Modifier.fillMaxSize().then(
             if (overlay == ReadingOverlay.Article) Modifier.blur(5.dp) else Modifier
         )) {
-            CompositionLocalProvider(LocalNavigationClearance provides clearance) {
+            CompositionLocalProvider(LocalNavigationClearance provides clearance, LocalMenuScene provides scene) {
                 Box(Modifier.fillMaxSize().recordScene(scene).background(palette.background).drawBehind {
                     val center = androidx.compose.ui.geometry.Offset(size.width * .15f, size.height * 1.02f)
                     drawCircle(androidx.compose.ui.graphics.Brush.radialGradient(
@@ -146,7 +145,7 @@ internal fun GlassLayout(tabs: List<HorizonTab>, selection: Int, showTabs: Boole
             CompositionLocalProvider(LocalGlassScene provides scene) {
                 if (statusHeight > 0.dp) {
                     Spacer(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(statusHeight)
-                        .navigationGlass(RectangleShape, outlined = false))
+                        .statusBarGlass())
                 }
                 AnimatedVisibility(showTabs, modifier = Modifier.align(Alignment.BottomCenter)
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
@@ -154,7 +153,7 @@ internal fun GlassLayout(tabs: List<HorizonTab>, selection: Int, showTabs: Boole
                     enter = fadeIn(tween(160)) + slideInVertically(tween(navigationSlideMillis)) { it * 2 },
                     exit = fadeOut(tween(140)) + slideOutVertically(tween(navigationSlideMillis)) { it * 2 }) {
                     BoxWithConstraints(Modifier.widthIn(max = 520.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        val width = (maxWidth / 2).coerceAtLeast(156.dp).coerceAtMost(maxWidth)
+                        val width = ((maxWidth / 2).coerceAtLeast(156.dp) * 1.5f).coerceAtMost(maxWidth)
                         GlassNavigation(tabs, selection, unread, width, overlay, measured = {
                             clearance = it + navigationBottomGap + 8.dp
                         }, select = select)

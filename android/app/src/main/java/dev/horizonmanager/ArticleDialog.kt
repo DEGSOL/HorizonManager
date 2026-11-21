@@ -14,7 +14,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -62,7 +61,7 @@ internal fun ArticleDialog(
 
     val cover = artwork(artworkServer, article, relay)
     var titleHeight by remember { mutableFloatStateOf(0f) }
-    ArticleModal(article.optString("title"), close) {
+    ArticleModal(article.optString("title"), close, captureMenu = actions) {
         Column(
             Modifier.widthIn(max = 620.dp)
                 .fillMaxWidth()
@@ -104,7 +103,7 @@ internal fun ArticleDialog(
                             ) {
                                 actions = true
                             }
-                            DropdownMenu(actions, { actions = false }) {
+                            GlassDropdownMenu(actions, { actions = false }) {
                                 DropdownMenuItem(
                                     text = {
                                         Text(
@@ -191,7 +190,9 @@ internal fun ArticleDialog(
 }
 
 @Composable
-private fun ArticleModal(title: String, close: () -> Unit, content: @Composable BoxScope.() -> Unit) {
+private fun ArticleModal(
+    title: String, close: () -> Unit, captureMenu: Boolean, content: @Composable BoxScope.() -> Unit,
+) {
     Dialog(onDismissRequest = close, properties = DialogProperties(
         usePlatformDefaultWidth = false, decorFitsSystemWindows = false,
     )) {
@@ -199,13 +200,13 @@ private fun ArticleModal(title: String, close: () -> Unit, content: @Composable 
         val window = (LocalView.current.parent as? DialogWindowProvider)?.window
         SideEffect { window?.setDimAmount(0f) }
         val dismissLabel = ui(R.string.ui_close)
-        DialogNoticeSurface(Modifier.semantics { paneTitle = title }) {
+        DialogNoticeSurface(Modifier.semantics { paneTitle = title }, captureMenu) {
             Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = .34f)).clickable(
                 interactionSource = remember { MutableInteractionSource() }, indication = null,
                 onClickLabel = dismissLabel, onClick = close,
             ))
             Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 78.dp),
+                .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = LocalNavigationClearance.current),
                 contentAlignment = Alignment.Center,
                 content = content,
             )

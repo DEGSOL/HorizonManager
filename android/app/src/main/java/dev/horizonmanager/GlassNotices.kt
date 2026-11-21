@@ -51,12 +51,16 @@ internal fun GlassNoticeHost(modifier: Modifier = Modifier, inDialog: Boolean = 
 }
 
 @Composable
-internal fun DialogNoticeSurface(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
+internal fun DialogNoticeSurface(
+    modifier: Modifier = Modifier, captureMenu: Boolean = false, content: @Composable BoxScope.() -> Unit,
+) {
     val layer = rememberGraphicsLayer()
     val scene = remember(layer) { GlassScene(layer) }
     val hasNotice = LocalNoticeQueue.current?.messages?.currentSnackbarData != null
     Box(modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxSize().then(if (hasNotice) Modifier.recordScene(scene) else Modifier), content = content)
+        Box(Modifier.fillMaxSize().then(if (hasNotice || captureMenu) Modifier.recordScene(scene) else Modifier)) {
+            CompositionLocalProvider(LocalMenuScene provides scene) { content() }
+        }
         CompositionLocalProvider(LocalGlassScene provides scene) {
             GlassNoticeHost(Modifier.align(Alignment.TopCenter), inDialog = true)
         }

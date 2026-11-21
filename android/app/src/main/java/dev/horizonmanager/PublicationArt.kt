@@ -110,6 +110,7 @@ internal class ArtworkCache(context: Context) {
     private val recentMisses = LruCache<String, Long>(2048)
     private val locks = Array(32) { Mutex() }
     private val slots = Semaphore(3)
+    private val cachedDecodes = Semaphore(2)
 
     fun peek(id: String): Cover? = memory.get(id)
 
@@ -259,7 +260,8 @@ internal class ArtworkCache(context: Context) {
             locks[Math.floorMod(id.hashCode(), locks.size)].withLock {
                 peek(id)?.let { return@withLock it }
                 if (prefetch && file.baseFile.isFile) return@withLock null
-                readCover(file)?.let { return@withLock it.also { cover -> memory.put(id, cover) } }
+                cachedDecodes.withPermit { readCover(file) }
+                    ?.let { return@withLock it.also { cover -> memory.put(id, cover) } }
                 val page = articleField(article, "url")
                 val provided = article.optJSONObject("media")?.let { articleField(it, "url") }.orEmpty()
                 val miss = id + "|" + provided + "|" + (relay != null)

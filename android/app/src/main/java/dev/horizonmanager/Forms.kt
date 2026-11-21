@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -146,7 +145,7 @@ internal fun Choice(
             else SettingHeading(title, help)
             TextButton(onClick = { expanded = true }, enabled = enabled) { Text(selected) }
         }
-        DropdownMenu(expanded = expanded && enabled, onDismissRequest = { expanded = false }) {
+        GlassDropdownMenu(expanded = expanded && enabled, onDismissRequest = { expanded = false }) {
             entries.forEach { value ->
                 DropdownMenuItem(text = { Text(labelOf(value)) }, enabled = entryEnabled(value),
                     onClick = { expanded = false; change(value) })

@@ -7,96 +7,128 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.RoundRect
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
+import kotlinx.coroutines.delay
 import kotlin.math.PI
+import kotlin.math.ceil
 import kotlin.math.sin
+import kotlin.random.Random
+
+internal data class BorderWaveFrame(val a: Float, val b: Float, val c: Float)
 
 @Composable
-internal fun rememberUnreadBorderClock(hasVisibleUnread: () -> Boolean): State<Float>? {
+internal fun rememberUnreadBorderClock(hasVisibleUnread: () -> Boolean): State<BorderWaveFrame> {
     val visibleCheck by rememberUpdatedState(hasVisibleUnread)
     val visible by remember { derivedStateOf { visibleCheck() } }
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
-    if (!visible || !lifecycle.isAtLeast(Lifecycle.State.RESUMED)) return null
-    return rememberInfiniteTransition(label = "Unread outline").animateFloat(
+    val active = visible && lifecycle.isAtLeast(Lifecycle.State.RESUMED)
+    var animated by remember(active) { mutableStateOf(false) }
+    if (active) LaunchedEffect(Unit) {
+        delay(navigationSlideMillis.toLong())
+        animated = true
+    }
+    val animation = if (animated) rememberInfiniteTransition(label = "Unread outline").animateFloat(
         initialValue = 0f,
         targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(9_000, easing = LinearEasing)),
-        label = "Light along the outline",
-    )
+        animationSpec = infiniteRepeatable(tween(20_000, easing = LinearEasing)),
+        label = "Intensity of the waves",
+    ) else null
+    val phase = rememberUpdatedState(animation)
+    // Keep the draw cache when animation starts. The shared clock bounds redraws to 30 Hz.
+    return remember {
+        derivedStateOf(androidx.compose.runtime.structuralEqualityPolicy()) {
+            val step = ((phase.value?.value ?: return@derivedStateOf restingWaves) * 600).toInt()
+            val angle = step * (2 * PI / 600)
+            BorderWaveFrame(
+                sin(3 * angle + .2).toFloat(),
+                sin(5 * angle + 1.9).toFloat(),
+                sin(7 * angle + 4.1).toFloat(),
+            )
+        }
+    }
 }
 
-internal fun Modifier.unreadOutline(shape: RoundedCornerShape, articleId: String, opacity: State<Float>,
-                                    clock: State<Float>?): Modifier = drawWithCache {
-    val strokeWidth = 1.45.dp.toPx()
-    val inset = 1.3.dp.toPx()
-    if (size.width <= inset * 2 || size.height <= inset * 2) {
-        return@drawWithCache onDrawWithContent { drawContent() }
-    }
-    val inner = Size(size.width - inset * 2, size.height - inset * 2)
-    val corners = (shape.createOutline(inner, layoutDirection, this) as Outline.Rounded).roundRect
-    val contour = Path().apply {
-        addRoundRect(RoundRect(inset, inset, size.width - inset, size.height - inset,
-            corners.topLeftCornerRadius, corners.topRightCornerRadius, corners.bottomRightCornerRadius,
-            corners.bottomLeftCornerRadius), Path.Direction.Clockwise)
-    }
-    val measure = PathMeasure().apply { setPath(contour, true) }
-    val length = measure.length
-    val stroke = Stroke(strokeWidth)
-    val shimmer = Brush.sweepGradient(listOf(
-        Color.White.copy(alpha = .34f), Color.White.copy(alpha = .16f), Color.White.copy(alpha = .27f),
-        Color.White.copy(alpha = .12f), Color.White.copy(alpha = .34f),
-    ))
-    val segment = Path()
-    val highlights = 3
-    val segments = 12
-    val spacing = length / highlights
-    val step = length * .115f / segments
-    val weights = FloatArray(segments) { index ->
-        val t = (index + .5) / segments
-        val envelope = sin(PI * t).toFloat()
-        val detail = (.68 + .32 * sin(PI * (t * 3.5 + .14))).toFloat()
-        envelope * envelope * detail
-    }
-    val strokes = Array(segments) { index ->
-        Stroke(width = (1.25f + 2.1f * weights[index]).dp.toPx(), cap = StrokeCap.Round)
-    }
-    val phase = (articleId.hashCode().ushr(1) % 997) / 997f
+private val restingWaves = BorderWaveFrame(.70f, -.65f, .50f)
 
-    onDrawWithContent {
-        drawContent()
+internal fun Modifier.unreadOutline(
+    shape: RoundedCornerShape, articleId: String, opacity: State<Float>, clock: State<BorderWaveFrame>?,
+): Modifier = drawWithCache {
+    val outline = shape.createOutline(size, layoutDirection, this) as? Outline.Rounded
+        ?: return@drawWithCache onDrawBehind {}
+    val outer = Path().apply { addRoundRect(outline.roundRect, Path.Direction.Clockwise) }
+    val measure = PathMeasure().apply { setPath(outer, true) }
+    val length = measure.length
+    if (length <= 0f) return@drawWithCache onDrawBehind {}
+
+    val count = ceil(length / 4.dp.toPx()).toInt().coerceIn(64, 416)
+    val x = FloatArray(count)
+    val y = FloatArray(count)
+    val inwardX = FloatArray(count)
+    val inwardY = FloatArray(count)
+    val waveA = FloatArray(count)
+    val waveB = FloatArray(count)
+    val waveC = FloatArray(count)
+    val random = Random(articleId.hashCode())
+    val phaseA = random.nextDouble(2 * PI)
+    val phaseB = random.nextDouble(2 * PI)
+    val phaseC = random.nextDouble(2 * PI)
+    for (i in 0 until count) {
+        val fraction = i.toFloat() / count
+        val position = measure.getPosition(fraction * length)
+        val tangent = measure.getTangent(fraction * length)
+        x[i] = position.x
+        y[i] = position.y
+        inwardX[i] = -tangent.y
+        inwardY[i] = tangent.x
+        val angle = fraction * 2 * PI
+        waveA[i] = sin(5 * angle + phaseA).toFloat()
+        waveB[i] = sin(9 * angle + phaseB).toFloat()
+        waveC[i] = sin(13 * angle + phaseC).toFloat()
+    }
+    val border = Path()
+    val minimum = .85.dp.toPx()
+    val amplitude = 2.85.dp.toPx()
+    val maxWidth = size.minDimension / 4
+    var lastFrame: BorderWaveFrame? = null
+
+    onDrawBehind {
         val alpha = opacity.value
-        if (alpha <= 0f || length <= 0f) return@onDrawWithContent
-        drawPath(contour, shimmer, alpha = alpha, style = stroke)
-        val time = clock?.value ?: return@onDrawWithContent
-        val head = (time + phase).mod(1f) * length
-        for (index in 0 until segments) {
-            segment.rewind()
-            for (highlight in 0 until highlights) {
-                val start = (head + highlight * spacing + index * step) % length
-                val end = start + step
-                measure.getSegment(start, end.coerceAtMost(length), segment, true)
-                if (end > length) measure.getSegment(0f, end - length, segment, true)
+        if (alpha <= 0f) return@onDrawBehind
+        val frame = clock?.value ?: restingWaves
+        if (frame != lastFrame) {
+            border.rewind()
+            border.fillType = PathFillType.EvenOdd
+            // The outer edge is the very same outline the tile uses for clipping.
+            border.addPath(outer)
+            for (i in 0 until count) {
+                val light = (.50f + .23f * waveA[i] * frame.a +
+                    .16f * waveB[i] * frame.b + .10f * waveC[i] * frame.c).coerceIn(0f, 1f)
+                val width = (minimum + amplitude * light * light).coerceAtMost(maxWidth)
+                val px = x[i] + inwardX[i] * width
+                val py = y[i] + inwardY[i] * width
+                if (i == 0) border.moveTo(px, py) else border.lineTo(px, py)
             }
-            drawPath(segment, Color.White, alpha = .92f * weights[index] * alpha, style = strokes[index])
+            border.close()
+            lastFrame = frame
         }
+        drawPath(border, Color.White, alpha = .59f * alpha)
     }
 }

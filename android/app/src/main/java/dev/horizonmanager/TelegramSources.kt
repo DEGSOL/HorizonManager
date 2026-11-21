@@ -169,7 +169,7 @@ private fun TelegramRow(entry: JSONObject, index: Int, lastIndex: Int, testEnabl
         }
         Box {
             GlassIconAction(Icons.Default.MoreVert, ui(R.string.editorial_article_actions)) { menu = true }
-            DropdownMenu(menu, { menu = false }) {
+            GlassDropdownMenu(menu, { menu = false }) {
                 DropdownMenuItem(text = { Text(ui(R.string.editorial_edit)) }, onClick = { menu = false; edit() })
                 DropdownMenuItem(text = { Text(ui(R.string.editorial_test_saved)) }, enabled = testEnabled,
                     onClick = { menu = false; test() })
