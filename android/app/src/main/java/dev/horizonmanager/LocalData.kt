@@ -202,6 +202,12 @@ internal interface Cache {
     @Query("SELECT * FROM CachedDigest WHERE server = :server AND run = :run AND language = :language ORDER BY offset")
     suspend fun digest(server: String, run: String, language: String): List<CachedDigest>
 
+    @Query("SELECT data FROM CachedDigest WHERE server = :server AND run = :run AND language = :language ORDER BY offset")
+    fun digestPages(server: String, run: String, language: String): Flow<List<String>>
+
+    @Query("SELECT article FROM ArticleFlag WHERE server = :server AND read = 1")
+    fun readArticleIds(server: String): Flow<List<String>>
+
     @Query("SELECT * FROM ArticleFlag WHERE server = :server")
     fun flags(server: String): Flow<List<ArticleFlag>>
 
@@ -277,7 +283,7 @@ internal abstract class ManagerDb : RoomDatabase() {
 }
 
 private fun CachedDigest.publications() = digestPublications(data)
-private fun digestPublications(data: String) =
+internal fun digestPublications(data: String) =
     runCatching { JSONObject(data).optJSONArray("items")?.objects().orEmpty() }.getOrDefault(emptyList())
 
 internal fun JSONArray.objects(): List<JSONObject> = (0 until length()).mapNotNull(::optJSONObject)

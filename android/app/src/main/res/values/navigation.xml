@@ -22,4 +22,5 @@
     <string name="browser_actions">Browser actions</string>
     <string name="browser_open_external">Open in external browser</string>
     <string name="browser_no_handler">No app is available to open this link.</string>
+    <string name="nav_unread">Unread: %1$d</string>
 </resources>

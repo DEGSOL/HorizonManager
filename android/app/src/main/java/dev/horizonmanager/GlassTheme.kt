@@ -2,7 +2,6 @@ package dev.horizonmanager
 
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -12,8 +11,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
@@ -30,14 +27,11 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -121,24 +115,26 @@ internal fun horizonFieldColors() = LocalHorizonPalette.current.let { palette ->
     OutlinedTextFieldDefaults.colors(focusedLabelColor = palette.text, focusedBorderColor = palette.link, cursorColor = palette.link)
 }
 
-internal data class HorizonTab(@param:StringRes val label: Int, val icon: ImageVector)
-
 @Composable
 internal fun GlassLayout(tabs: List<HorizonTab>, selection: Int, showTabs: Boolean, select: (Int) -> Unit,
-                         dimmed: Boolean = false, savedNotice: Boolean = false, content: @Composable BoxScope.() -> Unit) {
+                         unread: Int, dimmed: Boolean = false, savedNotice: Boolean = false,
+                         content: @Composable BoxScope.() -> Unit) {
     val palette = LocalHorizonPalette.current
     val sceneLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
     val scene = remember(sceneLayer) { GlassScene(sceneLayer) }
+    var clearance by remember { mutableStateOf(defaultNavigationClearance) }
     Box(Modifier.fillMaxSize().background(palette.background).drawBehind {
         val center = androidx.compose.ui.geometry.Offset(size.width * .15f, size.height * 1.02f)
         drawCircle(androidx.compose.ui.graphics.Brush.radialGradient(
             listOf(palette.tint.copy(alpha=.095f), Color.Transparent), center, size.width*.64f),
             radius=size.width*.64f, center=center)
     }.imePadding()) {
-        Box(Modifier.fillMaxSize().recordScene(scene), content = content)
+        CompositionLocalProvider(LocalNavigationClearance provides clearance) {
+            Box(Modifier.fillMaxSize().recordScene(scene), content = content)
+        }
         CompositionLocalProvider(LocalGlassScene provides scene) {
             AnimatedVisibility(savedNotice, modifier = Modifier.align(Alignment.BottomCenter)
-                .navigationBarsPadding().padding(bottom = if (showTabs) 76.dp else 14.dp, start = 18.dp, end = 18.dp),
+                .navigationBarsPadding().padding(bottom = if (showTabs) clearance else 14.dp, start = 18.dp, end = 18.dp),
                 enter = fadeIn(tween(170)) + slideInVertically(tween(190)) { it / 3 },
                 exit = fadeOut(tween(220)) + slideOutVertically(tween(220)) { it / 3 }) {
                 Box(Modifier.frost(MaterialTheme.shapes.large)
@@ -148,24 +144,13 @@ internal fun GlassLayout(tabs: List<HorizonTab>, selection: Int, showTabs: Boole
                 }
             }
             AnimatedVisibility(showTabs, modifier = Modifier.align(Alignment.BottomCenter)
-                .navigationBarsPadding().padding(bottom = 10.dp),
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
+                .padding(start = 16.dp, end = 16.dp, bottom = navigationBottomGap),
                 enter = fadeIn(tween(160)) + slideInVertically(tween(220)) { it / 2 },
                 exit = fadeOut(tween(140)) + slideOutVertically(tween(190)) { it / 2 }) {
-                val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
-                Row(Modifier.selectableGroup().then(if (dimmed) Modifier.blur(3.dp).alpha(.42f) else Modifier),
-                    horizontalArrangement = Arrangement.spacedBy(22.dp)) {
-                    tabs.forEachIndexed { index, tab ->
-                        val selected = index == selection
-                        Box(Modifier.size(54.dp).frost(CircleShape, selected)
-                            .selectable(selected, enabled = !dimmed, role = Role.Tab, onClick = {
-                                if (!selected) haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                                select(index)
-                            }), contentAlignment = Alignment.Center) {
-                            Icon(tab.icon, stringResource(tab.label), Modifier.size(22.dp),
-                                tint = if (selected) palette.link else palette.text)
-                        }
-                    }
-                }
+                GlassNavigation(tabs, selection, unread, dimmed, measured = {
+                    clearance = it + navigationBottomGap + 8.dp
+                }, select = select)
             }
         }
     }

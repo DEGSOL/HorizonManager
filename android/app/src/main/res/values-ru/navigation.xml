@@ -22,4 +22,5 @@
     <string name="browser_actions">Действия браузера</string>
     <string name="browser_open_external">Открыть во внешнем браузере</string>
     <string name="browser_no_handler">Нет приложения для открытия этой ссылки.</string>
+    <string name="nav_unread">Непрочитанных: %1$d</string>
 </resources>

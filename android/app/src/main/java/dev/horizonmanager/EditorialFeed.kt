@@ -228,7 +228,8 @@ internal fun NewsScreen(
                                     start = 18.dp,
                                     end = 18.dp,
                                     top = 6.dp,
-                                    bottom = 106.dp,
+                                    bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
+                                        LocalNavigationClearance.current,
                                 )
                         ) {
                             items(blocks.size) { i -> MarkdownBlock(blocks[i]) }
@@ -246,7 +247,7 @@ internal fun NewsScreen(
                                     bottom =
                                         WindowInsets.navigationBars
                                             .asPaddingValues()
-                                            .calculateBottomPadding() + 90.dp,
+                                            .calculateBottomPadding() + (if (archived) 12.dp else LocalNavigationClearance.current),
                                 ),
                             verticalItemSpacing = 9.dp,
                             horizontalArrangement = Arrangement.spacedBy(9.dp),

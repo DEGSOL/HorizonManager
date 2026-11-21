@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 internal class GlassScene(val layer: GraphicsLayer) {
@@ -33,29 +34,31 @@ internal fun Modifier.recordScene(scene: GlassScene): Modifier =
             drawLayer(scene.layer)
         }
 
-internal fun Modifier.frost(shape: Shape, active: Boolean = false, onPhoto: Boolean = false): Modifier = composed {
+internal val backdropBlurAvailable: Boolean
+    @Composable get() = LocalGlassScene.current != null && Build.VERSION.SDK_INT >= 31
+
+internal fun Modifier.glassBackdrop(shape: Shape, radius: Dp): Modifier = composed {
     val scene = LocalGlassScene.current
-    val palette = LocalHorizonPalette.current
+    if (scene == null || Build.VERSION.SDK_INT < 31) return@composed clip(shape)
     var position by remember { mutableStateOf(Offset.Zero) }
-    val hardwareBlur = scene != null && Build.VERSION.SDK_INT >= 31
     this.onGloballyPositioned { position = it.positionInRoot() }
         .clip(shape)
-        .then(
-            if (hardwareBlur)
-                Modifier.drawWithCache {
-                    val sampled =
-                        obtainGraphicsLayer().apply {
-                            renderEffect = BlurEffect(13.dp.toPx(), 13.dp.toPx(), TileMode.Clamp)
-                        }
-                    onDrawWithContent {
-                        val shift = scene!!.origin - position
-                        sampled.record { translate(shift.x, shift.y) { drawLayer(scene.layer) } }
-                        drawLayer(sampled)
-                        drawContent()
-                    }
-                }
-            else Modifier
-        )
+        .drawWithCache {
+            val blur = radius.toPx()
+            val sampled = obtainGraphicsLayer().apply { renderEffect = BlurEffect(blur, blur, TileMode.Clamp) }
+            onDrawWithContent {
+                val shift = scene.origin - position
+                sampled.record { translate(shift.x, shift.y) { drawLayer(scene.layer) } }
+                drawLayer(sampled)
+                drawContent()
+            }
+        }
+}
+
+internal fun Modifier.frost(shape: Shape, active: Boolean = false, onPhoto: Boolean = false): Modifier = composed {
+    val palette = LocalHorizonPalette.current
+    val hardwareBlur = backdropBlurAvailable
+    glassBackdrop(shape, 13.dp)
         .background(
             Brush.verticalGradient(
                 listOf(

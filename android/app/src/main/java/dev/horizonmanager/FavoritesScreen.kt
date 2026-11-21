@@ -53,7 +53,8 @@ internal fun FavoritesScreen(
             } else {
                 LazyVerticalStaggeredGrid(
                     columns = StaggeredGridCells.Adaptive(154.dp),
-                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 5.dp, bottom = 92.dp),
+                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 5.dp,
+                        bottom = LocalNavigationClearance.current),
                     verticalItemSpacing = 8.dp,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {

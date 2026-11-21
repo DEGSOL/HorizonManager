@@ -22,4 +22,5 @@
     <string name="browser_actions">浏览器操作</string>
     <string name="browser_open_external">在外部浏览器中打开</string>
     <string name="browser_no_handler">没有可打开此链接的应用。</string>
+    <string name="nav_unread">未读：%1$d</string>
 </resources>

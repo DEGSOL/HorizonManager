@@ -10,7 +10,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -68,6 +72,14 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     private val mutable = MutableStateFlow(Panel())
     val state = mutable.asStateFlow()
     val favorites = cache.favorites()
+
+    fun unreadFeed(server: String, run: String, language: String) =
+        cache.digestPages(server, run, language).map { pages ->
+            pages.asSequence().flatMap { digestPublications(it).asSequence() }
+                .map { it.optString("id") }.filter(String::isNotBlank).toSet()
+        }.distinctUntilChanged().combine(cache.readArticleIds(server)) { articles, read ->
+            articles.size - read.count(articles::contains)
+        }.distinctUntilChanged().flowOn(Dispatchers.Default)
     private val saved = MutableStateFlow(0)
     val settingsSaved = saved.asStateFlow()
 

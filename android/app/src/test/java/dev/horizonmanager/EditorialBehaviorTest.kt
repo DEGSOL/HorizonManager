@@ -6,6 +6,12 @@ import org.junit.Test
 
 class EditorialBehaviorTest {
     @Test
+    fun unreadBadgeHidesZeroAndCapsItsVisibleNumber() {
+        assertEquals(listOf(null, "1", "9", "12", "99", "99+", "99+"),
+            listOf(0, 1, 9, 12, 99, 100, 115).map(::unreadBadgeText))
+    }
+
+    @Test
     fun profileRenamePreservesLinkedRoutesAndUnrelatedText() {
         val raw=JSONObject("""{"sources":{"rss":[{"profile":["old","other"],"name":"old"}]},
             "processing":{"default_profile":"old","profile_settings":{"old":{"weight":2}}},

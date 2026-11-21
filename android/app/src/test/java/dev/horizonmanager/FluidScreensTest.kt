@@ -4,9 +4,11 @@ import android.graphics.Bitmap
 import android.util.LruCache
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import java.io.File
 import java.time.Instant
@@ -75,7 +77,7 @@ class FluidScreensTest {
 
     // Only the test owns this snapshot. The released app reads ManagerModel's agent/cache flow.
     @Suppress("UNCHECKED_CAST")
-    private fun loadIssue(longHeadline: String? = null, observeServer: Boolean = false): String {
+    private fun loadIssue(longHeadline: String? = null, observeServer: Boolean = false, articleCount: Int = 105): String {
         val now = Instant.now()
         val date = now.minusSeconds(900).toString()
         val server =
@@ -114,7 +116,7 @@ class FluidScreensTest {
                 as LruCache<String, Cover>
         val pictures = photos.map { requireNotNull(decodeCover(bytes(it + ".jpg"))) }
         val stories =
-            (0 until 105).map { n ->
+            (0 until articleCount).map { n ->
                 val k = n % 4
                 val slug = if (k == 0) "iss040e033340" else photos[k]
                 val page = "https://images.nasa.gov/details/" + slug
@@ -154,6 +156,9 @@ class FluidScreensTest {
                     .put("items", JSONArray(listOf(stories.first())))
                     .put("total", 1)
             cacheDao.saveDigest(CachedDigest(server.id, "past-1", "ru", 0, payload.toString()))
+            cacheDao.saveDigest(CachedDigest(server.id, "current", "ru", 0,
+                JSONObject().put("id", "current").put("language", "ru").put("markdown", "# Тестовый выпуск")
+                    .put("items", JSONArray(stories)).put("total", stories.size).toString()))
         }
         compose.runOnIdle {
             val model = ViewModelProvider(compose.activity)[ManagerModel::class.java]
@@ -368,9 +373,13 @@ class FluidScreensTest {
         compose.onNodeWithContentDescription(ui(R.string.settings)).assertDoesNotExist()
         scrollable.performTouchInput { swipeDown() }
         compose.mainClock.advanceTimeBy(500)
-        compose.onNodeWithContentDescription(ui(R.string.settings)).assertExists()
+        val barTop = compose.onNodeWithContentDescription(ui(R.string.settings)).getUnclippedBoundsInRoot().top
         scrollable.performScrollToIndex(104)
-        compose.onNodeWithText(headlines[0] + " · 105").assertExists()
+        scrollable.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 600f) }
+        val lastTile = compose.onNodeWithText(headlines[0] + " · 105", useUnmergedTree = true).onParent()
+        val cardBottom = lastTile.getUnclippedBoundsInRoot().bottom
+        snapshot("16-glass-navigation-last-card")
+        assertTrue("Last card bottom $cardBottom should be above navigation at $barTop", cardBottom <= barTop)
         scrollable.performScrollToIndex(0)
         compose.onNodeWithText(headlines[0]).assertExists()
         tab(R.string.settings)
@@ -414,6 +423,80 @@ class FluidScreensTest {
         back()
         back()
         text(R.string.editorial_archive_search).assertExists()
+    }
+
+    @Test
+    fun glassNavigationCountsCurrentNewsAndKeepsEqualTabsDuringSwitches() {
+        loadIssue(observeServer = true, articleCount = 12)
+        val feed = compose.onNodeWithContentDescription(ui(R.string.feed))
+        val settings = compose.onNodeWithContentDescription(ui(R.string.settings))
+        val favorites = compose.onNodeWithContentDescription(ui(R.string.favorites_title))
+        fun waitForCount(count: Int) {
+            compose.waitUntil(5_000) {
+                val node = compose.onAllNodesWithContentDescription(ui(R.string.feed)).fetchSemanticsNodes().singleOrNull()
+                node?.config?.getOrElse(SemanticsProperties.StateDescription) { "" } == ui(R.string.nav_unread, count)
+            }
+        }
+        waitForCount(12)
+        feed.assertIsSelected()
+        val bounds = listOf(feed, settings, favorites).map { it.getUnclippedBoundsInRoot() }
+        val widths = bounds.map { (it.right - it.left).value }
+        assertTrue(widths.max() - widths.min() <= 1f)
+        assertTrue(bounds.all { it.top == bounds.first().top && it.bottom == bounds.first().bottom })
+        snapshot("14-glass-navigation")
+
+        compose.onNodeWithText(headlines[0]).performClick()
+        waitForCount(11)
+        back()
+        settings.performClick()
+        settings.assertIsSelected()
+        waitForCount(11)
+        favorites.performClick()
+        favorites.assertIsSelected()
+        waitForCount(11)
+
+        val panel = compose.runOnIdle { ViewModelProvider(compose.activity)[ManagerModel::class.java].state.value }
+        val cache = ManagerDb.get(compose.activity).cache()
+        runBlocking(Dispatchers.IO) {
+            val page = JSONObject().put("items", JSONArray(listOf(panel.articles.first(),
+                JSONObject().put("id", "new-news").put("title", "Новость после синхронизации"))))
+            cache.saveDigest(CachedDigest(panel.server!!.id, "current", "ru", 12, page.toString()))
+        }
+        waitForCount(12)
+        feed.performClick()
+        feed.assertIsSelected()
+        waitForCount(12)
+    }
+
+    @Test
+    @Config(qualifiers = "ru-rRU-w320dp-h720dp-xhdpi")
+    fun narrowNavigationFitsLargeFontsAndHandlesFastTaps() {
+        val originalScale = org.robolectric.RuntimeEnvironment.getFontScale()
+        try {
+            org.robolectric.RuntimeEnvironment.setFontScale(1.8f)
+            compose.activityRule.scenario.recreate()
+            loadIssue(articleCount = 12)
+            val feed = compose.onNodeWithContentDescription(ui(R.string.feed))
+            val settings = compose.onNodeWithContentDescription(ui(R.string.settings))
+            val favorites = compose.onNodeWithContentDescription(ui(R.string.favorites_title))
+            compose.mainClock.autoAdvance = false
+            try {
+                for (destination in listOf(settings, favorites, settings, feed)) {
+                    destination.performClick()
+                    compose.mainClock.advanceTimeBy(48)
+                }
+            } finally {
+                compose.mainClock.autoAdvance = true
+            }
+            feed.assertIsSelected()
+            favorites.assertIsDisplayed()
+            val tabs = listOf(feed, settings, favorites).map { it.getUnclippedBoundsInRoot() }
+            assertTrue(tabs.first().left.value >= 12f && tabs.last().right.value <= 308f)
+            assertTrue(tabs.all { it.bottom - it.top >= 48.dp })
+            snapshot("15-glass-navigation-large-type")
+        } finally {
+            org.robolectric.RuntimeEnvironment.setFontScale(originalScale)
+        }
     }
 
     @Test

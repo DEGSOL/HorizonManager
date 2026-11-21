@@ -58,6 +58,7 @@ class SavedPublicationsTest {
             val reopened = open()
             try {
                 val cache = reopened.cache()
+                assertEquals(listOf("a"), cache.readArticleIds("server").first())
                 val favorite = cache.favorites().first().single().snapshot
                 assertEquals(oldArticle.getString("body"), favorite.publication().getString("body"))
                 val hidden = cache.hiddenDigests("server").toSet()

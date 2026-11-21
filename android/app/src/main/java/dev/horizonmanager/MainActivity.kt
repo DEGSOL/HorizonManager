@@ -113,8 +113,8 @@ private data class Screen(val page: String, val issueId: String = "") {
 
 @Composable
 private fun mainTabs() = listOf(
-    HorizonTab(R.string.feed, ImageVector.vectorResource(R.drawable.ic_issue)),
-    HorizonTab(R.string.settings, ImageVector.vectorResource(R.drawable.ic_sliders)),
+    HorizonTab(R.string.feed, ImageVector.vectorResource(R.drawable.ic_nav_feed)),
+    HorizonTab(R.string.settings, ImageVector.vectorResource(R.drawable.ic_nav_sliders)),
     HorizonTab(R.string.favorites_title, ImageVector.vectorResource(R.drawable.ic_star_outline)),
 )
 
@@ -174,6 +174,14 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         splitDigests(panel.archive, panel.collectionHours, now, panel.manuallyArchived, panel.hiddenDigests)
     }
     val openedIssue = issues.archive.find { it.optString("id") == archiveIssue }
+    val feed = issues.feed
+    val feedRun = feed?.optString("id")
+    val feedLanguage = feed?.optJSONArray("languages")?.strings()?.let { digestLanguage(it, panel.preferredDigestLanguage()) }
+    val unread = if (currentServer == null || feedRun.isNullOrBlank() || feedLanguage == null) 0
+        else key(currentServer.id, feedRun, feedLanguage) {
+            val updates = remember { model.unreadFeed(currentServer.id, feedRun, feedLanguage) }
+            updates.collectAsStateWithLifecycle(initialValue = 0).value
+        }
     val archiveFilters = rememberSaveable(currentServer?.id, archiveIssue, saver = NewsFilters.Saver) { NewsFilters() }
     LaunchedEffect(feedFilters, archiveFilters, defaultOrder) {
         for (filters in listOf(feedFilters, archiveFilters)) {
@@ -348,7 +356,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     }
 
     val showTabs = panel.ready && !canGoBack && (tab != FEED || navVisible || overlay)
-    GlassLayout(tabs, tab, showTabs, dimmed = overlay, savedNotice = savedNotice, select = { chosen ->
+    GlassLayout(tabs, tab, showTabs, unread = unread, dimmed = overlay, savedNotice = savedNotice, select = { chosen ->
         if (chosen != tab || configPage.isNotEmpty() || openedIssue != null) {
             previousTab = tab
             tab = chosen
@@ -507,7 +515,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                                 SettingsForm(panel, model, screen.page) { if (configPage == screen.page) dirtyPage = it }
                             }
                         }
-                        Spacer(Modifier.height(if (showTabs) 78.dp else 10.dp))
+                        Spacer(Modifier.height(if (showTabs) LocalNavigationClearance.current else 10.dp))
                     }
                 }
             }
