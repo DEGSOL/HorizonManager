@@ -124,12 +124,13 @@ internal fun horizonFieldColors() = LocalHorizonPalette.current.let { palette ->
 @Composable
 internal fun GlassLayout(tabs: List<HorizonTab>, selection: Int, showTabs: Boolean, select: (Int) -> Unit,
                          unread: Int, overlay: ReadingOverlay = ReadingOverlay.None,
+                         modal: @Composable () -> Unit = {},
                          content: @Composable BoxScope.() -> Unit) {
     val palette = LocalHorizonPalette.current
     val sceneLayer = rememberGraphicsLayer()
     val scene = remember(sceneLayer) { GlassScene(sceneLayer) }
     var clearance by remember { mutableStateOf(defaultNavigationClearance) }
-    val statusHeight = WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding()
+    val statusHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     Box(Modifier.fillMaxSize().background(palette.background).imePadding()) {
         Box(Modifier.fillMaxSize().then(
             if (overlay == ReadingOverlay.Article) Modifier.blur(5.dp) else Modifier
@@ -144,7 +145,7 @@ internal fun GlassLayout(tabs: List<HorizonTab>, selection: Int, showTabs: Boole
             }
             CompositionLocalProvider(LocalGlassScene provides scene) {
                 if (statusHeight > 0.dp) {
-                    Spacer(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(statusHeight)
+                    Spacer(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(statusHeight * (1f + statusGlassFadeFraction))
                         .statusBarGlass())
                 }
                 AnimatedVisibility(showTabs, modifier = Modifier.align(Alignment.BottomCenter)
@@ -161,8 +162,9 @@ internal fun GlassLayout(tabs: List<HorizonTab>, selection: Int, showTabs: Boole
                 }
             }
         }
-        CompositionLocalProvider(LocalGlassScene provides scene) {
+        CompositionLocalProvider(LocalGlassScene provides scene, LocalMenuScene provides scene) {
             GlassNoticeHost(Modifier.align(Alignment.TopCenter))
+            modal()
         }
     }
 }

@@ -1,0 +1,14 @@
+<resources>
+    <string name="hovq_headline_limit">Максимум слов в заголовке</string>
+    <string name="hovq_headline_help">От 2 до 30 слов для заголовков будущих дайджестов. По умолчанию 10.</string>
+    <string name="hovq_headline_save">Сохранить длину заголовка</string>
+    <string name="hovq_headline_upgrade">Обновите агент на VPS, чтобы менять длину заголовков.</string>
+    <string name="hovq_digest_notifications">Уведомления о новых дайджестах</string>
+    <string name="hovq_push_delivery_help">С ntfy или настроенной службой UnifiedPush дайджесты приходят как push-уведомления Android. Если push недоступен, приложение проверяет новые выпуски в фоне.</string>
+    <string name="hovq_notification_offer">Разрешите уведомления Android, чтобы узнавать о новых дайджестах, когда Hovq закрыт.</string>
+    <string name="hovq_allow_notifications">Разрешить уведомления</string>
+    <string name="hovq_later">Позже</string>
+    <string name="hovq_agent_update_offer">Обновите агент Horizon на VPS с версии %1$s до %2$s, чтобы пользоваться возможностями этой версии Hovq.</string>
+    <string name="hovq_update_now">Обновить агент</string>
+    <string name="hovq_update_sudo">Пароль sudo, если требуется</string>
+</resources>

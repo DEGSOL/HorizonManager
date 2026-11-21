@@ -89,8 +89,10 @@ class FluidScreensTest {
     @Suppress("UNCHECKED_CAST")
     private fun loadIssue(
         longHeadline: String? = null, observeServer: Boolean = false,
-        articleCount: Int = 105, showEmptyFeedFirst: Boolean = false,
+        articleCount: Int = 105, showEmptyFeedFirst: Boolean = false, agentVersion: String = BuildConfig.AGENT_VERSION,
     ): String {
+        val notificationOffer = compose.onAllNodesWithText(ui(R.string.hovq_notification_offer))
+        if (notificationOffer.fetchSemanticsNodes().isNotEmpty()) text(R.string.hovq_later).performClick()
         val now = Instant.now()
         val date = now.minusSeconds(900).toString()
         val server =
@@ -190,7 +192,7 @@ class FluidScreensTest {
                 .put("zone", "UTC").put("days", JSONArray((0..6).toList())))
                 .put("next", now.plusSeconds(3600).epochSecond),
             archive = listOf(issue) + archive,
-            status = JSONObject().put("agent", "0.1.4").put("media_search", false),
+            status = JSONObject().put("agent", agentVersion).put("media_search", false).put("headline_max_words", 10),
             events = listOf(
                 JSONObject().put("time", now.toString()).put("code", "SCHEDULE_SKIPPED_ACTIVE")
                     .put("component", "scheduler").put("level", "WARNING"),
@@ -215,6 +217,19 @@ class FluidScreensTest {
         }
         compose.waitForIdle()
         return ui(R.string.feed) + " " + shortDigestDate(date)
+    }
+
+    @Test
+    fun launchOffersSystemNotificationsAndPromptsForAnOlderAgent() {
+        text(R.string.hovq_notification_offer).assertIsDisplayed()
+        text(R.string.hovq_allow_notifications).assertIsEnabled()
+        text(R.string.hovq_later).performClick()
+        val heading = loadIssue(agentVersion = "0.1.10", articleCount = 8)
+        compose.onNodeWithText(ui(R.string.hovq_agent_update_offer, "0.1.10", BuildConfig.AGENT_VERSION))
+            .assertIsDisplayed()
+        text(R.string.hovq_update_now).assertIsEnabled()
+        text(R.string.hovq_later).performClick()
+        compose.onNodeWithText(heading).assertIsDisplayed()
     }
 
     @Test
@@ -517,7 +532,7 @@ class FluidScreensTest {
         // Sample the narrow left margin beside the text in the fixed portrait fixture.
         val x = openArticle.width / 25
         val y = openArticle.height * 51 / 100
-        assertEquals("Article art must be clipped to its header", ThemePreset.Graphite.surface.toArgb(),
+        assertEquals("Article art must be clipped to its header", 0xFF202020.toInt(),
             openArticle.getPixel(x, y))
         compose.onNode(isDialog()).performTouchInput {
             click(Offset(
@@ -611,7 +626,7 @@ class FluidScreensTest {
         assertTrue(widths.max() - widths.min() <= 1f)
         assertTrue(bounds.all { it.top == bounds.first().top && it.bottom == bounds.first().bottom })
         assertTrue("The expanded bar should cover about three quarters of the available width", widths.sum() in 265f..291f)
-        assertTrue(bounds.all { it.bottom - it.top in 59.dp..62.dp })
+        assertTrue(bounds.all { it.bottom - it.top in 51.dp..54.dp })
         snapshot("14-glass-navigation")
 
         compose.onNodeWithText(headlines[0]).performClick()

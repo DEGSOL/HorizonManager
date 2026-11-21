@@ -973,6 +973,10 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         api.put("digest-language", JSONObject().put("language", language))
     }
 
+    fun setHeadlineLength(words: Int) = mutate(setting = true) { api ->
+        api.put("headline-length", JSONObject().put("words", words))
+    }
+
     fun enrichmentMode(mode: String) = mutate(setting = true) { api ->
         api.put("enrichment-mode", JSONObject().put("mode", mode))
     }

@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -98,7 +97,7 @@ internal fun ArticleContext(
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End,
         verticalAlignment = Alignment.CenterVertically) {
         if (active) {
-            CircularProgressIndicator(Modifier.size(15.dp), strokeWidth = 2.dp)
+            DottedProgress(Modifier.width(44.dp), dots = 5)
             Text(ui(R.string.article_context_pending), Modifier.weight(1f, fill = false)
                 .padding(horizontal = 8.dp).semantics {
                     liveRegion = LiveRegionMode.Polite

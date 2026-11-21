@@ -236,8 +236,8 @@ internal fun NotificationSettings(panel: Panel, model: ManagerModel, permission:
     Tile {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(ui(R.string.ui_background_news_checks), Modifier.weight(1f))
-            SettingHelp(ui(R.string.ui_background_news_checks), R.string.hovq_polling_active)
+            Text(ui(R.string.hovq_digest_notifications), Modifier.weight(1f))
+            SettingHelp(ui(R.string.hovq_digest_notifications), R.string.hovq_push_delivery_help)
             Switch(server.background, enabled = !panel.busy, onCheckedChange = { checked ->
                 if (checked) permission()
                 model.settings(server.https, checked)
@@ -256,7 +256,7 @@ internal fun NotificationSettings(panel: Panel, model: ManagerModel, permission:
                 TextButton(onClick = { chooseDistributor = true }) { Text(ui(R.string.ui_connect_push_notifications)) }
                 if (pushReady || DigestNotifications.endpoint(context, server.id).isNotEmpty()) {
                     TextButton(onClick = {
-                        DigestNotifications.unregister(context, server.id)
+                        DigestNotifications.disconnectPush(context, server.id)
                         DigestWorker.sync(context, server.id)
                     }) { Text(ui(R.string.ui_disconnect_push_notifications)) }
                 }
@@ -298,7 +298,7 @@ internal fun ServerMaintenance(panel: Panel, model: ManagerModel, open: (String)
                     panel.jobs.none { it.optString("state") in setOf("queued", "running") }) { Text(ui(R.string.ui_update_vps_agent)) }
             }
         }
-        Reveal(panel.updatingAgent) { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+        Reveal(panel.updatingAgent) { DottedProgress(Modifier.fillMaxWidth()) }
         val result = panel.maintenanceResult
         Reveal(result.isNotEmpty()) { Text(result, style = MaterialTheme.typography.bodyMedium) }
     }

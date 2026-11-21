@@ -22,6 +22,9 @@ ENV_REFERENCE = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)\}")
 DigestLanguageCode = Literal["en", "ru", "de", "fr", "it", "es", "ja", "ko", "zh", "kk", "tt"]
 DIGEST_LANGUAGES = get_args(DigestLanguageCode)
 LANGUAGES = frozenset(DIGEST_LANGUAGES)
+DEFAULT_HEADLINE_WORDS = 10
+MIN_HEADLINE_WORDS = 2
+MAX_HEADLINE_WORDS = 30
 
 
 def secret_name_allowed(name):

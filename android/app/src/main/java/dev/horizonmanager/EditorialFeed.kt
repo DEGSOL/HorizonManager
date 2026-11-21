@@ -39,6 +39,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.*
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.res.vectorResource
@@ -65,6 +66,7 @@ internal fun NewsScreen(
     issue: JSONObject?,
     filters: NewsFilters,
     archived: Boolean,
+    promptOpen: Boolean,
     ai: () -> Unit,
     sources: () -> Unit,
     back: () -> Unit,
@@ -180,9 +182,9 @@ internal fun NewsScreen(
             .collect { if (it) barsRevealed = true }
     }
     LaunchedEffect(controlsOpen) { if (controlsOpen) barsRevealed = true }
-    var headerHeight by remember { mutableStateOf(62.dp) }
+    var headerHeight by remember { mutableStateOf(69.dp) }
     val movingBorder = rememberUnreadBorderClock {
-        !full && !blocked && state.layoutInfo.visibleItemsInfo.any { visible ->
+        !full && !blocked && !promptOpen && state.layoutInfo.visibleItemsInfo.any { visible ->
             val key = visible.key as? String ?: return@any false
             key.startsWith("story:") && flags[key.removePrefix("story:")]?.read != true
         }
@@ -245,7 +247,7 @@ internal fun NewsScreen(
                             item("progress", span = StaggeredGridItemSpan.FullLine) {
                                 Column {
                                     Text(status, style = MaterialTheme.typography.labelLarge)
-                                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                                    DottedProgress(Modifier.fillMaxWidth())
                                 }
                             }
                         if (!loaded || shown.isEmpty())
@@ -406,7 +408,7 @@ private fun FloatingFeedHeader(issue: JSONObject?, filters: NewsFilters, loaded:
     val palette = LocalHorizonPalette.current
     Row(
         modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 5.dp, bottom = 4.dp)
-            .navigationGlass(feedGlassShape).padding(start = 16.dp, end = 4.dp, top = 1.dp, bottom = 1.dp),
+            .height(readingBarHeight()).navigationGlass(feedGlassShape).padding(start = 16.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (archived || full) {
@@ -418,13 +420,14 @@ private fun FloatingFeedHeader(issue: JSONObject?, filters: NewsFilters, loaded:
             buildAnnotatedString {
                 append(title)
                 if (date.isNotBlank()) withStyle(SpanStyle(
-                    fontWeight = FontWeight.Light, color = palette.muted, fontSize = 25.sp,
+                    fontWeight = FontWeight.Light, color = palette.muted,
                 )) { append(" " + date) }
             },
             Modifier.weight(1f).clickable(role = Role.Button, onClick = toggleBubble)
                 .heightIn(min = 48.dp).wrapContentHeight(Alignment.CenterVertically).padding(vertical = 5.dp),
-            style = MaterialTheme.typography.displaySmall,
-            color = palette.text,
+            style = if (LocalConfiguration.current.screenWidthDp < 350) MaterialTheme.typography.headlineMedium
+                else MaterialTheme.typography.displaySmall,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, color = palette.text,
         )
         if (!bubble && !full) NewsToolbar(filters, loaded)
     }
@@ -559,7 +562,7 @@ internal fun DigestBubble(
                 onClick = details,
             )
         }
-        if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 6.dp))
+        if (busy) DottedProgress(Modifier.fillMaxWidth().padding(top = 6.dp))
     }
 }
 
@@ -651,7 +654,7 @@ internal fun PublicationTile(
         }
         if (unread || showBorder) {
             Spacer(Modifier.matchParentSize().graphicsLayer()
-                .unreadOutline(shape, key, borderAlpha, movingBorder))
+                .unreadOutline(shape, key, borderAlpha, movingBorder, cover?.luminance, photoHeight))
         }
     }
 }
@@ -774,7 +777,7 @@ internal fun ArchiveScreen(
                         Text(ui(R.string.ui_retry))
                     }
                 }
-                if (panel.syncing || panel.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                if (panel.syncing || panel.busy) DottedProgress(Modifier.fillMaxWidth())
                 if (issues.size > 7 || date.isNotEmpty())
                     ValueField(ui(R.string.editorial_archive_search), date, { date = it })
                 if (byMonth.isEmpty() && !panel.busy)

@@ -141,7 +141,7 @@ internal fun Control(panel: Panel, model: ManagerModel, confirm: (String, () -> 
     active?.let { job -> Tile {
         Text(phaseName(job.optString("phase")), style = MaterialTheme.typography.titleMedium)
         Text(stateName(job.optString("state")))
-        LinearProgressIndicator(Modifier.fillMaxWidth())
+        DottedProgress(Modifier.fillMaxWidth())
         Text(job.getString("id"), style = MaterialTheme.typography.labelSmall)
         TextButton(onClick = { confirm(ui(R.string.ui_stop_this_job_the_provider_may)) { model.stop(job.getString("id")) } }) { Text(ui(R.string.ui_stop)) }
     } }

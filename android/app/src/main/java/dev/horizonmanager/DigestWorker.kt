@@ -31,6 +31,7 @@ internal class DigestWorker(context: Context, params: WorkerParameters) : Corout
         var retry = false
         for (server in profiles.filter { it.installed && (id == it.id || id == null && it.background) }) {
             val immediate = id != null
+            if (server.background) runCatching { DigestNotifications.connectAvailable(app, server.id) }
             val endpoint = DigestNotifications.endpoint(app, server.id)
             val registration = DigestNotifications.registration(app, server.id)
             if (!immediate && !DigestNotifications.checkDue(app, server.id, endpoint, registration)) continue

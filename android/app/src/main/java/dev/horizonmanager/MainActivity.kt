@@ -238,7 +238,50 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         model.consumeProblem(problem)
     }
     var backupDialog by remember { mutableStateOf("") }
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    var notificationOffer by rememberSaveable { mutableStateOf(true) }
+    var notificationAllowed by remember { mutableStateOf(DigestNotifications.deliveryAllowed(ctx)) }
+    var requestingAlerts by rememberSaveable { mutableStateOf(false) }
+    var enableDigestAfterPermission by rememberSaveable { mutableStateOf(false) }
+    val notificationPrefs = remember(ctx) { ctx.getSharedPreferences("notification_permission", android.content.Context.MODE_PRIVATE) }
+    val activity = androidx.activity.compose.LocalActivity.current
+    fun permissionReturned() {
+        notificationAllowed = DigestNotifications.deliveryAllowed(ctx)
+        if (!notificationAllowed) enableDigestAfterPermission = false
+        requestingAlerts = false
+    }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { permissionReturned() }
+    val notificationSettings = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        permissionReturned()
+    }
+    fun requestNotifications() {
+        if (DigestNotifications.deliveryAllowed(ctx)) return
+        requestingAlerts = true
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ctx.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED &&
+            (!notificationPrefs.getBoolean("requested", false) ||
+                activity?.shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS) == true)) {
+            notificationPrefs.edit().putBoolean("requested", true).apply()
+            permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            notificationSettings.launch(Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, ctx.packageName))
+        }
+    }
+    DisposableEffect(lifecycle, ctx) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) notificationAllowed = DigestNotifications.deliveryAllowed(ctx)
+        }
+        lifecycle.lifecycle.addObserver(observer)
+        onDispose { lifecycle.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(enableDigestAfterPermission, notificationAllowed, currentServer, panel.ready, panel.busy) {
+        if (enableDigestAfterPermission && notificationAllowed && panel.ready && !panel.busy && currentServer != null) {
+            enableDigestAfterPermission = false
+            if (!currentServer.background) model.settings(currentServer.https, true)
+            else DigestWorker.sync(ctx, currentServer.id)
+        }
+    }
+    var dismissedAgentUpdates by rememberSaveable { mutableStateOf(emptyList<String>()) }
     val output = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         val content = model.takeExportDocument()
         if (uri != null) scope.launch {
@@ -382,9 +425,61 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
             if (chosen == FEED) model.showFeed()
         }
     }
-    val swipeTabs = panel.ready && !canGoBack && overlay == ReadingOverlay.None &&
+    val promptsAllowed = confirm == null && backupDialog.isEmpty() && panel.hostConfirmation == null &&
+        overlay == ReadingOverlay.None && !requestingAlerts
+    val installedAgent = panel.status.optString("agent")
+    val updateKey = "${currentServer?.id}/$installedAgent"
+    var requestUpdatePassword by remember(updateKey) { mutableStateOf(false) }
+    val showPermissionOffer = promptsAllowed && notificationOffer && !notificationAllowed
+    val showUpdateOffer = promptsAllowed && !showPermissionOffer && !canGoBack && panel.ready &&
+        !panel.busy && !panel.updatingAgent && !enableDigestAfterPermission && currentServer != null &&
+        panel.jobs.none { it.optString("state") in setOf("running", "queued") } &&
+        agentUpdateAvailable(installedAgent) && updateKey !in dismissedAgentUpdates
+    val promptOpen = showPermissionOffer || showUpdateOffer || requestUpdatePassword
+    val swipeTabs = panel.ready && !canGoBack && overlay == ReadingOverlay.None && !promptOpen &&
         (tab != FEED || !feedFilters.searchOpen && !feedFilters.optionsOpen)
-    GlassLayout(tabs, tab, showTabs, unread = unread, overlay = overlay, select = ::selectTab) {
+    val releaseDialogs: @Composable () -> Unit = {
+        if (showPermissionOffer) {
+            HorizonAlertDialog(onDismissRequest = { notificationOffer = false },
+                title = { Text(ui(R.string.hovq_digest_notifications)) },
+                text = { Text(ui(R.string.hovq_notification_offer)) },
+                confirmButton = {
+                    Button(onClick = {
+                        notificationOffer = false
+                        enableDigestAfterPermission = true
+                        requestNotifications()
+                    }) { Text(ui(R.string.hovq_allow_notifications)) }
+                }, dismissButton = {
+                    TextButton(onClick = { notificationOffer = false }) { Text(ui(R.string.hovq_later)) }
+                })
+        } else if (showUpdateOffer) {
+            fun dismissAgent() { dismissedAgentUpdates = dismissedAgentUpdates + updateKey }
+            HorizonAlertDialog(onDismissRequest = ::dismissAgent,
+                title = { Text(ui(R.string.ui_update_vps_agent)) },
+                text = {
+                    Text(ui(R.string.hovq_agent_update_offer, installedAgent, BuildConfig.AGENT_VERSION))
+                }, confirmButton = {
+                    Button(onClick = {
+                        dismissAgent()
+                        val privileges = panel.probe["privileges"]
+                        if (currentServer.user == "root" || privileges in listOf("root", "sudo"))
+                            model.updateAgent("")
+                        else requestUpdatePassword = true
+                    }) {
+                        Text(ui(R.string.hovq_update_now))
+                    }
+                }, dismissButton = {
+                    TextButton(onClick = ::dismissAgent) { Text(ui(R.string.hovq_later)) }
+                })
+        } else if (requestUpdatePassword) {
+            PasswordDialog(ui(R.string.ui_update_vps_agent), ui(R.string.hovq_update_sudo),
+                close = { requestUpdatePassword = false }) { password ->
+                requestUpdatePassword = false
+                model.updateAgent(password)
+            }
+        }
+    }
+    GlassLayout(tabs, tab, showTabs, unread = unread, overlay = overlay, select = ::selectTab, modal = releaseDialogs) {
         val destination = when {
             manageServers -> Screen("servers")
             editServer -> Screen("ssh")
@@ -459,7 +554,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
             }) else null
             screenState.SaveableStateProvider("${currentServer?.id.orEmpty()}/${screen.page}/${screen.issueId}") {
                 when {
-                    screen.reading -> NewsScreen(panel, model, displayedIssue, filters, archived,
+                    screen.reading -> NewsScreen(panel, model, displayedIssue, filters, archived, promptOpen,
                         { openSettings("ai") }, { openSettings("sources") }, ::goBack,
                         { if (screen == currentDestination) navVisible = it },
                         { if (screen == currentDestination) overlay = it })
@@ -477,7 +572,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                             else -> Column(Modifier.fillMaxSize().editorialSideBottomInsets().verticalScroll(rememberScrollState())
                                 .padding(start = 16.dp, end = 16.dp, top = top, bottom = 10.dp),
                                 verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Reveal(panel.busy) { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+                                Reveal(panel.busy) { DottedProgress(Modifier.fillMaxWidth()) }
                                 when (screen.page) {
                                     "servers" -> {
                                         panel.servers.forEach { server -> key(server.id) {
@@ -521,8 +616,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                                         editVerification = panel.sshVerification
                                         editServer = true
                                     }
-                                    "alerts" -> NotificationSettings(panel, model,
-                                        { if (Build.VERSION.SDK_INT >= 33) permission.launch(Manifest.permission.POST_NOTIFICATIONS) },
+                                    "alerts" -> NotificationSettings(panel, model, ::requestNotifications,
                                         { openSettings("delivery") })
                                     "maintenance" -> ServerMaintenance(panel, model, ::openSettings)
                                     "transfer" -> TransferSettings(panel,
@@ -700,7 +794,7 @@ private fun Setup(panel: Panel, model: ManagerModel, forceEdit: Boolean) {
                     else -> ui(R.string.ui_waiting)
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(title, Modifier.weight(1f)); Text(event) }
-                if (id == step && install == "running") LinearProgressIndicator(Modifier.fillMaxWidth())
+                if (id == step && install == "running") DottedProgress(Modifier.fillMaxWidth())
             }
             probe["operation"]?.let { Text(ui(R.string.ui_operation, it), style = MaterialTheme.typography.labelSmall) }
         }

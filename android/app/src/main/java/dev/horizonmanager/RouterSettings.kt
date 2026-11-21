@@ -11,7 +11,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -115,7 +114,7 @@ internal fun RouterSettings(
         })
     }
     if (loading) {
-        LinearProgressIndicator(Modifier.fillMaxWidth())
+        DottedProgress(Modifier.fillMaxWidth())
         Text(ui(R.string.ui_loading_the_catalog, router.title))
     }
     if (error.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error)

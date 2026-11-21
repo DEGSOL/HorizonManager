@@ -85,10 +85,12 @@ internal val ThemePreset.glassSelection: Color
 internal fun Modifier.navigationGlass(shape: Shape, outlined: Boolean = true): Modifier =
     glassSurface(shape, backdrop = true, outlined = outlined)
 
+internal const val statusGlassFadeFraction = .47f
+
 internal fun Modifier.statusBarGlass(): Modifier =
     graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
         .drawWithCache {
-            val fade = Brush.verticalGradient(.53f to Color.Black, 1f to Color.Transparent)
+            val fade = Brush.verticalGradient((1f / (1f + statusGlassFadeFraction)) to Color.Black, 1f to Color.Transparent)
             onDrawWithContent {
                 drawContent()
                 drawRect(fade, blendMode = BlendMode.DstIn)

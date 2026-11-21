@@ -18,7 +18,7 @@ from src.models import Config
 
 from .article_context import context_artifacts, find_item, read_json
 from .classification import score_with_retry
-from .configuration import only_source, write_profiles
+from .configuration import DEFAULT_HEADLINE_WORDS, only_source, write_profiles
 from .localized_digest import atomic_text, complete_artifacts, save_localized
 
 STATE = Path(os.environ["HM_STATE"])
@@ -166,6 +166,7 @@ async def main(payload, job):
     cfg = data / "config.json"
     if kind == "source":
         config = only_source(config, params["source"], params.get("bucket"), params.get("index"))
+    headline_words = payload.get("headline_max_words", DEFAULT_HEADLINE_WORDS)
     if kind in {"run", "localize"}:
         config = {**config, "ai": {**config["ai"], "languages": [language]}}
     cfg.write_text(json.dumps(config, ensure_ascii=False), encoding="utf-8")
@@ -194,7 +195,7 @@ async def main(payload, job):
                 missing = not (path / f"summary-{language}.md").is_file()
                 if missing:
                     context, _, _ = service._build_context(**common, sources=None)
-                    if await complete_artifacts(items, language, context.config.ai):
+                    if await complete_artifacts(items, language, context.config.ai, headline_words=headline_words):
                         # Keep the existing legacy edition intact and let the user retry.
                         raise ValueError("LOCALIZATION_INVALID")
                     await save_localized(path, items, [language], checked_raw=meta.get("raw_count", len(items)),
@@ -238,6 +239,7 @@ async def main(payload, job):
             items = dicts_to_items(service.run_store.load_items(job, stage))
             unavailable = await complete_artifacts(
                 items, language, context.config.ai,
+                headline_words=headline_words,
                 report=lambda code, count: send(
                     "log", level="INFO" if code == "LOCALIZATION_RECOVERED" else "WARNING",
                     code=code, detail=str(count)),

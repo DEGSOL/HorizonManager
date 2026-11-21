@@ -1,0 +1,14 @@
+<resources>
+    <string name="hovq_headline_limit">Maximum words per headline</string>
+    <string name="hovq_headline_help">Enter 2–30 words for headlines in future digests. The default is 10.</string>
+    <string name="hovq_headline_save">Save headline length</string>
+    <string name="hovq_headline_upgrade">Update the VPS agent to change headline length.</string>
+    <string name="hovq_digest_notifications">New digest notifications</string>
+    <string name="hovq_push_delivery_help">When ntfy or a configured UnifiedPush distributor is available, new digests arrive as Android push notifications. Background checks are used when push is unavailable.</string>
+    <string name="hovq_notification_offer">Allow Android notifications to see new digest alerts when Hovq is closed.</string>
+    <string name="hovq_allow_notifications">Allow notifications</string>
+    <string name="hovq_later">Later</string>
+    <string name="hovq_agent_update_offer">Update the Horizon agent on the VPS from %1$s to %2$s to use the features in this version of Hovq.</string>
+    <string name="hovq_update_now">Update agent</string>
+    <string name="hovq_update_sudo">sudo password, if required</string>
+</resources>

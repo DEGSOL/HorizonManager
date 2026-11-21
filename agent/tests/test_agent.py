@@ -185,15 +185,20 @@ class AgentTests(unittest.TestCase):
         self.assertFalse(self.client.get("/v1/status").json()["media_search"])
         self.assertTrue(self.client.put("/v1/media-search", json={"enabled": True}).json()["enabled"])
         self.assertEqual(self.client.put("/v1/digest-language", json={"language": "ru"}).json(), {"language": "ru"})
+        self.assertEqual(self.client.get("/v1/status").json()["headline_max_words"], 10)
+        self.assertEqual(self.client.put("/v1/headline-length", json={"words": 31}).status_code, 422)
+        self.assertEqual(self.client.put("/v1/headline-length", json={"words": 16}).json(), {"words": 16})
         self.assertEqual(before, self.client.get("/v1/config").json())
         backup = self.client.post("/v1/backup", json={"password": "long-password-for-tests"}).json()["archive"]
         self.client.put("/v1/media-search", json={"enabled": False})
         self.client.put("/v1/digest-language", json={"language": "en"})
+        self.client.put("/v1/headline-length", json={"words": 10})
         self.assertEqual(self.client.post("/v1/restore", json={"password": "long-password-for-tests",
                          "archive": backup, "revision": before["revision"]}).status_code, 200)
         status = self.client.get("/v1/status").json()
         self.assertTrue(status["media_search"])
         self.assertEqual(status["digest_language"], "ru")
+        self.assertEqual(status["headline_max_words"], 16)
 
     def test_digest_language_upgrade_keeps_old_choice_and_accepts_all_new_codes(self):
         import sqlite3
@@ -219,6 +224,7 @@ class AgentTests(unittest.TestCase):
     def test_generation_uses_one_new_language(self):
         self.assertEqual(self.client.put("/v1/config", json=self.config()).status_code, 200)
         self.assertEqual(self.client.put("/v1/digest-language", json={"language": "fr"}).status_code, 200)
+        self.assertEqual(self.client.put("/v1/headline-length", json={"words": 5}).status_code, 200)
         run = uuid4()
         self.assertLess(self.client.post("/v1/jobs", json={"id": str(run)}).status_code, 300)
         job = self.wait(run.hex)
@@ -226,6 +232,7 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(job["result"]["languages"], ["fr"])
         self.assertEqual(len(self.fixture.translation_requests), 1)
         self.assertIn("into French", self.fixture.translation_requests[0])
+        self.assertIn("2 to 5 words", self.fixture.translation_requests[0])
         digest = self.client.get(f"/v1/digests/{run.hex}/fr").json()
         self.assertIn("Revue du jour Horizon", digest["markdown"])
         self.assertEqual(digest["items"][0]["title"], "Article technique de test")

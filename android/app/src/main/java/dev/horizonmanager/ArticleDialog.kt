@@ -51,6 +51,7 @@ internal fun ArticleDialog(
     val uri = LocalUriHandler.current
     val context = LocalContext.current
     val theme = LocalHorizonPalette.current
+    val bodyColor = Color(0xFF202020)
     val link = article.optString("url")
     val body = article.optString("body").ifBlank { article.optString("summary") }
     var actions by remember { mutableStateOf(false) }
@@ -66,7 +67,7 @@ internal fun ArticleDialog(
             Modifier.widthIn(max = 620.dp)
                 .fillMaxWidth()
                 .clip(MaterialTheme.shapes.extraLarge)
-                .background(theme.surface)
+                .background(bodyColor)
                 .pointerInput(Unit) { detectTapGestures {} }
                 .verticalScroll(rememberScrollState())
         ) {
@@ -165,7 +166,7 @@ internal fun ArticleDialog(
                 }
             }
             Column(
-                Modifier.fillMaxWidth().background(theme.surface)
+                Modifier.fillMaxWidth().background(bodyColor)
                     .padding(horizontal = 20.dp, vertical = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(13.dp),
             ) {

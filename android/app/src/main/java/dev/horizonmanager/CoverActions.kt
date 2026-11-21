@@ -25,8 +25,11 @@ import androidx.compose.ui.unit.dp
 internal class CoverLuminance(private val width: Int, private val height: Int, pixels: IntArray) {
     private val tones = FloatArray(pixels.size) { Color(pixels[it]).compositeOver(Color.Black).luminance() }
 
-    fun prefersBlack(frame: Size, center: Offset, diameter: Float): Boolean {
-        if (frame.width <= 0f || frame.height <= 0f) return false
+    fun prefersBlack(frame: Size, center: Offset, diameter: Float): Boolean =
+        average(frame, center, diameter) >= .179f
+
+    fun average(frame: Size, center: Offset, diameter: Float): Float {
+        if (frame.width <= 0f || frame.height <= 0f) return 0f
         val scale = maxOf(frame.width / width, frame.height / height)
         val left = (frame.width - width * scale) / 2
         val top = (frame.height - height * scale) / 2
@@ -37,7 +40,7 @@ internal class CoverLuminance(private val width: Int, private val height: Int, p
             sum += tones[py * width + px]
         }
         // At this relative luminance, white and black have equal WCAG contrast ratios.
-        return sum / 9f >= .179f
+        return sum / 9f
     }
 }
 

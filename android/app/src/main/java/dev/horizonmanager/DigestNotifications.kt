@@ -116,8 +116,27 @@ internal object DigestNotifications {
     }
 
     fun register(app: Context, distributor: String, server: String) {
+        prefs(app).edit().remove("$server:push_disabled")
+            .putLong("$server:push_attempt", System.currentTimeMillis()).apply()
         UnifiedPush.saveDistributor(app, distributor)
         UnifiedPush.register(app, instance = server)
+    }
+
+    fun connectAvailable(app: Context, server: String) {
+        val settings = prefs(app)
+        if (endpoint(app, server).isNotEmpty() || settings.getBoolean("$server:push_disabled", false) ||
+            !deliveryAllowed(app)) return
+        val last = settings.getLong("$server:push_attempt", 0L)
+        if (System.currentTimeMillis() - last in 0 until 3_600_000L) return
+        val installed = UnifiedPush.getDistributors(app)
+        val distributor = UnifiedPush.getSavedDistributor(app)?.takeIf { it in installed }
+            ?: installed.firstOrNull { it == "io.heckel.ntfy" } ?: return
+        register(app, distributor, server)
+    }
+
+    fun disconnectPush(app: Context, server: String) {
+        prefs(app).edit().putBoolean("$server:push_disabled", true).apply()
+        unregister(app, server)
     }
 
     fun unregister(app: Context, server: String) {

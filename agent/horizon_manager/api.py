@@ -25,7 +25,7 @@ from src.processing.content import split_content
 
 from . import VERSION, backup, jobs, push, router_catalog
 from .article_context import find_item, key_for, localized_context, previous_context, read_json
-from .configuration import DIGEST_LANGUAGES, DigestLanguageCode, ai_missing, schema, secret_name_allowed, validate
+from .configuration import DIGEST_LANGUAGES, MAX_HEADLINE_WORDS, MIN_HEADLINE_WORDS, DigestLanguageCode, ai_missing, schema, secret_name_allowed, validate
 from .localized_digest import LocalizedSummarizer, restore_original_cards
 from .media import relay_cover
 from .scheduler import Schedule, next_run
@@ -66,6 +66,10 @@ class MediaSearch(Body):
 
 class EnrichmentMode(Body):
     mode: Literal["on_demand", "automatic"]
+
+
+class HeadlineLength(Body):
+    words: int = Field(strict=True, ge=MIN_HEADLINE_WORDS, le=MAX_HEADLINE_WORDS)
 
 
 class DigestLanguage(Body):
@@ -205,7 +209,7 @@ def create_app(root, token):
             next_at = db.execute("SELECT next FROM schedule WHERE id=1").fetchone()[0]
             language, chosen = store.digest_language(db)
             return {**health(), "digest_language": language, "digest_language_chosen": chosen,
-                    "digest_languages": DIGEST_LANGUAGES, "disk_free": disk.free, "disk_total": disk.total,
+                    "digest_languages": DIGEST_LANGUAGES, "headline_max_words": store.headline_words(db), "disk_free": disk.free, "disk_total": disk.total,
                     "media_search": store.media_search(db), "cover_relay": True, "enrichment_mode": store.enrichment_mode(db),
                     "load": os.getloadavg()[0], "cpu": os.cpu_count(), "memory": mem, "next": next_at}
 
@@ -223,6 +227,13 @@ def create_app(root, token):
             Store.set_enrichment_mode(db, body.mode)
             Store.event(db, "ENRICHMENT_MODE_CHANGED", detail=body.mode)
             return {"mode": store.enrichment_mode(db)}
+
+    @app.put("/v1/headline-length")
+    def set_headline_length(body: HeadlineLength):
+        with store.db() as db:
+            Store.set_headline_words(db, body.words)
+            Store.event(db, "HEADLINE_LENGTH_CHANGED")
+            return {"words": store.headline_words(db)}
 
     @app.put("/v1/digest-language")
     def set_digest_language(body: DigestLanguage):
@@ -629,10 +640,12 @@ def create_app(root, token):
             media_search = store.media_search(db)
             enrichment_mode = store.enrichment_mode(db)
             language, chosen = store.digest_language(db)
+            headline_words = store.headline_words(db)
             Store.event(db, "BACKUP_EXPORTED")
         return {"archive": backup.pack({"horizon": REVISION, "settings": settings, "schedule": schedule,
                                         "media_search": media_search, "enrichment_mode": enrichment_mode,
-                                        "digest_language": language, "digest_language_chosen": chosen}, body.password)}
+                                        "digest_language": language, "digest_language_chosen": chosen,
+                                        "headline_max_words": headline_words}, body.password)}
 
     @app.post("/v1/restore")
     def restore(body: ImportBackup):
@@ -641,6 +654,7 @@ def create_app(root, token):
             if payload["horizon"] != REVISION:
                 fail(422, "BACKUP_VERSION")
             updated = payload["settings"]
+            headline_words = HeadlineLength(words=payload["headline_max_words"]).words if "headline_max_words" in payload else None
             for name, value in updated["secrets"].items():
                 if not secret_name_allowed(name) or not isinstance(value, str) or not 1 <= len(value) <= 8192 or "\0" in value:
                     fail(422, "SECRET_VALUE_INVALID")
@@ -666,6 +680,8 @@ def create_app(root, token):
                 db.execute("DELETE FROM digest_options WHERE id=1")
             elif payload.get("digest_language") in DIGEST_LANGUAGES:
                 Store.set_digest_language(db, payload["digest_language"])
+            if headline_words is not None:
+                Store.set_headline_words(db, headline_words)
             Store.event(db, "BACKUP_RESTORED")
             return public(store.settings(db))
 

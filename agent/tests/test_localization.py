@@ -21,6 +21,16 @@ def article(title):
 
 
 class DigestLocalizationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_custom_headline_limit_controls_prompt_and_offline_fallback(self):
+        item = article("Компания представила новую компактную модель телефона")
+        item.content = "Устройство появится в продаже в следующем месяце."
+        calls = AsyncMock(return_value='{"items":[]}')
+        config = SimpleNamespace(enrichment_concurrency=1, max_tokens=1500)
+        with patch("horizon_manager.localized_digest.create_ai_client", return_value=SimpleNamespace(complete=calls)):
+            self.assertEqual(await complete_artifacts([item], "ru", config, headline_words=3), 0)
+        self.assertIn("2 to 3 words", calls.await_args.kwargs["system"])
+        self.assertEqual(item.processing.artifacts["ru"].title, "Компания представила новую…")
+
     async def test_preserves_successful_translation_when_another_item_fails(self):
         items = [article("First news"), article("Second news")]
         responses = [{"items": [

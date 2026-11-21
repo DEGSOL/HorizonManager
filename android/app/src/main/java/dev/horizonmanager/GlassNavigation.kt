@@ -59,16 +59,20 @@ import kotlin.math.abs
 internal data class HorizonTab(@param:StringRes val label: Int, val icon: ImageVector)
 
 private object NavigationStyle {
-    val height = 70.dp
-    val inset = 5.dp
+    val inset = 4.dp
     val label = TextStyle(fontSize = 11.sp, lineHeight = 14.sp, fontWeight = FontWeight.Medium,
         textAlign = TextAlign.Center)
 }
 
 internal enum class ReadingOverlay { None, Digest, Article }
 
+@Composable
+internal fun readingBarHeight() = maxOf(60.dp, with(LocalDensity.current) {
+    androidx.compose.material3.MaterialTheme.typography.displaySmall.lineHeight.toDp() + 14.dp
+})
+
 internal val navigationBottomGap = 10.dp
-internal val defaultNavigationClearance = NavigationStyle.height + navigationBottomGap + 8.dp
+internal val defaultNavigationClearance = 60.dp + navigationBottomGap + 8.dp
 internal val LocalNavigationClearance = compositionLocalOf { defaultNavigationClearance }
 
 internal fun Modifier.swipeBetweenTabs(
@@ -128,7 +132,7 @@ internal fun GlassNavigation(
         position.animateTo(selection.toFloat(), spring(dampingRatio = .97f, stiffness = 280f, visibilityThreshold = .002f))
     }
     BoxWithConstraints(
-        Modifier.width(width).heightIn(min = NavigationStyle.height)
+        Modifier.width(width).height(readingBarHeight())
             .onSizeChanged { measured(with(density) { it.height.toDp() }) }
             .then(if (overlay == ReadingOverlay.Digest) Modifier.blur(3.dp).clip(CircleShape).drawWithContent {
                 drawContent()
@@ -181,7 +185,7 @@ private fun GlassNavigationButton(
     val tint by animateColorAsState(if (selected) palette.text else palette.muted,
         tween(260), label = "Tab color")
     Column(
-        modifier.fillMaxHeight().heightIn(min = NavigationStyle.height - NavigationStyle.inset * 2)
+        modifier.fillMaxHeight().heightIn(min = readingBarHeight() - NavigationStyle.inset * 2)
             .clip(CircleShape)
             .selectable(selected, interaction, indication = null, enabled = enabled, role = Role.Tab, onClick = open)
             .semantics {

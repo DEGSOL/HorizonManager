@@ -36,6 +36,11 @@ internal fun DigestRulesForm(panel: Panel, model: ManagerModel, base: JSONObject
     val original = base.optJSONObject("digest") ?: JSONObject()
     val collection = base.optJSONObject("collection") ?: JSONObject()
     val revision = panel.config.optInt("revision")
+    val savedHeadline = panel.status.optString("headline_max_words")
+    var headline by rememberSaveable(savedHeadline) { mutableStateOf(savedHeadline) }
+    val headlineDirty = savedHeadline.isNotEmpty() && headline != savedHeadline
+    val headlineWords = headline.toIntOrNull()
+    val headlineValid = headlineWords != null && headlineWords in 2..30
     var hours by rememberSaveable(revision) { mutableStateOf(collection.optInt("time_window_hours", 24).toString()) }
     var maximum by rememberSaveable(revision) { mutableStateOf(articleField(original, "max_items")) }
     var draft by rememberSaveable(revision) { mutableStateOf(original.toString()) }
@@ -55,7 +60,7 @@ internal fun DigestRulesForm(panel: Panel, model: ManagerModel, base: JSONObject
     val validOrder = order.distinct().size == order.size && order.all(ids::contains)
     val dirty = hours != collection.optInt("time_window_hours", 24).toString() ||
         maximum != articleField(original, "max_items") || draft != original.toString()
-    SideEffect { dirtyChange(dirty) }
+    SideEffect { dirtyChange(dirty || headlineDirty) }
     fun change(name: String, value: Any) { draft = digest.copyObject().put(name, value).toString() }
 
     Tile {
@@ -64,6 +69,21 @@ internal fun DigestRulesForm(panel: Panel, model: ManagerModel, base: JSONObject
             R.string.digest_window_hint, R.string.setting_help_collection)
         CountField(R.string.ui_maximum_items, maximum, { maximum = it }, correctMaximum,
             R.string.digest_max_hint, R.string.setting_help_issue_limit)
+    }
+    Tile {
+        if (savedHeadline.isEmpty()) {
+            Text(ui(R.string.hovq_headline_limit), style = MaterialTheme.typography.titleMedium)
+            Text(ui(R.string.hovq_headline_upgrade), style = MaterialTheme.typography.bodySmall)
+        } else {
+            CountField(R.string.hovq_headline_limit, headline, { headline = it }, headlineValid,
+                R.string.hovq_headline_help)
+            if (headlineDirty) {
+                Button(enabled = !panel.busy && headlineValid,
+                    onClick = { headlineWords?.let(model::setHeadlineLength) }) {
+                    Text(ui(R.string.hovq_headline_save))
+                }
+            }
+        }
     }
     SettingsExpandable(R.string.digest_groups_title, R.string.digest_groups_summary) {
         Choice(ui(R.string.ui_grouping), listOf("category", "profile"), groupBy, { change("group_by", it) }, {

@@ -134,7 +134,7 @@ internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model:
                         confirm(ui(R.string.ui_delete_downloaded_journal_entries_and_vps), model::clearEvents)
                     }) { Text(ui(R.string.ui_clear)) }
                 }
-                if (panel.syncing) LinearProgressIndicator(Modifier.fillMaxWidth())
+                if (panel.syncing) DottedProgress(Modifier.fillMaxWidth())
                 if (events.isEmpty() && !panel.syncing) Text(ui(R.string.ui_no_entries_match_these_filters))
             }
         }
