@@ -12,4 +12,14 @@
     <string name="router_vps_network">VPS 无法连接到 %1$s。请检查服务器连接。</string>
     <string name="router_upgrade_required">请更新 VPS 代理，以使用服务器保存的密钥加载模型。</string>
     <string name="agent_https_unreachable">VPS 代理未通过 HTTPS 响应。</string>
+    <string name="favorites_title">收藏</string>
+    <string name="favorites_empty">标记星标的文章将在此显示。</string>
+    <string name="archive_digests">摘要存档</string>
+    <string name="archive_digests_detail">查看此服务器上的往期摘要。</string>
+    <string name="archive_issue_actions">摘要操作</string>
+    <string name="archive_remove_device">从此设备移除</string>
+    <string name="archive_remove_detail">%1$s 的摘要将从此设备的存档中移除。VPS 副本和收藏的文章将保留。</string>
+    <string name="browser_actions">浏览器操作</string>
+    <string name="browser_open_external">在外部浏览器中打开</string>
+    <string name="browser_no_handler">没有可打开此链接的应用。</string>
 </resources>

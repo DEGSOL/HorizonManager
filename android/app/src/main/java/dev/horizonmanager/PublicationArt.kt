@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -409,6 +410,26 @@ private fun DrawScope.drawTilePhoto(cover: Cover, photoBottom: Float, fadeStart:
         )
     }
     drawContext.canvas.restore()
+}
+
+@Composable
+internal fun PublicationCover(
+    cover: Cover?,
+    seed: String,
+    modifier: Modifier = Modifier,
+    textHeight: Float = 0f,
+    photoHeight: Dp? = null,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    val layer = rememberGraphicsLayer()
+    val scene = remember(layer) { GlassScene(layer) }
+    Box(modifier) {
+        val background = Modifier.matchParentSize()
+        CoverSurface(cover, seed,
+            if (Build.VERSION.SDK_INT >= 31) background.recordScene(scene) else background,
+            textHeight = textHeight, photoHeight = photoHeight)
+        CompositionLocalProvider(LocalGlassScene provides scene) { content() }
+    }
 }
 
 @Composable

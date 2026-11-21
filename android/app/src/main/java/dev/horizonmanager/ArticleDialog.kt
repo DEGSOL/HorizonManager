@@ -14,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -77,13 +78,7 @@ internal fun ArticleDialog(
                 .pointerInput(Unit) { detectTapGestures {} }
                 .verticalScroll(rememberScrollState())
         ) {
-            Box {
-                CoverSurface(
-                    cover,
-                    article.optString("id"),
-                    Modifier.matchParentSize(),
-                    textHeight = titleHeight,
-                )
+            PublicationCover(cover, article.optString("id"), textHeight = titleHeight) {
                 Column {
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
@@ -92,6 +87,7 @@ internal fun ArticleDialog(
                         GlassIconAction(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             ui(R.string.ui_back),
+                            onPhoto = true,
                             onClick = close,
                         )
                         Spacer(Modifier.weight(1f))
@@ -99,32 +95,27 @@ internal fun ArticleDialog(
                             GlassIconAction(
                                 ImageVector.vectorResource(R.drawable.ic_external_link),
                                 ui(R.string.ui_original_source),
+                                onPhoto = true,
                             ) {
                                 runCatching { uri.openUri(link) }
                             }
+                        val saved = flag?.saved == true
+                        GlassIconAction(
+                            if (saved) Icons.Default.Star else ImageVector.vectorResource(R.drawable.ic_star_outline),
+                            ui(if (saved) R.string.remove_from_favorites else R.string.add_to_favorites),
+                            active = saved,
+                            onPhoto = true,
+                            onClick = onSave,
+                        )
                         Box {
                             GlassIconAction(
                                 Icons.Default.MoreVert,
                                 ui(R.string.editorial_article_actions),
+                                onPhoto = true,
                             ) {
                                 actions = true
                             }
                             DropdownMenu(actions, { actions = false }) {
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            ui(
-                                                if (flag?.saved == true)
-                                                    R.string.remove_from_favorites
-                                                else R.string.add_to_favorites
-                                            )
-                                        )
-                                    },
-                                    onClick = {
-                                        actions = false
-                                        onSave()
-                                    },
-                                )
                                 DropdownMenuItem(
                                     text = {
                                         Text(
@@ -196,7 +187,7 @@ internal fun ArticleDialog(
                     color = theme.muted,
                 )
                 if (article.optBoolean("body_is_plain"))
-                    Text(body, style = MaterialTheme.typography.bodyLarge)
+                    Text(linkedText(body), style = MaterialTheme.typography.bodyLarge)
                 else Markdown(body)
                 contextContent()
                 val media = article.optJSONObject("media")

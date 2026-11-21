@@ -85,9 +85,11 @@ class MainActivity : ComponentActivity() {
                 onDispose { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
             }
             HorizonTheme(preset) {
-                Manager(viewModel(), notificationServer, { notificationServer = "" }, preset) {
-                    preset = it
-                    preferences.edit().putString("preset", it.id).apply()
+                HovqLinks {
+                    Manager(viewModel(), notificationServer, { notificationServer = "" }, preset) {
+                        preset = it
+                        preferences.edit().putString("preset", it.id).apply()
+                    }
                 }
             }
         }
@@ -96,7 +98,7 @@ class MainActivity : ComponentActivity() {
 
 private const val FEED = 0
 private const val SETTINGS = 1
-private const val ARCHIVE = 2
+private const val FAVORITES = 2
 
 internal fun pushSettingsRoute(current: String, next: String): String = when {
     next.isEmpty() -> ""
@@ -113,7 +115,7 @@ private data class Screen(val page: String, val issueId: String = "") {
 private fun mainTabs() = listOf(
     HorizonTab(R.string.feed, ImageVector.vectorResource(R.drawable.ic_issue)),
     HorizonTab(R.string.settings, ImageVector.vectorResource(R.drawable.ic_sliders)),
-    HorizonTab(R.string.archive, ImageVector.vectorResource(R.drawable.ic_archive)),
+    HorizonTab(R.string.favorites_title, ImageVector.vectorResource(R.drawable.ic_star_outline)),
 )
 
 @Composable
@@ -168,8 +170,8 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         }
     }
     val tabs = mainTabs()
-    val issues = remember(panel.archive, panel.collectionHours, panel.manuallyArchived, now) {
-        splitDigests(panel.archive, panel.collectionHours, now, panel.manuallyArchived)
+    val issues = remember(panel.archive, panel.collectionHours, panel.manuallyArchived, panel.hiddenDigests, now) {
+        splitDigests(panel.archive, panel.collectionHours, now, panel.manuallyArchived, panel.hiddenDigests)
     }
     val openedIssue = issues.archive.find { it.optString("id") == archiveIssue }
     val archiveFilters = rememberSaveable(currentServer?.id, archiveIssue, saver = NewsFilters.Saver) { NewsFilters() }
@@ -184,8 +186,8 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
             if (!panel.ready) tab = FEED
         }
     }
-    LaunchedEffect(tab, openedIssue?.optString("id"), currentServer?.id) {
-        if (tab == ARCHIVE && openedIssue != null) {
+    LaunchedEffect(configPage, openedIssue?.optString("id"), currentServer?.id) {
+        if (configPage == "archive" && openedIssue != null) {
             snapshotFlow { panel.busy }.first { !it }
             val issue = openedIssue
             model.openArchive(issue)
@@ -284,9 +286,12 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         when {
             manageServers -> manageServers = false
             editServer -> editServer = false
+            tab == SETTINGS && configPage == "archive" && archiveIssue.isNotEmpty() -> {
+                archiveIssue = ""
+                model.leaveArchive()
+            }
             tab == SETTINGS && route.isNotEmpty() -> route = route.substringBeforeLast('/', "")
             showingSetupSettings -> tab = FEED
-            tab == ARCHIVE && archiveIssue.isNotEmpty() -> { archiveIssue = ""; model.leaveArchive() }
             tab != FEED -> { tab = if (previousTab != tab) previousTab else FEED; previousTab = FEED; if (tab == FEED) model.showFeed() }
         }
     }
@@ -296,7 +301,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         editorBack.value?.let { it(); return }
         if (dirtyPage) confirm = ui(R.string.editorial_discard_prompt) to ::navigateBack else navigateBack()
     }
-    val canGoBack = manageServers || editServer || configPage.isNotEmpty() || showingSetupSettings || (tab == ARCHIVE && openedIssue != null)
+    val canGoBack = manageServers || editServer || configPage.isNotEmpty() || showingSetupSettings
     var backProgress by remember { mutableFloatStateOf(0f) }
     PredictiveBackHandler(enabled = canGoBack || tab != FEED) { events ->
         try {
@@ -355,11 +360,11 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         val destination = when {
             manageServers -> Screen("servers")
             editServer -> Screen("ssh")
+            configPage == "archive" && openedIssue != null -> Screen("archived", archiveIssue)
             configPage.isNotEmpty() -> Screen(configPage, route)
             showingSetupSettings -> Screen("settings")
             !panel.ready -> Screen("setup")
-            tab == ARCHIVE && openedIssue != null -> Screen("archived", archiveIssue)
-            tab == ARCHIVE -> Screen("archive")
+            tab == FAVORITES -> Screen("favorites")
             tab == SETTINGS -> Screen("settings")
             else -> Screen("feed")
         }
@@ -374,7 +379,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
             val archived = screen.page == "archived"
             val displayedIssue = if (archived) issues.archive.find { it.optString("id") == screen.issueId } else issues.feed
             val filters = if (archived) archiveFilters else feedFilters
-            val screenBack = screen.page !in setOf("feed", "archive", "setup", "settings") ||
+            val screenBack = screen.page !in setOf("feed", "favorites", "setup", "settings") ||
                 (screen.page == "settings" && showingSetupSettings)
             val heading = when (screen.page) {
                 "servers" -> ui(R.string.ui_servers)
@@ -405,7 +410,8 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                 "ai" -> ui(R.string.settings_ai_model)
                 "ai_settings" -> ui(R.string.editorial_ai_processing)
                 "archived" -> ui(R.string.ui_digest)
-                "archive" -> ui(R.string.archive)
+                "archive" -> ui(R.string.archive_digests)
+                "favorites" -> ui(R.string.favorites_title)
                 "feed" -> ui(R.string.feed)
                 else -> label(screen.page)
             }
@@ -425,6 +431,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                         { navVisible = it }, { overlay = it })
                     screen.page == "archive" -> ArchiveScreen(issues.archive, panel, model,
                         { archiveIssue = it.getString("id") }, header)
+                    screen.page == "favorites" -> FavoritesScreen(model, panel.servers, header) { overlay = it }
                     screen.page == "journal" -> Journal(panel, { description, run -> confirm = description to run }, model,
                         { model.prepareExportDocument(it); output.launch("horizon-journal.json") }, header)
                     else -> Column(Modifier.fillMaxSize().editorialInsets().verticalScroll(rememberScrollState())

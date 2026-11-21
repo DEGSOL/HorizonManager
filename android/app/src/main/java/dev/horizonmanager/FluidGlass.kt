@@ -33,7 +33,7 @@ internal fun Modifier.recordScene(scene: GlassScene): Modifier =
             drawLayer(scene.layer)
         }
 
-internal fun Modifier.frost(shape: Shape, active: Boolean = false): Modifier = composed {
+internal fun Modifier.frost(shape: Shape, active: Boolean = false, onPhoto: Boolean = false): Modifier = composed {
     val scene = LocalGlassScene.current
     val palette = LocalHorizonPalette.current
     var position by remember { mutableStateOf(Offset.Zero) }
@@ -59,10 +59,11 @@ internal fun Modifier.frost(shape: Shape, active: Boolean = false): Modifier = c
         .background(
             Brush.verticalGradient(
                 listOf(
-                    (if (active) palette.tint else palette.elevated).copy(
+                    if (onPhoto) Color.Black.copy(alpha = if (hardwareBlur) .52f else .66f)
+                    else (if (active) palette.tint else palette.elevated).copy(
                         alpha = if (hardwareBlur) .55f else .85f
                     ),
-                    palette.surface.copy(alpha = .78f),
+                    if (onPhoto) Color.Black.copy(alpha = .70f) else palette.surface.copy(alpha = .78f),
                 )
             )
         )

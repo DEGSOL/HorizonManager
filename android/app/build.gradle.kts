@@ -15,8 +15,8 @@ android {
         applicationId = "dev.horizonmanager.mobile"
         minSdk = 26
         targetSdk = 36
-        versionCode = 17
-        versionName = "0.3.8"
+        versionCode = 18
+        versionName = "0.3.9"
         buildConfigField("String", "AGENT_VERSION", "\"0.1.10\"")
     }
     testOptions {
@@ -76,6 +76,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.activity:activity-compose:1.11.0")
+    implementation("androidx.browser:browser:1.9.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.4")
     implementation("androidx.room:room-runtime:2.8.4")

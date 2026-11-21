@@ -32,6 +32,7 @@ internal fun SettingsHome(panel: Panel, preset: ThemePreset, open: (String) -> U
                 panel.server?.let { Text(it.host,style=MaterialTheme.typography.bodySmall,color=LocalHorizonPalette.current.muted) }
             }
             if (panel.ready) SettingsSection(R.string.setting_group_content) {
+                GlassSettingRow(ui(R.string.archive_digests), ui(R.string.archive_digests_detail), open = rowPage("archive"))
                 GlassSettingRow(ui(R.string.mr_news), ui(R.string.mr_news_detail), open = rowPage("news_settings"))
                 GlassSettingRow(ui(R.string.editorial_ai_processing), ui(R.string.editorial_ai_settings_detail),
                     enabled = configured, open = rowPage("ai_settings"))

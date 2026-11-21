@@ -75,12 +75,12 @@ class FluidScreensTest {
 
     // Only the test owns this snapshot. The released app reads ManagerModel's agent/cache flow.
     @Suppress("UNCHECKED_CAST")
-    private fun loadIssue(longHeadline: String? = null): String {
+    private fun loadIssue(longHeadline: String? = null, observeServer: Boolean = false): String {
         val now = Instant.now()
         val date = now.minusSeconds(900).toString()
         val server =
             Server(
-                "visual",
+                java.util.UUID.randomUUID().toString(),
                 "VPS · тестовый стенд",
                 "example.invalid",
                 22,
@@ -185,6 +185,8 @@ class FluidScreensTest {
                             .put("component", "horizon").put("level", "INFO"),
                     ),
                 )
+            if (observeServer) ManagerModel::class.java.getDeclaredMethod("observe", String::class.java)
+                .apply { isAccessible = true }.invoke(model, server.id)
         }
         compose.waitForIdle()
         return ui(R.string.feed) + " " + shortDigestDate(date)
@@ -399,7 +401,8 @@ class FluidScreensTest {
         snapshot("07-server")
         back()
         back()
-        tab(R.string.archive)
+        tab(R.string.settings)
+        text(R.string.archive_digests).performClick()
         snapshot("06-archive")
         text(R.string.editorial_archive_search).assertExists()
         compose.onNodeWithText(ui(R.string.mr_offline_copy), substring = true).performClick()
@@ -411,5 +414,48 @@ class FluidScreensTest {
         back()
         back()
         text(R.string.editorial_archive_search).assertExists()
+    }
+
+    @Test
+    fun browserBackRestoresTheSameOpenArticle() {
+        loadIssue()
+        compose.onNodeWithText(headlines[0]).performClick()
+        compose.onNodeWithContentDescription(ui(R.string.ui_original_source)).performClick()
+        compose.onNodeWithText("https://images.nasa.gov/details/iss040e033340").assertExists()
+        back()
+        compose.onNodeWithText(headlines[0]).assertIsDisplayed()
+        compose.onNodeWithContentDescription(ui(R.string.ui_original_source)).assertIsDisplayed()
+    }
+
+    @Test
+    fun favoriteFromArchiveSurvivesDeletionAndCanBeUnstarredWhileOpen() {
+        loadIssue(observeServer = true)
+        tab(R.string.settings)
+        text(R.string.archive_digests).performClick()
+        compose.onNodeWithText(ui(R.string.mr_offline_copy), substring = true).performClick()
+        compose.waitUntil(8_000) {
+            compose.onAllNodesWithText(headlines[0]).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText(headlines[0]).performClick()
+        compose.onNodeWithContentDescription(ui(R.string.add_to_favorites)).performClick()
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithContentDescription(ui(R.string.remove_from_favorites)).fetchSemanticsNodes().isNotEmpty()
+        }
+        back()
+        back()
+        val cachedIssue = compose.onNodeWithText(ui(R.string.mr_offline_copy), substring = true)
+        compose.onAllNodesWithContentDescription(ui(R.string.archive_issue_actions)).onFirst().performClick()
+        text(R.string.archive_remove_device).performClick()
+        compose.onAllNodesWithText(ui(R.string.archive_remove_device)).onLast().performClick()
+        compose.waitUntil(5_000) { cachedIssue.isNotDisplayed() }
+        back()
+        tab(R.string.favorites_title)
+        compose.onNodeWithText(headlines[0]).performClick()
+        compose.onNodeWithText("Экипаж Международной космической станции", substring = true).assertIsDisplayed()
+        compose.onNodeWithContentDescription(ui(R.string.remove_from_favorites)).performClick()
+        compose.onNodeWithText(headlines[0]).assertIsDisplayed()
+        back()
+        text(R.string.favorites_empty).assertIsDisplayed()
+        compose.onNodeWithText(headlines[0]).assertDoesNotExist()
     }
 }

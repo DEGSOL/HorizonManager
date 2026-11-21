@@ -12,4 +12,14 @@
     <string name="router_vps_network">The VPS could not reach %1$s. Check the server connection.</string>
     <string name="router_upgrade_required">Update the VPS agent to load models with the key saved on your server.</string>
     <string name="agent_https_unreachable">The VPS agent did not respond over HTTPS.</string>
+    <string name="favorites_title">Favorites</string>
+    <string name="favorites_empty">Articles you mark with a star will appear here.</string>
+    <string name="archive_digests">Digest archive</string>
+    <string name="archive_digests_detail">Open past digests on this server.</string>
+    <string name="archive_issue_actions">Digest actions</string>
+    <string name="archive_remove_device">Remove from this device</string>
+    <string name="archive_remove_detail">The digest from %1$s will disappear from the archive on this device. The VPS copy and favorite articles will remain.</string>
+    <string name="browser_actions">Browser actions</string>
+    <string name="browser_open_external">Open in external browser</string>
+    <string name="browser_no_handler">No app is available to open this link.</string>
 </resources>

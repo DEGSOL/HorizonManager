@@ -258,6 +258,7 @@ internal class AgentApi(private val server: Server, private val session: Session
         check(Regex("[a-zA-Z0-9/_=&?.-]+").matches(path) && ".." !in path)
         val body = value?.toString()?.toByteArray() ?: ByteArray(0)
         val (status, data) = if (server.https.isNotEmpty()) {
+            if (!validHttps(server.https)) throw Problem("TLS_INVALID")
             val request = Request.Builder().url(server.https.trimEnd('/') + "/v1/$path")
                 .header("Authorization", "Bearer ${server.token}")
                 .method(method, if (value != null) body.toRequestBody("application/json".toMediaType()) else null)

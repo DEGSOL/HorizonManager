@@ -42,6 +42,7 @@ internal data class Panel(
     val archive: List<JSONObject> = emptyList(),
     val hasMoreDigests: Boolean = false,
     val manuallyArchived: Set<String> = emptySet(),
+    val hiddenDigests: Set<String> = emptySet(),
     val collectionHours: Int = DEFAULT_COLLECTION_HOURS,
     val jobs: List<JSONObject> = emptyList(),
     val sourceHistory: List<JSONObject> = emptyList(),
@@ -66,6 +67,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     private val cache = ManagerDb.get(app).cache()
     private val mutable = MutableStateFlow(Panel())
     val state = mutable.asStateFlow()
+    val favorites = cache.favorites()
     private val saved = MutableStateFlow(0)
     val settingsSaved = saved.asStateFlow()
 
@@ -397,8 +399,12 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
 
     fun coverRelay(panel: Panel, articleId: String): (suspend () -> ByteArray?)? {
         val server = panel.server ?: return null
-        val run = panel.selectedRun
-        if (!panel.status.optBoolean("cover_relay") || run.isBlank()) return null
+        if (!panel.status.optBoolean("cover_relay")) return null
+        return coverRelay(server, panel.selectedRun, articleId)
+    }
+
+    fun coverRelay(server: Server?, run: String, articleId: String): (suspend () -> ByteArray?)? {
+        if (server?.installed != true || run.isBlank()) return null
         return {
             try {
                 val result = withAgent(server, updateStatus = false) {
@@ -416,10 +422,10 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     }
 
     private suspend fun loadArchive(server: Server) {
-        val cached = cache.archive(server.id) ?: return
-        val history = JSONArray(cached).objects()
+        val hidden = cache.hiddenDigests(server.id).toSet()
+        val history = cache.archive(server.id)?.let { JSONArray(it).objects() }.orEmpty()
         if (state.value.server?.id != server.id) return
-        mutable.update { it.copy(archive = history, hasMoreDigests = history.size >= DIGEST_PAGE_SIZE) }
+        mutable.update { it.copy(archive = history, hiddenDigests = hidden, hasMoreDigests = history.size >= DIGEST_PAGE_SIZE) }
         state.value.feedIssue(history)?.let { latest ->
             val lang = digestLanguage(latest.getJSONArray("languages").strings(), state.value.preferredDigestLanguage()) ?: return@let
             val run = latest.getString("id")
@@ -615,9 +621,24 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
 
     fun openArchive(issue: JSONObject) {
         val run = issue.getString("id")
+        if (run in state.value.hiddenDigests) return
         val lang = digestLanguage(issue.getJSONArray("languages").strings(), state.value.preferredDigestLanguage()) ?: return
         archiveRun = run
         openDigest(run, lang, offset = 0)
+    }
+
+    fun deleteArchive(run: String) {
+        val panel = state.value
+        val server = panel.server ?: return
+        if (splitDigests(panel.archive, panel.collectionHours, Instant.now(), panel.manuallyArchived,
+                panel.hiddenDigests).archive.none { it.optString("id") == run }) return
+        operation {
+            cache.deleteDigest(server.id, run)
+            mutable.update { current ->
+                if (current.server?.id == server.id) current.copy(hiddenDigests = current.hiddenDigests + run)
+                else current
+            }
+        }
     }
 
     fun openDigest(run: String, language: String, offset: Int) {
@@ -708,15 +729,28 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         }
     }
 
-    fun flag(article: String, save: Boolean? = null, read: Boolean? = null) {
-        val server = state.value.server ?: return
+    fun flag(article: JSONObject, save: Boolean? = null, read: Boolean? = null) {
+        val panel = state.value
+        val server = panel.server ?: return
+        val id = article.getString("id")
+        val snapshot = if (save == true) SavedPublication(server.id, id, panel.selectedRun, panel.language,
+            System.currentTimeMillis(), article.toString()) else null
+        flag(server.id, id, save, read, snapshot)
+    }
+
+    fun flag(publication: SavedPublication, save: Boolean? = null, read: Boolean? = null) {
+        flag(publication.server, publication.article, save, read,
+            if (save == true) publication.copy(savedAt = System.currentTimeMillis()) else null)
+    }
+
+    private fun flag(serverId: String, article: String, save: Boolean?, read: Boolean?, snapshot: SavedPublication?) {
         viewModelScope.launch {
             try {
-                cache.updateFlag(server.id, article, save, read)
+                cache.updateFlag(serverId, article, save, read, snapshot)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
-                if (state.value.server?.id == server.id) record(error, server)
+                state.value.servers.find { it.id == serverId }?.let { record(error, it) }
             }
         }
     }
@@ -755,8 +789,6 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     suspend fun getArticleContext(
         serverId: String, run: String, article: String, language: String, submit: Boolean,
     ): JSONObject = withContext(Dispatchers.IO) {
-        val server = state.value.server?.takeIf { it.id == serverId }
-            ?: throw Problem("AGENT_UNREACHABLE")
         if (!Regex("(?:[a-f0-9]{32}|run-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{8})").matches(run) ||
             language !in digestLanguages || article.isBlank()) {
             throw Problem("ARTICLE_UNKNOWN")
@@ -767,6 +799,9 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         runCatching { JSONObject(file.readFully().toString(Charsets.UTF_8)) }.getOrNull()?.let {
             if (it.optString("state") == "ready") return@withContext it
         }
+        val panel = state.value
+        val server = panel.server?.takeIf { it.id == serverId } ?: panel.servers.find { it.id == serverId }
+            ?: throw Problem("AGENT_UNREACHABLE")
         val path = "article-context/$run/$articleKey/$language"
         val result = try {
             withAgent(server) { (if (submit) it.post(path) else it.get(path)) as JSONObject }

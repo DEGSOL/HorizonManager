@@ -75,18 +75,22 @@ internal fun orderArticles(articles: List<JSONObject>, order: NewsOrder): List<J
 
 @Composable
 internal fun GlassIconAction(icon: ImageVector, description: String, enabled: Boolean = true,
-                            active: Boolean? = null, onClick: () -> Unit) {
+                            active: Boolean? = null, onPhoto: Boolean = false, onClick: () -> Unit) {
     val palette = LocalHorizonPalette.current
     val indicator by animateColorAsState(if (active == true) palette.tint.copy(alpha = 0.27f) else Color.Transparent,
         tween(180), label = "icon highlight")
     val tint by animateColorAsState(when {
         !enabled -> palette.muted.copy(alpha = 0.53f)
         active == true -> palette.link
+        onPhoto -> Color.White
         else -> palette.text
     }, tween(180), label = "icon tint")
     val glyph: @Composable () -> Unit = {
         Icon(icon, description,
-            Modifier.size(36.dp).background(indicator, CircleShape).padding(8.dp),
+            Modifier.size(36.dp).then(
+                if (onPhoto) Modifier.frost(CircleShape, active = active == true, onPhoto = true)
+                else Modifier.background(indicator, CircleShape)
+            ).padding(8.dp),
             tint = tint)
     }
     if (active != null) IconToggleButton(active, { onClick() }, Modifier.size(48.dp), enabled, content = glyph)

@@ -297,10 +297,10 @@ internal fun NewsScreen(
                                         relay = model.coverRelay(panel, id),
                                         open = {
                                             openId = id
-                                            if (flag?.read != true) model.flag(id, read = true)
+                                            if (flag?.read != true) model.flag(item, read = true)
                                         },
                                     ) {
-                                        model.flag(id, save = flag?.saved != true)
+                                        model.flag(item, save = flag?.saved != true)
                                     }
                                 }
                             if (incomplete && panel.problem.isNotEmpty())
@@ -381,8 +381,8 @@ internal fun NewsScreen(
                 val run = panel.selectedRun
                 val language = panel.language
                 ArticleDialog(
-                    selected, flag, { model.flag(id, save = flag?.saved != true) },
-                    { model.flag(id, read = flag?.read != true) },
+                    selected, flag, { model.flag(selected, save = flag?.saved != true) },
+                    { model.flag(selected, read = flag?.read != true) },
                     artworkServer = serverId,
                     relay = model.coverRelay(panel, id),
                     contextContent = {
@@ -545,8 +545,8 @@ internal fun PublicationTile(
     val cover = artwork(artworkServer, article, relay)
     val photoHeight = 112.dp
     val shape = androidx.compose.foundation.shape.RoundedCornerShape(19.dp)
-    Box(modifier.fillMaxWidth().clip(shape).clickable(role = Role.Button, onClick = open)) {
-        CoverSurface(cover, key, Modifier.matchParentSize(), photoHeight = photoHeight)
+    PublicationCover(cover, key, modifier.fillMaxWidth().clip(shape).clickable(role = Role.Button, onClick = open),
+        photoHeight = photoHeight) {
         Column {
             Row(
                 Modifier.fillMaxWidth().padding(start = 9.dp, end = 1.dp),
@@ -580,6 +580,7 @@ internal fun PublicationTile(
                         else R.string.add_to_favorites
                     ),
                     active = flag?.saved == true,
+                    onPhoto = true,
                 ) {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     save()
@@ -669,6 +670,20 @@ internal fun ArchiveScreen(
             }
             .collectAsState(initial = emptyList())
     var date by rememberSaveable { mutableStateOf("") }
+    var menu by remember { mutableStateOf("") }
+    var pendingRemoval by rememberSaveable { mutableStateOf("") }
+    issues.find { it.optString("id") == pendingRemoval }?.let { issue ->
+        HorizonAlertDialog(onDismissRequest = { pendingRemoval = "" },
+            title = { Text(ui(R.string.archive_remove_device)) },
+            text = { Text(ui(R.string.archive_remove_detail, localTime(digestTime(issue)))) },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingRemoval = ""
+                    model.deleteArchive(issue.getString("id"))
+                }, enabled = !panel.busy) { Text(ui(R.string.archive_remove_device)) }
+            },
+            dismissButton = { TextButton(onClick = { pendingRemoval = "" }) { Text(ui(R.string.ui_cancel)) } })
+    }
     val byMonth =
         remember(issues, date) {
             issues
@@ -773,10 +788,16 @@ internal fun ArchiveScreen(
                             color = theme.muted,
                         )
                     }
-                    Icon(
-                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        ui(R.string.editorial_open_digest),
-                    )
+                    Box {
+                        GlassIconAction(Icons.Default.MoreVert, ui(R.string.archive_issue_actions)) { menu = id }
+                        DropdownMenu(expanded = menu == id, onDismissRequest = { menu = "" }) {
+                            DropdownMenuItem(
+                                text = { Text(ui(R.string.archive_remove_device)) },
+                                enabled = !panel.busy,
+                                onClick = { menu = ""; pendingRemoval = id },
+                            )
+                        }
+                    }
                 }
                 HorizontalDivider(color = theme.card)
             }

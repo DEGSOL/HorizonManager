@@ -12,4 +12,14 @@
     <string name="router_vps_network">VPS не смог связаться с %1$s. Проверьте подключение сервера.</string>
     <string name="router_upgrade_required">Обновите агент на VPS, чтобы загрузить модели с сохранённым ключом.</string>
     <string name="agent_https_unreachable">Агент VPS не ответил по HTTPS.</string>
+    <string name="favorites_title">Избранное</string>
+    <string name="favorites_empty">Здесь будут новости, которые вы отметите звездой.</string>
+    <string name="archive_digests">Архив дайджестов</string>
+    <string name="archive_digests_detail">Прошлые выпуски на этом сервере.</string>
+    <string name="archive_issue_actions">Действия с выпуском</string>
+    <string name="archive_remove_device">Удалить с устройства</string>
+    <string name="archive_remove_detail">Выпуск от %1$s исчезнет из архива на этом устройстве. Копия на VPS и новости в избранном сохранятся.</string>
+    <string name="browser_actions">Действия браузера</string>
+    <string name="browser_open_external">Открыть во внешнем браузере</string>
+    <string name="browser_no_handler">Нет приложения для открытия этой ссылки.</string>
 </resources>
