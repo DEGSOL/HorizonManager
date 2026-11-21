@@ -722,7 +722,9 @@ class FluidScreensTest {
         compose.onNodeWithContentDescription(ui(R.string.remove_from_favorites)).performClick()
         compose.onNodeWithText(headlines[0]).assertIsDisplayed()
         back()
-        text(R.string.favorites_empty).assertIsDisplayed()
+        val emptyFavorites = compose.onNodeWithText(ui(R.string.favorites_empty))
+        compose.waitUntil(5_000) { emptyFavorites.isDisplayed() }
+        emptyFavorites.assertIsDisplayed()
         compose.onNodeWithText(headlines[0]).assertDoesNotExist()
     }
 }
