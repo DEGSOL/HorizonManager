@@ -80,5 +80,9 @@ class EditorialBehaviorTest {
         assertFalse(sanitized.toString().contains("SECRET"))
         assertTrue(matchesEventLevel("ERROR", "CRITICAL"))
         assertFalse(matchesEventLevel("WARNING", "CRITICAL"))
+
+        val detail = "tcp/dns · Problem @ Ssh.connect:178 ← SocketTimeoutException"
+        row.put("code", "SSH_TIMEOUT").put("detail", detail)
+        assertEquals(detail, diagnosticEvent(row).getString("detail"))
     }
 }

@@ -2,6 +2,7 @@ package dev.horizonmanager
 
 import android.graphics.Bitmap
 import android.util.LruCache
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -24,6 +25,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import org.robolectric.shadows.ShadowDialog
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "ru-rRU-w412dp-h860dp-xhdpi")
@@ -47,7 +49,8 @@ class FluidScreensTest {
         compose.waitForIdle()
         val bmp =
             compose.runOnIdle {
-                val root = compose.activity.window.decorView
+                val dialog = ShadowDialog.getLatestDialog()?.takeIf { it.isShowing }
+                val root = (dialog?.window ?: compose.activity.window).decorView
                 Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888).also {
                     val capture =
                         Class.forName("org.robolectric.shadows.HardwareRenderingScreenshot")
@@ -71,7 +74,11 @@ class FluidScreensTest {
     private fun tab(id: Int) = compose.onNodeWithContentDescription(ui(id)).performClick()
 
     private fun back() {
-        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.runOnUiThread {
+            val dialog = ShadowDialog.getLatestDialog()?.takeIf { it.isShowing }
+            if (dialog != null) dialog.onBackPressed()
+            else compose.activity.onBackPressedDispatcher.onBackPressed()
+        }
         compose.waitForIdle()
     }
 
@@ -357,22 +364,35 @@ class FluidScreensTest {
         snapshot("02-bubble")
         back()
         text(R.string.mr_latest).assertDoesNotExist()
+        val settingsTab = compose.onNodeWithContentDescription(ui(R.string.settings))
+        val settingsBounds = settingsTab.getUnclippedBoundsInRoot()
         compose.onNodeWithText(headlines[0]).performClick()
         compose.onNodeWithContentDescription(ui(R.string.ui_original_source)).assertExists()
-        compose.onNodeWithContentDescription(ui(R.string.settings)).assertIsNotEnabled()
+        settingsTab.assertIsNotEnabled()
         val openArticle = snapshot("03-article")
         // Sample the narrow left margin beside the text in the fixed portrait fixture.
         val x = openArticle.width / 25
         val y = openArticle.height * 51 / 100
         assertEquals("Article art must be clipped to its header", ThemePreset.Graphite.surface.toArgb(),
             openArticle.getPixel(x, y))
-        back()
+        compose.onNode(isDialog()).performTouchInput {
+            click(Offset(
+                ((settingsBounds.left + settingsBounds.right) / 2).toPx(),
+                ((settingsBounds.top + settingsBounds.bottom) / 2).toPx(),
+            ))
+        }
+        compose.onNode(isDialog()).assertDoesNotExist()
+        settingsTab.assertIsEnabled()
+        compose.onNodeWithText(heading).assertIsDisplayed()
+
         val scrollable = compose.onNode(hasScrollAction())
         scrollable.performTouchInput { swipeUp() }
         compose.mainClock.advanceTimeBy(500)
         compose.onNodeWithContentDescription(ui(R.string.settings)).assertDoesNotExist()
+        compose.onNodeWithContentDescription(ui(R.string.news_search)).assertDoesNotExist()
         scrollable.performTouchInput { swipeDown() }
         compose.mainClock.advanceTimeBy(500)
+        compose.onNodeWithContentDescription(ui(R.string.news_search)).assertIsDisplayed()
         val barTop = compose.onNodeWithContentDescription(ui(R.string.settings)).getUnclippedBoundsInRoot().top
         scrollable.performScrollToIndex(104)
         scrollable.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 600f) }

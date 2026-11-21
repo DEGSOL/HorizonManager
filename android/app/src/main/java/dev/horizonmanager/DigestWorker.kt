@@ -61,7 +61,7 @@ internal class DigestWorker(context: Context, params: WorkerParameters) : Corout
                 throw cancelled
             } catch (error: Exception) {
                 val code = (error as? Problem)?.code ?: "BACKGROUND_CHECK_FAILED"
-                DigestNotifications.record(app, server.id, code)
+                DigestNotifications.record(app, server.id, code, error.connectionTrace())
                 if (code in setOf("PUSH_ENDPOINT", "API_404") && endpoint.isNotEmpty()) {
                     DigestNotifications.setEndpoint(app, server.id, "")
                 }
@@ -80,9 +80,9 @@ internal class DigestWorker(context: Context, params: WorkerParameters) : Corout
         (api.get("digests?limit=1") as JSONArray).optJSONObject(0)?.optString("id").orEmpty()
     }
 
-    private fun <T> withAgent(server: Server, action: (AgentApi) -> T): T =
-        if (server.https.isNotEmpty()) action(AgentApi(server))
-        else Ssh.withSession(server) { action(AgentApi(server, it)) }
+    private suspend fun <T> withAgent(server: Server, action: (AgentApi) -> T): T =
+        if (server.https.isNotEmpty()) useTransport { action(AgentApi(server)) }
+        else useTransport(server) { Ssh.withSession(server) { action(AgentApi(server, it)) } }
 
     companion object {
         private val network = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()

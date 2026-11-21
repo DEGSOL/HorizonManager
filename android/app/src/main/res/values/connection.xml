@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <string name="connection_ssh_available">SSH authenticated</string>
+    <string name="connection_checking_agent">Checking the Horizon agent</string>
+    <string name="connection_ssh_handshake">The VPS accepted TCP, but the SSH handshake failed.</string>
+    <string name="connection_ssh_negotiation">The client and VPS could not agree on secure SSH algorithms.</string>
+    <string name="connection_ssh_lost">The VPS closed the SSH session. Try connecting again.</string>
+    <string name="connection_ssh_command_timeout">The VPS did not finish the SSH check in time.</string>
+    <string name="connection_network_unavailable">The phone has no route to the VPS. Check your network.</string>
+    <string name="connection_agent_timeout">The Horizon agent did not respond in time.</string>
+    <string name="connection_agent_inactive">SSH is available. The Horizon agent service is stopped.</string>
+    <string name="connection_agent_tunnel">SSH is available. The VPS could not forward the connection to the Horizon agent. Check the service and SSH forwarding.</string>
+    <string name="connection_agent_protocol">The configured address did not return a compatible Horizon API response.</string>
+    <string name="connection_https_dns">Could not resolve the HTTPS address of the Horizon agent.</string>
+    <string name="connection_agent_api_error">The Horizon agent answered with an error. See the journal for details.</string>
+</resources>

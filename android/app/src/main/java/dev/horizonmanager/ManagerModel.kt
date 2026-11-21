@@ -4,7 +4,12 @@ import android.app.Application
 import android.util.AtomicFile
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import android.net.ConnectivityManager
+import android.net.Network
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,6 +31,8 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
 
+internal enum class ConnectionPhase { Idle, Connecting, SshAvailable, CheckingAgent, Connected }
+
 internal data class Panel(
     val servers: List<Server> = emptyList(),
     val server: Server? = null,
@@ -34,6 +41,8 @@ internal data class Panel(
     val syncing: Boolean = false,
     val lastContact: String = "",
     val connectionProblem: String = "",
+    val connectionPhase: ConnectionPhase = ConnectionPhase.Idle,
+    val connectionCancellable: Boolean = false,
     val probe: Map<String, String> = emptyMap(),
     val hostConfirmation: HostConfirmation? = null,
     val problem: String = "",
@@ -67,6 +76,18 @@ internal data class Panel(
 internal fun Panel.preferredDigestLanguage() = status.optString("digest_language", digestLocale())
 
 internal class ManagerModel(private val app: Application) : AndroidViewModel(app) {
+    private val connectivity = app.getSystemService(ConnectivityManager::class.java)
+    val networkAvailable = callbackFlow {
+        val manager = connectivity ?: run { close(); return@callbackFlow }
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) { trySend(true) }
+            override fun onLost(network: Network) { trySend(manager.activeNetwork != null) }
+        }
+        manager.registerDefaultNetworkCallback(callback)
+        trySend(manager.activeNetwork != null)
+        awaitClose { manager.unregisterNetworkCallback(callback) }
+    }.distinctUntilChanged()
+
     private val vault = Vault(app)
     private val cache = ManagerDb.get(app).cache()
     private val mutable = MutableStateFlow(Panel())
@@ -84,11 +105,14 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     val settingsSaved = saved.asStateFlow()
 
     private fun settingsSaved() { saved.update { it + 1 } }
-    private var candidate: Server? = null
+    @Volatile private var candidate: Server? = null
     private var flagObserver: Job? = null
     private var eventObserver: Job? = null
     private var active: Job? = null
     private var activeIsQuiet = false
+    @Volatile private var reconnectPaused = false
+    @Volatile private var quietRetryAfter = 0L
+    private var pendingSelection: Job? = null
     private var lastError = ""
     private var lastErrorTime = 0L
     private val selection = app.getSharedPreferences("selected_server", 0)
@@ -125,7 +149,9 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                 DigestWorker.schedule(app, servers)
                 val id = pendingNotification.ifEmpty { selection.getString("id", "").orEmpty() }
                 pendingNotification = ""
-                servers.find { it.id == id }?.let(::select)
+                servers.find { it.id == id }?.let(::select) ?: observe("setup")
+            } catch (error: CancellationException) {
+                throw error
             } catch (_: Exception) {
                 mutable.update { it.copy(problem = "VAULT_READ", userProblem = "VAULT_READ") }
             }
@@ -133,38 +159,52 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     }
 
     private fun canPrefetchArtwork(panel: Panel): Boolean =
-        panel.ready && panel.status.length() > 0 && panel.connectionProblem.isBlank()
+        panel.ready && panel.status.length() > 0 && panel.connectionPhase == ConnectionPhase.Connected
 
     private fun record(error: Throwable, server: Server?, announce: Boolean = true) {
-        val problem = when (error) {
-            is Problem -> error.code + error.detail.takeIf { it.isNotEmpty() }?.let { " · $it" }.orEmpty()
+        val code = when (error) {
+            is Problem -> error.code
             is HostConfirmation -> "SSH_HOST_CHANGED"
             else -> "ANDROID_" + error.javaClass.simpleName.uppercase()
         }
+        val detail = (error as? Problem)?.detail.orEmpty()
+        val problem = listOf(code, detail).filter(String::isNotBlank).joinToString(" · ")
+        val connectionError = isConnectionFailure(code)
         mutable.update {
-            it.copy(problem = problem, userProblem = if (announce) problem else it.userProblem,
-                connectionProblem = if (isConnectionFailure(problem)) problem else it.connectionProblem)
+            if (server != null && server.id != it.server?.id && server.id != candidate?.id) it
+            else it.copy(problem = problem, userProblem = if (announce) problem else it.userProblem,
+                connectionProblem = if (connectionError) code else it.connectionProblem,
+                connectionPhase = if (connectionError) ConnectionPhase.Idle else it.connectionPhase)
         }
         val now = android.os.SystemClock.elapsedRealtime()
-        if (problem == lastError && now - lastErrorTime < 60_000) return
-        lastError = problem
+        if (isTransientConnectionFailure(code)) quietRetryAfter = now + 60_000
+        val signature = "${server?.id}:$problem:${error.cause?.javaClass?.simpleName}"
+        if (signature == lastError && now - lastErrorTime < 60_000) return
+        lastError = signature
         lastErrorTime = now
         val ts = Instant.now()
         viewModelScope.launch {
             runCatching {
                 val data = JSONObject().put("time", ts.toString()).put("component", "android")
-                    .put("level", "ERROR").put("code", problem)
+                    .put("level", "ERROR").put("code", code)
+                val diagnostic = if (connectionError) listOfNotNull(
+                    detail.takeIf { it == "ssh" || it == "tcp/dns" },
+                    error.connectionTrace(),
+                ).joinToString(" · ") else detail
+                if (diagnostic.isNotBlank()) data.put("detail", diagnostic)
                 val id = ts.epochSecond * 1_000_000 + ts.nano / 1000
                 cache.saveEvents(listOf(LocalEvent(server?.id ?: "setup", "android", id, ts.toString(), data.toString())))
             }
         }
     }
 
-    private fun operation(quiet: Boolean = false, task: suspend () -> Unit) {
-        val previous = active?.takeIf { it.isActive }
+    private fun operation(quiet: Boolean = false, connectionCheck: Boolean = false, task: suspend () -> Unit) {
+        val previous = active?.takeIf { !it.isCompleted }
         if (previous != null && (quiet || !activeIsQuiet)) return
         activeIsQuiet = quiet
-        if (!quiet) mutable.update { it.copy(busy = true, problem = "", userProblem = "") }
+        if (!quiet) mutable.update {
+            it.copy(busy = true, problem = "", userProblem = "", connectionCancellable = connectionCheck)
+        }
         active = viewModelScope.launch {
             try {
                 previous?.join()
@@ -172,14 +212,63 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             } catch (error: CancellationException) {
                 throw error
             } catch (error: HostConfirmation) {
-                if (candidate != null) mutable.update { it.copy(hostConfirmation = error) }
-                else record(error, state.value.server, announce = !quiet)
+                if (connectionCheck && candidate != null) {
+                    mutable.update { it.copy(hostConfirmation = error, connectionPhase = ConnectionPhase.Idle) }
+                } else record(error, state.value.server, announce = !quiet)
             } catch (error: Exception) {
                 record(error, state.value.server, announce = !quiet)
             } finally {
-                if (!quiet) mutable.update { it.copy(busy = false) }
+                if (!quiet) mutable.update { it.copy(busy = false, connectionCancellable = false) }
             }
         }
+    }
+
+    private fun connectionStage(phase: ConnectionPhase) {
+        mutable.update {
+            if (reconnectPaused) it else it.copy(connectionPhase = phase, connectionProblem = "")
+        }
+    }
+
+    private fun connected(server: Server) {
+        quietRetryAfter = 0
+        mutable.update {
+            if (it.server != server || reconnectPaused) it
+            else it.copy(lastContact = Instant.now().toString(), connectionProblem = "",
+                connectionPhase = ConnectionPhase.Connected)
+        }
+    }
+
+    fun cancelConnection() {
+        if (!state.value.connectionCancellable) return
+        candidate = null
+        reconnectPaused = true
+        active?.cancel()
+        mutable.update { it.copy(connectionPhase = ConnectionPhase.Idle, connectionProblem = "") }
+    }
+
+    fun networkChanged(available: Boolean) {
+        val panel = state.value
+        if (reconnectPaused || panel.server == null || !panel.ready) return
+        if (!available && panel.connectionPhase == ConnectionPhase.Connected) {
+            record(Problem("NETWORK_UNAVAILABLE"), panel.server, announce = false)
+        } else if (available && isTransientConnectionFailure(panel.connectionProblem)) {
+            quietRetryAfter = 0
+            refresh(quiet = true)
+        }
+    }
+
+    private suspend fun retryConnection(task: suspend () -> Unit) {
+        val intervals = listOf(750L, 2_000L)
+        for (interval in intervals) {
+            try {
+                task()
+                return
+            } catch (error: Problem) {
+                if (!isTransientConnectionFailure(error.code)) throw error
+                delay(interval)
+            }
+        }
+        task()
     }
 
     private fun store(server: Server) {
@@ -204,11 +293,22 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         }
     }
 
-    fun add() {
-        if (active?.isActive == true) {
-            if (activeIsQuiet) viewModelScope.launch { active?.join(); add() }
-            return
+    private fun afterConnectionCloses(next: () -> Unit): Boolean {
+        val previous = active?.takeIf { !it.isCompleted } ?: return false
+        if (!activeIsQuiet && !state.value.connectionCancellable) return true
+        previous.cancel()
+        pendingSelection?.cancel()
+        pendingSelection = viewModelScope.launch {
+            previous.join()
+            next()
         }
+        return true
+    }
+
+    fun add() {
+        if (afterConnectionCloses(::add)) return
+        reconnectPaused = false
+        quietRetryAfter = 0
         candidate = null
         selection.edit().remove("id").apply()
         mutable.update { Panel(servers = it.servers) }
@@ -216,12 +316,11 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     }
 
     fun select(server: Server) {
-        if (active?.isActive == true) {
-            if (activeIsQuiet) viewModelScope.launch { active?.join(); select(server) }
-            return
-        }
+        if (afterConnectionCloses { select(server) }) return
+        reconnectPaused = false
+        quietRetryAfter = 0
         selectLocally(server, state.value.servers)
-        operation { loadSelected(server) }
+        operation(connectionCheck = true) { loadSelected(server) }
     }
 
     private fun selectLocally(server: Server?, servers: List<Server>) {
@@ -239,7 +338,9 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
 
     private suspend fun loadSelected(server: Server) {
         loadArchive(server)
-        if (server.installed) synchronize(server, everything = true) else probe(server)
+        retryConnection {
+            if (server.installed) synchronize(server, everything = true) else probe(server)
+        }
     }
 
     fun removeServer(id: String) = operation {
@@ -275,8 +376,10 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
 
     fun connect(name: String, hostname: String, portText: String, user: String, key: Boolean,
                 credential: String, passphrase: String, previous: Server?) {
+        if (active?.isActive == true && !activeIsQuiet) return
+        reconnectPaused = false
         val host = hostname.trim().removeSurrounding("[", "]")
-        val port = portText.toIntOrNull()
+        val port = portText.trim().toIntOrNull()
         if (host.isEmpty() || !host.matches(Regex("[A-Za-z0-9:._%\\-]+")) ||
             port == null || port !in 1..65535 || !user.matches(Regex("[A-Za-z0-9._-]{1,64}")) ||
             credential.isBlank() || credential.length > 65536) {
@@ -295,45 +398,64 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             matching?.installed ?: false, matching?.https.orEmpty(), matching?.background ?: false
         )
         candidate = server
-        operation { probe(server, explicit = true) }
+        operation(connectionCheck = true) { retryConnection { probe(server, explicit = true) } }
     }
 
     fun confirmHost(approved: Boolean) {
         val received = state.value.hostConfirmation ?: return
         mutable.update { it.copy(hostConfirmation = null) }
         val server = candidate ?: return
-        if (approved) operation { probe(server.copy(pin = received.fingerprint), explicit = true) }
+        if (approved) operation(connectionCheck = true) {
+            retryConnection { probe(server.copy(pin = received.fingerprint), explicit = true) }
+        }
         else candidate = null
     }
 
     private suspend fun probe(server: Server, explicit: Boolean = false) {
-        Ssh.withSession(server) { session ->
-            val report = Ssh.probe(app, session).toMutableMap()
-            if (report["agent"] == "active") {
-                runCatching { AgentApi(server.copy(https = ""), session).get("health") as JSONObject }
-                    .onSuccess { health ->
-                        if (health.optInt("api") == 1) report["authenticated"] = "yes"
-                    }.onFailure { report["agent_problem"] = (it as? Problem)?.code ?: "AGENT_UNREACHABLE" }
+        connectionStage(ConnectionPhase.Connecting)
+        val (report, agentError) = useTransport(server) {
+            Ssh.withSession(server) { session ->
+                connectionStage(ConnectionPhase.SshAvailable)
+                val report = Ssh.probe(app, session).toMutableMap()
+                val error = if (report["agent"] == "active" || server.https.isNotEmpty()) {
+                    connectionStage(ConnectionPhase.CheckingAgent)
+                    try {
+                        AgentApi(server, session).health()
+                        report["authenticated"] = "yes"
+                        null
+                    } catch (error: Problem) {
+                        report["agent_problem"] = error.code
+                        error
+                    }
+                } else if (server.installed || report["install"] == "success") {
+                    Problem("AGENT_INACTIVE").also { report["agent_problem"] = it.code }
+                } else null
+                report to error
             }
-            val connected = server.copy(installed = report["authenticated"] == "yes")
-            val wasInstalled = state.value.server?.installed == true
-            store(connected)
-            if (connected.installed && !wasInstalled) {
-                DigestNotifications.notify(app, connected.id, connected.name, ui(R.string.ui_horizon_manager_installed))
-            }
-            observe(connected.id)
-            mutable.update { it.copy(probe = report, ready = connected.installed) }
-            candidate = null
         }
-        if (state.value.ready) synchronize(requireNotNull(state.value.server), everything = true)
-        if (explicit) mutable.update { it.copy(sshVerification = UUID.randomUUID().toString()) }
+        val authenticated = report["authenticated"] == "yes"
+        val wasInstalled = server.installed
+        val profile = server.copy(installed = wasInstalled || authenticated)
+        val changedSelection = state.value.server?.id != profile.id
+        if (state.value.server != profile || state.value.servers.none { it == profile }) store(profile)
+        if (authenticated && !wasInstalled) {
+            DigestNotifications.notify(app, profile.id, profile.name, ui(R.string.ui_horizon_manager_installed))
+        }
+        if (changedSelection) observe(profile.id)
+        mutable.update {
+            it.copy(probe = report, ready = profile.installed,
+                sshVerification = if (explicit) UUID.randomUUID().toString() else it.sshVerification)
+        }
+        candidate = null
+        if (agentError != null) throw agentError
+        if (authenticated) synchronize(profile, everything = true, checkConnection = false)
     }
 
     fun install(password: String) {
         val server = state.value.server ?: return
         val report = state.value.probe
         operation {
-            val stage = Ssh.withSession(server) { session ->
+            val stage = shell(server) { session ->
                 Ssh.install(app, session, server, report["privileges"].orEmpty(),
                     password.ifEmpty { if (!server.keyMode) server.credential else "" })
                 Ssh.probe(app, session)
@@ -344,9 +466,9 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
 
     fun attachExisting(password: String) {
         val server = state.value.server ?: return
-        val privileges = state.value.probe["privileges"]
         operation {
-            val token = Ssh.withSession(server) { session ->
+            val token = shell(server) { session ->
+                val privileges = Ssh.probe(app, session)["privileges"]
                 val command = "/bin/cat /etc/horizon-manager/api-token"
                 val input = password.ifEmpty { if (!server.keyMode) server.credential else "" }
                 when (privileges) {
@@ -366,7 +488,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     fun updateAgent(password: String) {
         val server = state.value.server ?: return
         operation {
-            val stage = Ssh.withSession(server) { session ->
+            val stage = shell(server) { session ->
                 val before = Ssh.probe(app, session)
                 installOperation = before["operation"].orEmpty()
                 Ssh.install(app, session, server, before["privileges"].orEmpty(),
@@ -378,7 +500,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     }
 
     private suspend fun checkAgentUpdate(server: Server) {
-        val report = Ssh.withSession(server) { Ssh.probe(app, it) }
+        val report = shell(server) { Ssh.probe(app, it) }
         val fresh = report["operation"] != installOperation
         if (fresh && report["install"] == "failed") {
             mutable.update { it.copy(probe = report, updatingAgent = false) }
@@ -396,17 +518,26 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     }
 
     fun refreshInstallation(quiet: Boolean = true) {
+        if (!quiet) reconnectPaused = false
+        if (reconnectPaused || quiet && android.os.SystemClock.elapsedRealtime() < quietRetryAfter) return
         val server = state.value.server ?: return
-        operation(quiet) { probe(server) }
+        operation(quiet, connectionCheck = true) { retryConnection { probe(server) } }
     }
 
-    private fun <T> withAgent(server: Server, updateStatus: Boolean = true, action: (AgentApi) -> T): T {
-        val result = if (server.https.isNotEmpty()) action(AgentApi(server))
-            else Ssh.withSession(server) { action(AgentApi(server, it)) }
-        if (updateStatus) mutable.update {
-            if (it.server?.id == server.id) it.copy(lastContact = Instant.now().toString(), connectionProblem = "") else it
+    private suspend fun <T> shell(server: Server, action: (com.jcraft.jsch.Session) -> T): T =
+        useTransport(server) { Ssh.withSession(server, action) }
+
+    private suspend fun <T> withAgent(server: Server, checkingConnection: Boolean = false,
+                                     action: (AgentApi) -> T): T {
+        if (checkingConnection) connectionStage(ConnectionPhase.Connecting)
+        if (server.https.isNotEmpty()) return useTransport {
+            if (checkingConnection) connectionStage(ConnectionPhase.CheckingAgent)
+            action(AgentApi(server))
         }
-        return result
+        return shell(server) { session ->
+            if (checkingConnection) connectionStage(ConnectionPhase.SshAvailable)
+            action(AgentApi(server, session))
+        }
     }
 
     fun coverRelay(panel: Panel, articleId: String): (suspend () -> ByteArray?)? {
@@ -419,7 +550,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         if (server?.installed != true || run.isBlank()) return null
         return {
             try {
-                val result = withAgent(server, updateStatus = false) {
+                val result = withAgent(server) {
                     it.get("covers/$run/${contextHash(articleId)}") as JSONObject
                 }
                 val encoded = result.optString("image")
@@ -457,10 +588,10 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         return true
     }
 
-    private suspend fun synchronize(server: Server, everything: Boolean) {
+    private suspend fun synchronize(server: Server, everything: Boolean, checkConnection: Boolean = true) {
         mutable.update { it.copy(syncing = true) }
         try {
-            fetchPanel(server, everything)
+            fetchPanel(server, everything, checkConnection)
         } finally {
             mutable.update { it.copy(syncing = false) }
         }
@@ -475,13 +606,16 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             page.offset.takeIf { stale }
         }.toSet()
 
-    private suspend fun fetchPanel(server: Server, everything: Boolean) {
+    private suspend fun fetchPanel(server: Server, everything: Boolean, checkConnection: Boolean) {
         val cursor = cache.eventCursor(server.id)
         val current = state.value
         val stale = if (current.selectedRun.isNotEmpty())
             staleDigestOffsets(server.id, current.selectedRun, current.language) else emptySet()
-        val remote = withAgent(server) { api ->
-            val status = api.get("status") as JSONObject
+        val checking = checkConnection && (everything || state.value.connectionPhase != ConnectionPhase.Connected)
+        val remote = withAgent(server, checkingConnection = checking) { api ->
+            if (checking) connectionStage(ConnectionPhase.CheckingAgent)
+            val status = api.status()
+            connected(server)
             if (status.has("digest_language") && !status.optBoolean("digest_language_chosen")) {
                 val accepted = status.optJSONArray("digest_languages")?.strings() ?: legacyDigestLanguages
                 val language = digestLocale()
@@ -580,20 +714,16 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     }
 
     fun refresh(quiet: Boolean = false) {
-        val server = state.value.server ?: return
+        if (!quiet) reconnectPaused = false
+        if (reconnectPaused || quiet && android.os.SystemClock.elapsedRealtime() < quietRetryAfter) return
+        val panel = state.value
+        val server = panel.server ?: return
         if (!server.installed) return
-        operation(quiet) {
-            if (state.value.updatingAgent) {
-                checkAgentUpdate(server)
-            } else {
-                try {
-                    synchronize(server, everything = !quiet || state.value.selectedRun.isEmpty())
-                } catch (error: Problem) {
-                    if (error.code !in setOf("SSH_CONNECT", "SSH_TIMEOUT", "AGENT_UNREACHABLE", "HTTPS_UNREACHABLE")) throw error
-                    kotlinx.coroutines.delay(1_000)
-                    synchronize(server, everything = !quiet || state.value.selectedRun.isEmpty())
-                }
-            }
+        if (quiet && !panel.updatingAgent && panel.connectionProblem.isNotBlank() &&
+            !isTransientConnectionFailure(panel.connectionProblem)) return
+        operation(quiet, connectionCheck = !panel.updatingAgent) {
+            if (state.value.updatingAgent) checkAgentUpdate(server)
+            else retryConnection { synchronize(server, everything = !quiet || state.value.selectedRun.isEmpty()) }
         }
     }
 
@@ -951,11 +1081,14 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         operation {
             if (!AgentApi.validHttps(url)) throw Problem("HTTPS_URL")
             val updated = server.copy(https = url.trim(), background = background)
-            if (url.isNotBlank()) {
-                val health = withAgent(updated) { it.get("health") as JSONObject }
-                if (health.optInt("api") != 1) throw Problem("AGENT_PROTOCOL")
+            if (updated.https != server.https) {
+                withAgent(updated, checkingConnection = true) {
+                    connectionStage(ConnectionPhase.CheckingAgent)
+                    it.status()
+                }
             }
             store(updated)
+            if (updated.https != server.https) connected(updated)
             settingsSaved()
             if (!background && server.background) DigestNotifications.unregister(app, server.id)
             DigestWorker.schedule(app, state.value.servers)
@@ -966,7 +1099,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     fun restart(password: String) {
         val server = state.value.server ?: return
         operation {
-            Ssh.withSession(server) { session ->
+            shell(server) { session ->
                 val report = Ssh.probe(app, session)
                 val command = "/bin/systemctl restart horizon-manager.service"
                 val input = password.ifEmpty { if (!server.keyMode) server.credential else "" }

@@ -3,7 +3,6 @@ package dev.horizonmanager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -31,6 +30,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.compose.ui.platform.LocalView
 import org.json.JSONObject
 
 @Composable
@@ -55,21 +60,9 @@ internal fun ArticleDialog(
             .filter(String::isNotBlank)
             .joinToString("\n\n")
 
-    BackHandler { close() }
     val cover = artwork(artworkServer, article, relay)
     var titleHeight by remember { mutableFloatStateOf(0f) }
-    Box(
-        Modifier.fillMaxSize()
-            .background(Color.Black.copy(alpha = .25f))
-            .clickable(
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() },
-                onClick = close,
-            )
-            .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 78.dp)
-            .navigationBarsPadding(),
-        contentAlignment = Alignment.Center,
-    ) {
+    ArticleModal(article.optString("title"), close) {
         Column(
             Modifier.widthIn(max = 620.dp)
                 .fillMaxWidth()
@@ -211,6 +204,29 @@ internal fun ArticleDialog(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ArticleModal(title: String, close: () -> Unit, content: @Composable BoxScope.() -> Unit) {
+    Dialog(onDismissRequest = close, properties = DialogProperties(
+        usePlatformDefaultWidth = false, decorFitsSystemWindows = false,
+    )) {
+        DialogMotion()
+        val window = (LocalView.current.parent as? DialogWindowProvider)?.window
+        SideEffect { window?.setDimAmount(0f) }
+        val dismissLabel = ui(R.string.ui_close)
+        Box(Modifier.fillMaxSize().semantics { paneTitle = title }) {
+            Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = .34f)).clickable(
+                interactionSource = remember { MutableInteractionSource() }, indication = null,
+                onClickLabel = dismissLabel, onClick = close,
+            ))
+            Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 78.dp),
+                contentAlignment = Alignment.Center,
+                content = content,
+            )
         }
     }
 }

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="favorites_title">Favoritos</string>
+    <string name="favorites_empty">Los artículos que marques con una estrella aparecerán aquí.</string>
+    <string name="archive_digests">Archivo de resúmenes</string>
+    <string name="archive_digests_detail">Abre resúmenes anteriores de este servidor.</string>
+    <string name="archive_issue_actions">Acciones del resumen</string>
+    <string name="archive_remove_device">Eliminar de este dispositivo</string>
+    <string name="archive_remove_detail">El resumen del %1$s desaparecerá del archivo de este dispositivo. Se conservarán la copia del VPS y los artículos favoritos.</string>
+    <string name="browser_actions">Acciones del navegador</string>
+    <string name="browser_open_external">Abrir en un navegador externo</string>
+    <string name="browser_no_handler">No hay ninguna aplicación disponible para abrir este enlace.</string>
+    <string name="nav_unread">Sin leer: %1$d</string>
+</resources>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="favorites_title">Favoris</string>
+    <string name="favorites_empty">Les articles marqués d’une étoile apparaîtront ici.</string>
+    <string name="archive_digests">Archives des digests</string>
+    <string name="archive_digests_detail">Ouvrir les digests précédents sur ce serveur.</string>
+    <string name="archive_issue_actions">Actions du digest</string>
+    <string name="archive_remove_device">Supprimer de cet appareil</string>
+    <string name="archive_remove_detail">Le digest du %1$s disparaîtra des archives de cet appareil. La copie sur le VPS et les articles favoris seront conservés.</string>
+    <string name="browser_actions">Actions du navigateur</string>
+    <string name="browser_open_external">Ouvrir dans un navigateur externe</string>
+    <string name="browser_no_handler">Aucune application ne peut ouvrir ce lien.</string>
+    <string name="nav_unread">Non lus : %1$d</string>
+</resources>

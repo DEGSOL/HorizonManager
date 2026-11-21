@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="favorites_title">Таңдаулылар</string>
+    <string name="favorites_empty">Жұлдызшамен белгіленген мақалалар осы жерде көрсетіледі.</string>
+    <string name="archive_digests">Дайджесттер мұрағаты</string>
+    <string name="archive_digests_detail">Осы сервердегі бұрынғы дайджесттерді ашу.</string>
+    <string name="archive_issue_actions">Дайджест әрекеттері</string>
+    <string name="archive_remove_device">Осы құрылғыдан жою</string>
+    <string name="archive_remove_detail">%1$s күнгі дайджест осы құрылғының мұрағатынан жойылады. VPS-тегі көшірме мен таңдаулы мақалалар сақталады.</string>
+    <string name="browser_actions">Браузер әрекеттері</string>
+    <string name="browser_open_external">Сыртқы браузерде ашу</string>
+    <string name="browser_no_handler">Бұл сілтемені ашатын қолданба жоқ.</string>
+    <string name="nav_unread">Оқылмағандар: %1$d</string>
+</resources>

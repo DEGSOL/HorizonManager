@@ -122,9 +122,13 @@ internal fun AiSettings(panel: Panel, model: ManagerModel, open: (String) -> Uni
     }
 }
 
-internal fun isConnectionFailure(problem: String): Boolean =
-    problem.startsWith("SSH_") || problem.startsWith("HTTPS_") || problem.startsWith("AGENT_") ||
-        problem.substringBefore(" · ") in setOf("AUTH_REQUIRED", "API_401", "API_403")
+internal fun ConnectionPhase.label(): Int = when (this) {
+    ConnectionPhase.Idle -> R.string.editorial_not_checked
+    ConnectionPhase.Connecting -> R.string.editorial_connecting
+    ConnectionPhase.SshAvailable -> R.string.connection_ssh_available
+    ConnectionPhase.CheckingAgent -> R.string.connection_checking_agent
+    ConnectionPhase.Connected -> R.string.editorial_connected
+}
 
 @Composable
 internal fun ServerConnectionStatus(panel: Panel, model: ManagerModel?) {
@@ -132,20 +136,25 @@ internal fun ServerConnectionStatus(panel: Panel, model: ManagerModel?) {
     val problem = panel.connectionProblem
     val (title, color) = when {
         panel.server == null -> R.string.editorial_not_configured to theme.muted
-        panel.syncing || panel.busy && panel.lastContact.isBlank() -> R.string.editorial_connecting to theme.muted
-        problem.substringBefore(" · ") in setOf("SSH_AUTH", "AUTH_REQUIRED", "API_401", "API_403") -> R.string.editorial_auth_error to theme.danger
+        problem in setOf("SSH_AUTH", "AUTH_REQUIRED", "API_401", "API_403") ->
+            R.string.editorial_auth_error to theme.danger
         problem.isNotBlank() -> R.string.editorial_unavailable to theme.danger
-        panel.lastContact.isNotBlank() -> R.string.editorial_connected to theme.success
-        else -> R.string.editorial_not_checked to theme.muted
+        panel.connectionPhase == ConnectionPhase.Connected -> R.string.editorial_connected to theme.success
+        else -> panel.connectionPhase.label() to theme.muted
     }
     Tile {
         Text(panel.server?.name ?: ui(R.string.ui_servers), style = MaterialTheme.typography.titleMedium)
         Text(ui(title), style = MaterialTheme.typography.labelLarge, color = color)
         if (panel.lastContact.isNotBlank()) Text(ui(R.string.editorial_last_contact, localTime(panel.lastContact)),
             style = MaterialTheme.typography.bodySmall, color = theme.muted)
-        if (problem.isNotBlank() && !panel.syncing && model != null) {
+        if (model != null && problem.isNotBlank()) {
             Text(errorText(problem), style = MaterialTheme.typography.bodyMedium)
-            TextButton(onClick = { model.refresh() }, enabled = !panel.busy) { Text(ui(R.string.ui_retry)) }
+            TextButton(onClick = {
+                if (panel.ready) model.refresh() else model.refreshInstallation(false)
+            }, enabled = !panel.busy) { Text(ui(R.string.ui_retry)) }
+        }
+        if (panel.connectionCancellable && model != null) {
+            TextButton(onClick = model::cancelConnection) { Text(ui(R.string.ui_cancel)) }
         }
     }
 }
@@ -158,6 +167,17 @@ internal fun ConnectionSettings(panel: Panel, model: ManagerModel, dirtyChange: 
     val valid = AgentApi.validHttps(url.trim())
     SideEffect { dirtyChange(changed) }
     ServerConnectionStatus(panel, model)
+    var attaching by remember(server.id) { mutableStateOf(false) }
+    if (panel.connectionProblem in setOf("AUTH_REQUIRED", "API_401", "API_403")) {
+        OutlinedButton(onClick = { attaching = true }, enabled = !panel.busy) {
+            Text(ui(R.string.ui_connect_an_existing_agent))
+        }
+    }
+    if (attaching) PasswordDialog(ui(R.string.ui_connect_an_existing_agent),
+        ui(R.string.ui_manager_will_retrieve_the_agent_key), close = { attaching = false }) { password ->
+        attaching = false
+        model.attachExisting(password)
+    }
     Tile {
         val https = ui(R.string.ui_https_domain_optional)
         OutlinedTextField(url, { url = it }, label = { Text(https) },

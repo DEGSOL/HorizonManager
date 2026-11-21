@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="favorites_title">Favoriten</string>
+    <string name="favorites_empty">Mit einem Stern markierte Artikel erscheinen hier.</string>
+    <string name="archive_digests">Digest-Archiv</string>
+    <string name="archive_digests_detail">Frühere Ausgaben auf diesem Server öffnen.</string>
+    <string name="archive_issue_actions">Aktionen für die Ausgabe</string>
+    <string name="archive_remove_device">Von diesem Gerät entfernen</string>
+    <string name="archive_remove_detail">Die Ausgabe vom %1$s verschwindet aus dem Archiv auf diesem Gerät. Die Kopie auf dem VPS und die Favoriten bleiben erhalten.</string>
+    <string name="browser_actions">Browseraktionen</string>
+    <string name="browser_open_external">Im externen Browser öffnen</string>
+    <string name="browser_no_handler">Keine App kann diesen Link öffnen.</string>
+    <string name="nav_unread">Ungelesen: %1$d</string>
+</resources>

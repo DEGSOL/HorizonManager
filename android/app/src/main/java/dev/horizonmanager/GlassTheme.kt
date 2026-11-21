@@ -146,8 +146,8 @@ internal fun GlassLayout(tabs: List<HorizonTab>, selection: Int, showTabs: Boole
             AnimatedVisibility(showTabs, modifier = Modifier.align(Alignment.BottomCenter)
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
                 .padding(start = 16.dp, end = 16.dp, bottom = navigationBottomGap),
-                enter = fadeIn(tween(160)) + slideInVertically(tween(220)) { it / 2 },
-                exit = fadeOut(tween(140)) + slideOutVertically(tween(190)) { it / 2 }) {
+                enter = fadeIn(tween(160)) + slideInVertically(tween(navigationSlideMillis)) { it * 2 },
+                exit = fadeOut(tween(140)) + slideOutVertically(tween(navigationSlideMillis)) { it * 2 }) {
                 GlassNavigation(tabs, selection, unread, dimmed, measured = {
                     clearance = it + navigationBottomGap + 8.dp
                 }, select = select)

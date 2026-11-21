@@ -4,6 +4,8 @@ import androidx.annotation.StringRes
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -99,17 +101,32 @@ internal fun GlassIconAction(icon: ImageVector, description: String, enabled: Bo
 
 @Composable
 internal fun NewsToolbar(filters: NewsFilters, enabled: Boolean) {
-    Row(horizontalArrangement=Arrangement.spacedBy(4.dp),verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.frost(CircleShape)) { GlassIconAction(Icons.Default.Search, ui(R.string.news_search), enabled, active = filters.searchOpen || filters.query.isNotBlank()) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        FeedToolbarButton(Icons.Default.Search, ui(R.string.news_search), enabled,
+            filters.searchOpen || filters.query.isNotBlank()) {
             filters.searchOpen = !filters.searchOpen
             if (filters.searchOpen) filters.optionsOpen = false
-        } }
-        Box(Modifier.frost(CircleShape)) { GlassIconAction(ImageVector.vectorResource(R.drawable.ic_sliders), ui(R.string.editorial_filters_sort), enabled,
-            active = filters.optionsOpen || filters.scope != NewsScope.All || filters.profile.isNotEmpty() ||
+        }
+        FeedToolbarButton(ImageVector.vectorResource(R.drawable.ic_sliders), ui(R.string.editorial_filters_sort), enabled,
+            filters.optionsOpen || filters.scope != NewsScope.All || filters.profile.isNotEmpty() ||
                 filters.category.isNotEmpty() || filters.explicitOrder) {
             filters.optionsOpen = !filters.optionsOpen
             if (filters.optionsOpen) filters.searchOpen = false
-        } }
+        }
+    }
+}
+
+@Composable
+private fun FeedToolbarButton(icon: ImageVector, description: String, enabled: Boolean,
+                              active: Boolean, toggle: () -> Unit) {
+    Box(
+        Modifier.size(48.dp).toggleable(active, enabled = enabled, role = Role.Button,
+            interactionSource = null, indication = ripple(bounded = false, radius = 21.dp, color = Color.White),
+            onValueChange = { toggle() }),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, description, Modifier.size(22.dp),
+            tint = Color.White.copy(alpha = if (!enabled) .40f else if (active) 1f else .76f))
     }
 }
 

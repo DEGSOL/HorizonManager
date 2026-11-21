@@ -32,11 +32,20 @@ private val sourceResult = Regex(".* · ([0-9]{1,9})(?: · (AUTH|RATE_LIMIT|HTTP
 private val contextResult = Regex("[0-9]{1,9} ms(?: · [A-Z][A-Z0-9_]{1,79})?")
 private val safeException = setOf("TimeoutError", "ConnectionError", "ValueError", "RuntimeError", "OSError", "HTTPError")
 
+private val traceFrame = Regex("(?:Problem|HostConfirmation|[A-Z][A-Za-z0-9]{0,60}(?:Exception|Error))(?: @ [A-Za-z0-9_.$-]{1,110}:-?[0-9]{1,5})?")
+
+private fun isPublicConnectionTrace(value: String): Boolean {
+    if (value.length !in 1..780) return false
+    val frames = value.removePrefix("background · ").removePrefix("tcp/dns · ").removePrefix("ssh · ").split(" ← ")
+    return frames.size in 1..5 && frames.all(traceFrame::matches)
+}
+
 internal fun diagnosticEvent(row: JSONObject): JSONObject {
     val code = row.optString("code").substringBefore(" · ")
         .takeIf { it in phases || publicCode.matches(it) }.orEmpty()
     val raw = row.optString("detail")
     val detail = when {
+        row.optString("component") == "android" && isConnectionFailure(code) -> raw.takeIf(::isPublicConnectionTrace)
         code.startsWith("INSTALL_") -> raw.takeIf(exitStatus::matches)
         code.startsWith("SOURCE_") -> sourceResult.matchEntire(raw)?.groupValues?.drop(1)?.filter(String::isNotBlank)?.joinToString(" · ")
         code == "JOB_QUEUED" -> raw.takeIf { it in setOf("run", "ai", "source", "localize", "article_context") }

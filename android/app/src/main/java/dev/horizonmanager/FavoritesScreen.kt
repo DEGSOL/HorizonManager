@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.items
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -40,6 +41,10 @@ internal fun FavoritesScreen(
 ) {
     val favorites by model.favorites.collectAsStateWithLifecycle(initialValue = emptyList())
     var selected by rememberSaveable(stateSaver = openFavoriteSaver) { mutableStateOf<SavedPublication?>(null) }
+    val grid = rememberLazyStaggeredGridState()
+    val movingBorder = rememberUnreadBorderClock {
+        selected == null && grid.layoutInfo.visibleItemsInfo.any { favorites.getOrNull(it.index)?.read == false }
+    }
     SideEffect { focus(selected != null) }
     DisposableEffect(Unit) { onDispose { focus(false) } }
     Box(Modifier.fillMaxSize().editorialInsets()) {
@@ -53,6 +58,7 @@ internal fun FavoritesScreen(
             } else {
                 LazyVerticalStaggeredGrid(
                     columns = StaggeredGridCells.Adaptive(154.dp),
+                    state = grid,
                     contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 5.dp,
                         bottom = LocalNavigationClearance.current),
                     verticalItemSpacing = 8.dp,
@@ -64,6 +70,7 @@ internal fun FavoritesScreen(
                         PublicationTile(article, ArticleFlag(item.server, item.article, true, favorite.read),
                             Modifier, artworkServer = item.server,
                             relay = model.coverRelay(servers.find { it.id == item.server }, item.run, item.article),
+                            movingBorder = movingBorder,
                             open = {
                                 selected = item
                                 if (!favorite.read) model.flag(item, read = true)

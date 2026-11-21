@@ -37,7 +37,7 @@ internal fun Modifier.recordScene(scene: GlassScene): Modifier =
 internal val backdropBlurAvailable: Boolean
     @Composable get() = LocalGlassScene.current != null && Build.VERSION.SDK_INT >= 31
 
-internal fun Modifier.glassBackdrop(shape: Shape, radius: Dp): Modifier = composed {
+internal fun Modifier.glassBackdrop(shape: Shape, radius: Dp, monochrome: Boolean = false): Modifier = composed {
     val scene = LocalGlassScene.current
     if (scene == null || Build.VERSION.SDK_INT < 31) return@composed clip(shape)
     var position by remember { mutableStateOf(Offset.Zero) }
@@ -45,14 +45,35 @@ internal fun Modifier.glassBackdrop(shape: Shape, radius: Dp): Modifier = compos
         .clip(shape)
         .drawWithCache {
             val blur = radius.toPx()
-            val sampled = obtainGraphicsLayer().apply { renderEffect = BlurEffect(blur, blur, TileMode.Clamp) }
+            val sampled = obtainGraphicsLayer().apply {
+                renderEffect = BlurEffect(blur, blur, TileMode.Clamp)
+                if (monochrome) colorFilter = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
+            }
             onDrawWithContent {
                 val shift = scene.origin - position
-                sampled.record { translate(shift.x, shift.y) { drawLayer(scene.layer) } }
+                sampled.record {
+                    if (monochrome) drawRect(Color(0xFF161616))
+                    translate(shift.x, shift.y) { drawLayer(scene.layer) }
+                }
                 drawLayer(sampled)
                 drawContent()
             }
         }
+}
+
+internal const val navigationSlideMillis = 220
+
+internal fun Modifier.navigationGlass(shape: Shape): Modifier = composed {
+    val graphite = Color(0xFF161616)
+    val blur = backdropBlurAvailable
+    glassBackdrop(shape, 22.dp, monochrome = true)
+        .background(Brush.verticalGradient(listOf(
+            if (blur) graphite.copy(alpha = .61f) else Color(0xFF242424),
+            if (blur) graphite.copy(alpha = .75f) else graphite,
+        )))
+        .border(1.dp, Brush.verticalGradient(listOf(
+            Color.White.copy(alpha = .31f), Color.White.copy(alpha = .14f),
+        )), shape)
 }
 
 internal fun Modifier.frost(shape: Shape, active: Boolean = false, onPhoto: Boolean = false): Modifier = composed {

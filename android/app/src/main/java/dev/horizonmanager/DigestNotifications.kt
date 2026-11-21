@@ -189,14 +189,14 @@ internal object DigestNotifications {
         return true
     }
 
-    suspend fun record(app: Context, server: String, code: String) = withContext(Dispatchers.IO) {
+    suspend fun record(app: Context, server: String, code: String, trace: String) = withContext(Dispatchers.IO) {
         val now = Instant.now()
         val stamp = now.epochSecond * 1_000_000 + now.nano / 1000
         val key = "$server:background_error:$code"
         val last = prefs(app).getLong(key, 0)
         if (now.epochSecond - last < 3600) return@withContext
         val data = JSONObject().put("time", now.toString()).put("component", "android")
-            .put("level", "WARNING").put("code", code).put("detail", "background")
+            .put("level", "WARNING").put("code", code).put("detail", "background · $trace")
         ManagerDb.get(app).cache().saveEvents(listOf(LocalEvent(server, "android", stamp, now.toString(), data.toString())))
         prefs(app).edit().putLong(key, now.epochSecond).apply()
     }

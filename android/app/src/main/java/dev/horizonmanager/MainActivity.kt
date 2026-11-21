@@ -271,6 +271,11 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     val checkingInstall = panel.probe["install"] == "running" || panel.updatingAgent
     val watchingFeed = panel.ready && tab == FEED && !manageServers && !editServer
     val preparing = digestIsPreparing(panel.jobs)
+    LaunchedEffect(model, lifecycle) {
+        lifecycle.repeatAt(androidx.lifecycle.Lifecycle.State.RESUMED) {
+            model.networkAvailable.collect(model::networkChanged)
+        }
+    }
     LaunchedEffect(currentServer?.id, panel.ready, running, checkingInstall, watchingFeed, preparing, lifecycle, locale) {
         androidx.lifecycle.Lifecycle.State.RESUMED.let { minimum ->
             lifecycle.repeatAt(minimum) {
@@ -355,7 +360,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         }
     }
 
-    val showTabs = panel.ready && !canGoBack && (tab != FEED || navVisible || overlay)
+    val showTabs = panel.ready && !canGoBack && (tab != FEED || navVisible)
     GlassLayout(tabs, tab, showTabs, unread = unread, dimmed = overlay, savedNotice = savedNotice, select = { chosen ->
         if (chosen != tab || configPage.isNotEmpty() || openedIssue != null) {
             previousTab = tab
@@ -376,6 +381,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
             tab == SETTINGS -> Screen("settings")
             else -> Screen("feed")
         }
+        val currentDestination by rememberUpdatedState(destination)
         AnimatedContent(destination,
             modifier = Modifier.align(Alignment.TopCenter).graphicsLayer { scaleX = 1f - backProgress * .035f; scaleY = scaleX }.widthIn(max = 780.dp).fillMaxSize(),
             transitionSpec = {
@@ -436,10 +442,13 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                 when {
                     screen.reading -> NewsScreen(panel, model, displayedIssue, filters, archived,
                         { openSettings("ai") }, { openSettings("sources") }, ::goBack,
-                        { navVisible = it }, { overlay = it })
+                        { if (screen == currentDestination) navVisible = it },
+                        { if (screen == currentDestination) overlay = it })
                     screen.page == "archive" -> ArchiveScreen(issues.archive, panel, model,
                         { archiveIssue = it.getString("id") }, header)
-                    screen.page == "favorites" -> FavoritesScreen(model, panel.servers, header) { overlay = it }
+                    screen.page == "favorites" -> FavoritesScreen(model, panel.servers, header) {
+                        if (screen == currentDestination) overlay = it
+                    }
                     screen.page == "journal" -> Journal(panel, { description, run -> confirm = description to run }, model,
                         { model.prepareExportDocument(it); output.launch("horizon-journal.json") }, header)
                     else -> Column(Modifier.fillMaxSize().editorialInsets().verticalScroll(rememberScrollState())
@@ -648,9 +657,18 @@ private fun Setup(panel: Panel, model: ManagerModel, forceEdit: Boolean) {
             }
             Reveal(!keyMode) { PasswordField(ui(R.string.ui_ssh_password), credential) { credential = it } }
             val setupProblem = panel.problem.takeIf { it == "SERVER_FIELDS" || isConnectionFailure(it) }
+            val phase = panel.connectionPhase
+            if (phase != ConnectionPhase.Idle) Text(ui(phase.label()))
             if (setupProblem != null) Text(errorText(setupProblem), color = MaterialTheme.colorScheme.error)
-            Button(onClick = { model.connect(name, host, port, user, keyMode, credential, passphrase, server) },
-                enabled = !panel.busy && credential.isNotBlank()) { Text(ui(R.string.ui_connect)) }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { model.connect(name, host, port, user, keyMode, credential, passphrase, server) },
+                    enabled = !panel.busy && credential.isNotBlank()) {
+                    Text(ui(if (setupProblem != null) R.string.ui_retry else R.string.ui_connect))
+                }
+                if (panel.connectionCancellable) TextButton(onClick = model::cancelConnection) {
+                    Text(ui(R.string.ui_cancel))
+                }
+            }
         }
     } else {
         Tile {
@@ -661,7 +679,9 @@ private fun Setup(panel: Panel, model: ManagerModel, forceEdit: Boolean) {
             Text("DNS GitHub ${if (probe["dns"] == "yes") ui(R.string.ui_available_990c71) else ui(R.string.ui_no_response)} · systemd ${if (probe["systemd"] == "yes") ui(R.string.ui_running) else ui(R.string.ui_not_found)}")
             probe["existing"]?.let { Text(ui(R.string.hovq_existing_horizon, it)) }
             if (probe["docker_horizon"] == "yes") Text(ui(R.string.ui_a_container_with_horizon_in_its))
-            probe["agent_problem"]?.let { Text(errorText(it), color = MaterialTheme.colorScheme.error) }
+            if (panel.connectionPhase != ConnectionPhase.Idle) Text(ui(panel.connectionPhase.label()))
+            val failure = panel.connectionProblem.ifBlank { probe["agent_problem"].orEmpty() }
+            if (failure.isNotBlank()) Text(errorText(failure), color = MaterialTheme.colorScheme.error)
         }
         val stages = linkedMapOf("preflight" to ui(R.string.ui_check_server), "packages" to ui(R.string.ui_prepare_packages),
             "files" to ui(R.string.ui_persistent_storage), "runtime" to ui(R.string.ui_download_horizon_and_dependencies),
@@ -698,6 +718,7 @@ private fun Setup(panel: Panel, model: ManagerModel, forceEdit: Boolean) {
                 Text(if (install == "failed") ui(R.string.ui_retry_installation) else ui(R.string.ui_install_horizon))
             }
             OutlinedButton(onClick = { model.refreshInstallation(false) }, enabled = !panel.busy) { Text(ui(R.string.ui_check_again)) }
+            if (panel.connectionCancellable) TextButton(onClick = model::cancelConnection) { Text(ui(R.string.ui_cancel)) }
         }
     }
 }
@@ -741,9 +762,20 @@ internal fun errorText(code: String) = when (code.substringBefore(" · ")) {
     "LOCALIZATION_PARTIAL" -> ui(R.string.journal_translation_partial)
     "CLASSIFIER_FALLBACK" -> ui(R.string.ui_the_classifier_used_the_fallback_profile)
     "SSH_CONNECT" -> ui(R.string.ui_could_not_connect_over_ssh_check)
+    "SSH_HANDSHAKE" -> ui(R.string.connection_ssh_handshake)
+    "SSH_NEGOTIATION" -> ui(R.string.connection_ssh_negotiation)
+    "SSH_SESSION_LOST" -> ui(R.string.connection_ssh_lost)
+    "SSH_COMMAND_TIMEOUT" -> ui(R.string.connection_ssh_command_timeout)
+    "NETWORK_UNAVAILABLE" -> ui(R.string.connection_network_unavailable)
+    "AGENT_TIMEOUT", "HTTPS_TIMEOUT" -> ui(R.string.connection_agent_timeout)
+    "AGENT_API_ERROR" -> ui(R.string.connection_agent_api_error)
+    "AGENT_INACTIVE" -> ui(R.string.connection_agent_inactive)
+    "AGENT_TUNNEL" -> ui(R.string.connection_agent_tunnel)
+    "AGENT_PROTOCOL" -> ui(R.string.connection_agent_protocol)
+    "HTTPS_DNS" -> ui(R.string.connection_https_dns)
     "SSH_COMMAND", "SUDO_REQUIRED" -> ui(R.string.ui_the_vps_could_not_run_the)
     "AGENT_UNREACHABLE" -> ui(R.string.ui_the_agent_did_not_respond_over)
-    "AUTH_REQUIRED" -> ui(R.string.ui_the_agent_rejected_the_access_key)
+    "AUTH_REQUIRED", "API_401", "API_403" -> ui(R.string.ui_the_agent_rejected_the_access_key)
     "UPSTREAM_CHECK_UNAVAILABLE" -> ui(R.string.ui_could_not_verify_the_version_on)
     "HTTPS_UNREACHABLE" -> ui(R.string.agent_https_unreachable)
     "TLS_INVALID" -> ui(R.string.ui_the_https_certificate_could_not_be)

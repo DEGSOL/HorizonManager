@@ -1,13 +1,12 @@
 package dev.horizonmanager
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.background
@@ -38,6 +37,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.*
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.semantics.Role
@@ -45,6 +47,7 @@ import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.Instant
@@ -121,7 +124,6 @@ internal fun NewsScreen(
                 order,
             )
         }
-    val p = LocalHorizonPalette.current
     val preparing = !archived && digestIsPreparing(panel.jobs)
     val status =
         when {
@@ -133,8 +135,12 @@ internal fun NewsScreen(
             panel.connectionProblem.isNotEmpty() -> ui(R.string.editorial_not_available)
             else -> ui(R.string.issue_not_loaded)
         }
-    val selectedNav by rememberUpdatedState(nav)
-    val threshold = with(androidx.compose.ui.platform.LocalDensity.current) { 34.dp.toPx() }
+    var barsRevealed by rememberSaveable(run, archived) { mutableStateOf(true) }
+    val controlsOpen = filters.searchOpen || filters.optionsOpen || bubble || full
+    val barsVisible = barsRevealed || controlsOpen
+    SideEffect { nav(barsVisible) }
+    val density = LocalDensity.current
+    val threshold = with(density) { 34.dp.toPx() }
     val scroll =
         remember(threshold) {
             object : NestedScrollConnection {
@@ -149,16 +155,29 @@ internal fun NewsScreen(
                     if (movement * delta < 0) movement = 0f
                     movement += delta
                     if (kotlin.math.abs(movement) >= threshold) {
-                        selectedNav(movement > 0)
+                        barsRevealed = movement > 0
                         movement = 0f
                     }
                     return Offset.Zero
+                }
+
+                override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                    movement = 0f
+                    return Velocity.Zero
                 }
             }
         }
     LaunchedEffect(state) {
         snapshotFlow { state.firstVisibleItemIndex == 0 && state.firstVisibleItemScrollOffset == 0 }
-            .collect { if (it) selectedNav(true) }
+            .collect { if (it) barsRevealed = true }
+    }
+    LaunchedEffect(controlsOpen) { if (controlsOpen) barsRevealed = true }
+    var headerHeight by remember { mutableStateOf(62.dp) }
+    val movingBorder = rememberUnreadBorderClock {
+        !full && !blocked && state.layoutInfo.visibleItemsInfo.any { visible ->
+            val key = visible.key as? String ?: return@any false
+            key.startsWith("story:") && flags[key.removePrefix("story:")]?.read != true
+        }
     }
     val layer = androidx.compose.ui.graphics.rememberGraphicsLayer()
     val scene = remember(layer) { GlassScene(layer) }
@@ -168,234 +187,236 @@ internal fun NewsScreen(
                 WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
             )
             .imePadding()
+            .clip(androidx.compose.ui.graphics.RectangleShape)
     ) {
         val fontScale = androidx.compose.ui.platform.LocalDensity.current.fontScale
         val columns = if (maxWidth / fontScale < 295.dp) 1 else 2
         val controlsHeight = maxHeight * .45f
-        Column(
-            Modifier.fillMaxSize()
-                .then(
-                    if (article != null) Modifier.blur(3.dp).clearAndSetSemantics {} else Modifier
-                )
-        ) {
-            val title = ui(if (archived) R.string.archive else R.string.feed)
-            Row(
-                Modifier.fillMaxWidth()
-                    .padding(start = 16.dp, end = 12.dp, top = 5.dp, bottom = 5.dp),
-                verticalAlignment = Alignment.CenterVertically,
+        Box(Modifier.fillMaxSize().then(
+            if (article != null) Modifier.blur(3.dp).clearAndSetSemantics {} else Modifier
+        )) {
+            Box(
+                Modifier.fillMaxSize()
+                    .recordScene(scene)
+                    .then(if (bubble) Modifier.blur(3.dp).clearAndSetSemantics {} else Modifier)
             ) {
-                if (archived || full)
-                    GlassIconAction(Icons.AutoMirrored.Filled.ArrowBack, ui(R.string.ui_back)) {
-                        if (full) full = false else back()
+                if (full && loaded) {
+                    val blocks = remember(panel.markdown) { markdownBlocks(panel.markdown) }
+                    LazyColumn(
+                        contentPadding =
+                            PaddingValues(
+                                start = 18.dp,
+                                end = 18.dp,
+                                top = headerHeight + 6.dp,
+                                bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
+                                    LocalNavigationClearance.current,
+                            )
+                    ) {
+                        items(blocks.size) { i -> MarkdownBlock(blocks[i]) }
                     }
-                val date = issue?.let { shortDigestDate(digestTime(it)) }.orEmpty()
-                Text(
-                    buildAnnotatedString {
-                        append(title)
-                        if (date.isNotBlank())
-                            withStyle(
-                                SpanStyle(
-                                    fontWeight = FontWeight.Light,
-                                    color = p.muted,
-                                    fontSize = 27.sp,
-                                )
-                            ) {
-                                append(" " + date)
+                } else {
+                    LazyVerticalStaggeredGrid(
+                        StaggeredGridCells.Fixed(columns),
+                        state = state,
+                        modifier = Modifier.fillMaxSize().nestedScroll(scroll),
+                        contentPadding =
+                            PaddingValues(
+                                start = 12.dp,
+                                end = 12.dp,
+                                top = headerHeight + 4.dp,
+                                bottom =
+                                    WindowInsets.navigationBars
+                                        .asPaddingValues()
+                                        .calculateBottomPadding() + (if (archived) 12.dp else LocalNavigationClearance.current),
+                            ),
+                        verticalItemSpacing = 9.dp,
+                        horizontalArrangement = Arrangement.spacedBy(9.dp),
+                    ) {
+                        if (preparing || panel.syncing && !loaded)
+                            item("progress", span = StaggeredGridItemSpan.FullLine) {
+                                Column {
+                                    Text(status, style = MaterialTheme.typography.labelLarge)
+                                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                                }
                             }
-                    },
-                    Modifier.weight(1f)
-                        .clickable(role = Role.Button) { bubble = !bubble }
-                        .heightIn(min = 48.dp)
-                        .padding(vertical = 5.dp),
-                    style = MaterialTheme.typography.displaySmall,
-                )
-                if (!bubble && !full) NewsToolbar(filters, loaded)
+                        if (!loaded || shown.isEmpty())
+                            item("empty", span = StaggeredGridItemSpan.FullLine) {
+                                Tile {
+                                    Text(
+                                        if (loaded)
+                                            ui(
+                                                if (panel.total == 0)
+                                                    R.string
+                                                        .ui_no_items_passed_the_horizon_filters
+                                                else
+                                                    R.string
+                                                        .ui_no_downloaded_articles_match_your_filters
+                                            )
+                                        else if (issue == null)
+                                            ui(R.string.ui_news_will_appear_here_after_horizon)
+                                        else status
+                                    )
+                                    TextButton(onClick = { bubble = true }) {
+                                        Text(ui(R.string.mr_details))
+                                    }
+                                }
+                            }
+                        if (loaded)
+                            items(
+                                shown.size,
+                                key = { "story:" + shown[it].getString("id") },
+                                contentType = { "story" },
+                            ) { index ->
+                                val item = shown[index]
+                                val id = item.getString("id")
+                                val flag = flags[id]
+                                PublicationTile(
+                                    item,
+                                    flag,
+                                    Modifier.semantics { traversalIndex = index.toFloat() },
+                                    artworkServer = panel.server?.id.orEmpty(),
+                                    movingBorder = movingBorder,
+                                    relay = model.coverRelay(panel, id),
+                                    open = {
+                                        openId = id
+                                        if (flag?.read != true) model.flag(item, read = true)
+                                    },
+                                ) {
+                                    model.flag(item, save = flag?.saved != true)
+                                }
+                            }
+                        if (incomplete && panel.problem.isNotEmpty())
+                            item("retry", span = StaggeredGridItemSpan.FullLine) {
+                                OutlinedButton(
+                                    onClick = { model.loadChronology(run, panel.language) }
+                                ) {
+                                    Text(ui(R.string.ui_retry))
+                                }
+                            }
+                    }
+                }
             }
-            if (!bubble && !full && loaded) {
-                PinnedNewsControls(filters, panel.articles, controlsHeight)
-            }
-            Box(Modifier.fillMaxSize()) {
+            if (bubble)
                 Box(
-                    Modifier.fillMaxSize()
-                        .recordScene(scene)
-                        .then(if (bubble) Modifier.blur(3.dp).clearAndSetSemantics {} else Modifier)
-                ) {
-                    if (full && loaded) {
-                        val blocks = remember(panel.markdown) { markdownBlocks(panel.markdown) }
-                        LazyColumn(
-                            contentPadding =
-                                PaddingValues(
-                                    start = 18.dp,
-                                    end = 18.dp,
-                                    top = 6.dp,
-                                    bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
-                                        LocalNavigationClearance.current,
-                                )
-                        ) {
-                            items(blocks.size) { i -> MarkdownBlock(blocks[i]) }
-                        }
-                    } else {
-                        LazyVerticalStaggeredGrid(
-                            StaggeredGridCells.Fixed(columns),
-                            state = state,
-                            modifier = Modifier.fillMaxSize().nestedScroll(scroll),
-                            contentPadding =
-                                PaddingValues(
-                                    start = 12.dp,
-                                    end = 12.dp,
-                                    top = 4.dp,
-                                    bottom =
-                                        WindowInsets.navigationBars
-                                            .asPaddingValues()
-                                            .calculateBottomPadding() + (if (archived) 12.dp else LocalNavigationClearance.current),
-                                ),
-                            verticalItemSpacing = 9.dp,
-                            horizontalArrangement = Arrangement.spacedBy(9.dp),
-                        ) {
-                            if (preparing || panel.syncing && !loaded)
-                                item("progress", span = StaggeredGridItemSpan.FullLine) {
-                                    Column {
-                                        Text(status, style = MaterialTheme.typography.labelLarge)
-                                        LinearProgressIndicator(Modifier.fillMaxWidth())
-                                    }
-                                }
-                            if (!loaded || shown.isEmpty())
-                                item("empty", span = StaggeredGridItemSpan.FullLine) {
-                                    Tile {
-                                        Text(
-                                            if (loaded)
-                                                ui(
-                                                    if (panel.total == 0)
-                                                        R.string
-                                                            .ui_no_items_passed_the_horizon_filters
-                                                    else
-                                                        R.string
-                                                            .ui_no_downloaded_articles_match_your_filters
-                                                )
-                                            else if (issue == null)
-                                                ui(R.string.ui_news_will_appear_here_after_horizon)
-                                            else status
-                                        )
-                                        TextButton(onClick = { bubble = true }) {
-                                            Text(ui(R.string.mr_details))
-                                        }
-                                    }
-                                }
-                            if (loaded)
-                                items(
-                                    shown.size,
-                                    key = { "story:" + shown[it].getString("id") },
-                                    contentType = { "story" },
-                                ) { index ->
-                                    val item = shown[index]
-                                    val id = item.getString("id")
-                                    val flag = flags[id]
-                                    PublicationTile(
-                                        item,
-                                        flag,
-                                        Modifier.semantics { traversalIndex = index.toFloat() },
-                                        artworkServer = panel.server?.id.orEmpty(),
-                                        relay = model.coverRelay(panel, id),
-                                        open = {
-                                            openId = id
-                                            if (flag?.read != true) model.flag(item, read = true)
-                                        },
-                                    ) {
-                                        model.flag(item, save = flag?.saved != true)
-                                    }
-                                }
-                            if (incomplete && panel.problem.isNotEmpty())
-                                item("retry", span = StaggeredGridItemSpan.FullLine) {
-                                    OutlinedButton(
-                                        onClick = { model.loadChronology(run, panel.language) }
-                                    ) {
-                                        Text(ui(R.string.ui_retry))
-                                    }
-                                }
-                        }
+                    Modifier.fillMaxSize().background(Color.Black.copy(alpha = .34f)).clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) {
+                        bubble = false
                     }
-                }
-                if (blocked)
-                    Box(
-                        Modifier.fillMaxSize().background(Color.Black.copy(alpha = .34f)).clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                        ) {
+                )
+            AnimatedVisibility(
+                bubble,
+                modifier = Modifier.padding(top = headerHeight),
+                enter =
+                    androidx.compose.animation.fadeIn() +
+                        androidx.compose.animation.expandVertically(),
+                exit =
+                    androidx.compose.animation.fadeOut() +
+                        androidx.compose.animation.shrinkVertically(),
+            ) {
+                CompositionLocalProvider(LocalGlassScene provides scene) {
+                    DigestBubble(
+                        issue,
+                        if (loaded) panel.total else null,
+                        status,
+                        preparing || panel.syncing,
+                        !panel.busy && !panel.syncing,
+                        { model.refresh() },
+                        loaded,
+                        {
                             bubble = false
-                        }
+                            full = true
+                        },
+                        archived,
+                        panel.jobs.none {
+                            it.optString("state") in setOf("running", "queued")
+                        } && !panel.busy,
+                        { model.submit() },
+                        {
+                            bubble = false
+                            model.archiveDigest(run)
+                        },
+                        loaded && issue?.has("output_language") == false &&
+                            issue.optJSONArray("languages")?.strings()?.contains(panel.preferredDigestLanguage()) == false,
+                        { model.translateDigest(run) },
+                        if (panel.archive.isEmpty()) ai else null,
+                        sources,
                     )
-                androidx.compose.animation.AnimatedVisibility(
-                    bubble,
-                    enter =
-                        androidx.compose.animation.fadeIn() +
-                            androidx.compose.animation.expandVertically(),
-                    exit =
-                        androidx.compose.animation.fadeOut() +
-                            androidx.compose.animation.shrinkVertically(),
-                ) {
-                    CompositionLocalProvider(LocalGlassScene provides scene) {
-                        DigestBubble(
-                            issue,
-                            if (loaded) panel.total else null,
-                            status,
-                            preparing || panel.syncing,
-                            !panel.busy && !panel.syncing,
-                            { model.refresh() },
-                            loaded,
-                            {
-                                bubble = false
-                                full = true
-                            },
-                            archived,
-                            panel.jobs.none {
-                                it.optString("state") in setOf("running", "queued")
-                            } && !panel.busy,
-                            { model.submit() },
-                            {
-                                bubble = false
-                                model.archiveDigest(run)
-                            },
-                            loaded && issue?.has("output_language") == false &&
-                                issue.optJSONArray("languages")?.strings()?.contains(panel.preferredDigestLanguage()) == false,
-                            { model.translateDigest(run) },
-                            if (panel.archive.isEmpty()) ai else null,
-                            sources,
-                        )
+                }
+            }
+        }
+        CompositionLocalProvider(LocalGlassScene provides scene) {
+            AnimatedVisibility(
+                barsVisible,
+                modifier = Modifier.align(Alignment.TopCenter),
+                enter = fadeIn(tween(navigationSlideMillis)) + slideInVertically(tween(navigationSlideMillis)) { -it },
+                exit = fadeOut(tween(navigationSlideMillis)) + slideOutVertically(tween(navigationSlideMillis)) { -it },
+            ) {
+                Column(Modifier.fillMaxWidth().onSizeChanged { size ->
+                    headerHeight = with(density) { size.height.toDp() }
+                }) {
+                    FloatingFeedHeader(issue, filters, loaded, archived, bubble, full, {
+                        if (full) full = false else back()
+                    }) { bubble = !bubble }
+                    if (!bubble && !full && loaded) {
+                        PinnedNewsControls(filters, panel.articles, controlsHeight)
                     }
                 }
             }
         }
-        AnimatedContent(
-            targetState = article,
-            modifier = Modifier.fillMaxSize(),
-            contentKey = { it?.optString("id") },
-            transitionSpec = {
-                (fadeIn(tween(180)) + scaleIn(tween(230), initialScale = .965f)) togetherWith
-                    (fadeOut(tween(125)) + scaleOut(tween(145), targetScale = .985f))
-            },
-            label = "open publication",
-        ) { selected ->
-            if (selected != null) {
-                val id = selected.getString("id")
-                val flag = flags[id]
-                val serverId = panel.server?.id.orEmpty()
-                val run = panel.selectedRun
-                val language = panel.language
-                ArticleDialog(
-                    selected, flag, { model.flag(selected, save = flag?.saved != true) },
-                    { model.flag(selected, read = flag?.read != true) },
-                    artworkServer = serverId,
-                    relay = model.coverRelay(panel, id),
-                    contextContent = {
-                        key(serverId, run, language, id) {
-                            ArticleContext(selected) { submit ->
-                                model.getArticleContext(serverId, run, id, language, submit)
-                            }
+        article?.let { selected ->
+            val id = selected.getString("id")
+            val flag = flags[id]
+            val serverId = panel.server?.id.orEmpty()
+            val run = panel.selectedRun
+            val language = panel.language
+            ArticleDialog(
+                selected, flag, { model.flag(selected, save = flag?.saved != true) },
+                { model.flag(selected, read = flag?.read != true) },
+                artworkServer = serverId,
+                relay = model.coverRelay(panel, id),
+                contextContent = {
+                    key(serverId, run, language, id) {
+                        ArticleContext(selected) { submit ->
+                            model.getArticleContext(serverId, run, id, language, submit)
                         }
-                    },
-                ) { openId = "" }
+                    }
+                },
+            ) { openId = "" }
+        }
+    }
+}
+
+@Composable
+private fun FloatingFeedHeader(issue: JSONObject?, filters: NewsFilters, loaded: Boolean,
+                               archived: Boolean, bubble: Boolean, full: Boolean,
+                               back: () -> Unit, toggleBubble: () -> Unit) {
+    val title = ui(if (archived) R.string.archive else R.string.feed)
+    val date = issue?.let { shortDigestDate(digestTime(it)) }.orEmpty()
+    Row(
+        Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 5.dp, bottom = 4.dp)
+            .navigationGlass(RoundedCornerShape(26.dp)).padding(start = 16.dp, end = 4.dp, top = 1.dp, bottom = 1.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (archived || full) {
+            IconButton(onClick = back, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, ui(R.string.ui_back), tint = Color.White)
             }
         }
+        Text(
+            buildAnnotatedString {
+                append(title)
+                if (date.isNotBlank()) withStyle(SpanStyle(
+                    fontWeight = FontWeight.Light, color = Color(0xFFC4C4C4), fontSize = 25.sp,
+                )) { append(" " + date) }
+            },
+            Modifier.weight(1f).clickable(role = Role.Button, onClick = toggleBubble)
+                .heightIn(min = 48.dp).wrapContentHeight(Alignment.CenterVertically).padding(vertical = 5.dp),
+            style = MaterialTheme.typography.displaySmall,
+            color = Color(0xFFF5F5F5),
+        )
+        if (!bubble && !full) NewsToolbar(filters, loaded)
     }
 }
 
@@ -539,6 +560,7 @@ internal fun PublicationTile(
     modifier: Modifier,
     artworkServer: String,
     relay: (suspend () -> ByteArray?)? = null,
+    movingBorder: State<Float>? = null,
     open: () -> Unit,
     save: () -> Unit,
 ) {
@@ -546,8 +568,15 @@ internal fun PublicationTile(
     val cover = artwork(artworkServer, article, relay)
     val photoHeight = 112.dp
     val shape = androidx.compose.foundation.shape.RoundedCornerShape(19.dp)
-    PublicationCover(cover, key, modifier.fillMaxWidth().clip(shape).clickable(role = Role.Button, onClick = open),
-        photoHeight = photoHeight) {
+    val unread = flag?.read != true
+    val borderAlpha = androidx.compose.animation.core.animateFloatAsState(
+        if (unread) 1f else 0f, tween(280), label = "Unread outline opacity",
+    )
+    val unreadLabel = ui(R.string.ui_unread)
+    PublicationCover(cover, key, modifier.fillMaxWidth().clip(shape)
+        .unreadOutline(shape, key, borderAlpha, movingBorder)
+        .semantics { if (unread) stateDescription = unreadLabel }
+        .clickable(role = Role.Button, onClick = open), photoHeight = photoHeight) {
         Column {
             Row(
                 Modifier.fillMaxWidth().padding(start = 9.dp, end = 1.dp),
