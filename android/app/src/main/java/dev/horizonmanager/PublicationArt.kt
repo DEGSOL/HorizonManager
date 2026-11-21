@@ -17,8 +17,9 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.scale
-import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -65,7 +66,12 @@ internal fun publicPhotoAddress(address: InetAddress): Boolean {
         !(b[0] == 32 && (b[1] == 2 || b[1] == 1 && (b[2] == 0 || b[2] == 13 && b[3] == 184)))
 }
 
-internal data class Cover(val image: ImageBitmap, val soft: ImageBitmap, val brightness: Float)
+internal data class Cover(
+    val image: ImageBitmap,
+    val soft: ImageBitmap,
+    val brightness: Float,
+    val luminance: CoverLuminance,
+)
 
 internal fun artworkKey(server: String, article: JSONObject) =
     contextHash(server + "\u0000" + articleField(article, "id").ifBlank { articleField(article, "url") })
@@ -337,7 +343,7 @@ internal fun decodeCover(bytes: ByteArray): Cover? {
         light += (.213 * r + .715 * g + .072 * b) / n / 255
     }
     val soft = Bitmap.createBitmap(output, w, h, Bitmap.Config.ARGB_8888)
-    return Cover(source.asImageBitmap(), soft.asImageBitmap(), (light / (w * h)).toFloat())
+    return Cover(source.asImageBitmap(), soft.asImageBitmap(), (light / (w * h)).toFloat(), CoverLuminance(w, h, input))
 }
 
 @Composable
@@ -421,14 +427,12 @@ internal fun PublicationCover(
     photoHeight: Dp? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val layer = rememberGraphicsLayer()
-    val scene = remember(layer) { GlassScene(layer) }
-    Box(modifier) {
-        val background = Modifier.matchParentSize()
-        CoverSurface(cover, seed,
-            if (Build.VERSION.SDK_INT >= 31) background.recordScene(scene) else background,
-            textHeight = textHeight, photoHeight = photoHeight)
-        CompositionLocalProvider(LocalGlassScene provides scene) { content() }
+    val placement = remember { CoverPlacement() }
+    val height = with(LocalDensity.current) { photoHeight?.toPx() }
+    val surface = remember(cover, height) { CoverActionSurface(placement, cover?.luminance, height) }
+    Box(modifier.onPlaced { placement.coordinates = it }) {
+        CoverSurface(cover, seed, Modifier.matchParentSize(), textHeight = textHeight, photoHeight = photoHeight)
+        CompositionLocalProvider(LocalCoverActionSurface provides surface, content = { content() })
     }
 }
 

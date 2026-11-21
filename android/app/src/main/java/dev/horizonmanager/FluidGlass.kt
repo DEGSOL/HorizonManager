@@ -76,24 +76,21 @@ internal fun Modifier.navigationGlass(shape: Shape): Modifier = composed {
         )), shape)
 }
 
-internal fun Modifier.frost(shape: Shape, active: Boolean = false, onPhoto: Boolean = false): Modifier = composed {
+internal fun Modifier.frost(shape: Shape): Modifier = composed {
     val palette = LocalHorizonPalette.current
     val hardwareBlur = backdropBlurAvailable
     glassBackdrop(shape, 13.dp)
         .background(
             Brush.verticalGradient(
                 listOf(
-                    if (onPhoto) Color.Black.copy(alpha = if (hardwareBlur) .52f else .66f)
-                    else (if (active) palette.tint else palette.elevated).copy(
-                        alpha = if (hardwareBlur) .55f else .85f
-                    ),
-                    if (onPhoto) Color.Black.copy(alpha = .70f) else palette.surface.copy(alpha = .78f),
+                    palette.elevated.copy(alpha = if (hardwareBlur) .55f else .85f),
+                    palette.surface.copy(alpha = .78f),
                 )
             )
         )
         .border(
             1.dp,
-            (if (active) palette.tint else Color.White).copy(alpha = if (active) .55f else .16f),
+            Color.White.copy(alpha = .16f),
             shape,
         )
 }

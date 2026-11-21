@@ -77,34 +77,30 @@ internal fun ArticleDialog(
                         Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        GlassIconAction(
+                        CoverIconAction(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             ui(R.string.ui_back),
-                            onPhoto = true,
                             onClick = close,
                         )
                         Spacer(Modifier.weight(1f))
                         if (isWeb(link))
-                            GlassIconAction(
+                            CoverIconAction(
                                 ImageVector.vectorResource(R.drawable.ic_external_link),
                                 ui(R.string.ui_original_source),
-                                onPhoto = true,
                             ) {
                                 runCatching { uri.openUri(link) }
                             }
                         val saved = flag?.saved == true
-                        GlassIconAction(
+                        CoverIconAction(
                             if (saved) Icons.Default.Star else ImageVector.vectorResource(R.drawable.ic_star_outline),
                             ui(if (saved) R.string.remove_from_favorites else R.string.add_to_favorites),
                             active = saved,
-                            onPhoto = true,
                             onClick = onSave,
                         )
                         Box {
-                            GlassIconAction(
+                            CoverIconAction(
                                 Icons.Default.MoreVert,
                                 ui(R.string.editorial_article_actions),
-                                onPhoto = true,
                             ) {
                                 actions = true
                             }
@@ -184,24 +180,10 @@ internal fun ArticleDialog(
                 else Markdown(body)
                 contextContent()
                 val media = article.optJSONObject("media")
-                if (media != null && isWeb(media.optString("source")) && cover != null) {
-                    TextButton(
-                        onClick = { runCatching { uri.openUri(media.getString("source")) } }
-                    ) {
-                        val kind =
-                            if (media.optString("kind") == "thematic") R.string.mr_themed
-                            else R.string.mr_art
-                        Text(
-                            listOf(
-                                    ui(kind),
-                                    articleField(media, "artist"),
-                                    articleField(media, "license"),
-                                )
-                                .filter(String::isNotBlank)
-                                .joinToString(" · "),
-                            color = theme.link,
-                        )
-                    }
+                if (media != null && cover != null) {
+                    val credit = listOf(articleField(media, "artist"), articleField(media, "license"))
+                        .filter(String::isNotBlank).joinToString(" · ")
+                    if (credit.isNotEmpty()) Text(credit, color = theme.muted, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -217,7 +199,7 @@ private fun ArticleModal(title: String, close: () -> Unit, content: @Composable 
         val window = (LocalView.current.parent as? DialogWindowProvider)?.window
         SideEffect { window?.setDimAmount(0f) }
         val dismissLabel = ui(R.string.ui_close)
-        Box(Modifier.fillMaxSize().semantics { paneTitle = title }) {
+        DialogNoticeSurface(Modifier.semantics { paneTitle = title }) {
             Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = .34f)).clickable(
                 interactionSource = remember { MutableInteractionSource() }, indication = null,
                 onClickLabel = dismissLabel, onClick = close,

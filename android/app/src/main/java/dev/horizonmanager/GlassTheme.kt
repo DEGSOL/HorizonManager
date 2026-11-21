@@ -34,8 +34,6 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -117,7 +115,7 @@ internal fun horizonFieldColors() = LocalHorizonPalette.current.let { palette ->
 
 @Composable
 internal fun GlassLayout(tabs: List<HorizonTab>, selection: Int, showTabs: Boolean, select: (Int) -> Unit,
-                         unread: Int, dimmed: Boolean = false, savedNotice: Boolean = false,
+                         unread: Int, dimmed: Boolean = false,
                          content: @Composable BoxScope.() -> Unit) {
     val palette = LocalHorizonPalette.current
     val sceneLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
@@ -133,16 +131,6 @@ internal fun GlassLayout(tabs: List<HorizonTab>, selection: Int, showTabs: Boole
             Box(Modifier.fillMaxSize().recordScene(scene), content = content)
         }
         CompositionLocalProvider(LocalGlassScene provides scene) {
-            AnimatedVisibility(savedNotice, modifier = Modifier.align(Alignment.BottomCenter)
-                .navigationBarsPadding().padding(bottom = if (showTabs) clearance else 14.dp, start = 18.dp, end = 18.dp),
-                enter = fadeIn(tween(170)) + slideInVertically(tween(190)) { it / 3 },
-                exit = fadeOut(tween(220)) + slideOutVertically(tween(220)) { it / 3 }) {
-                Box(Modifier.frost(MaterialTheme.shapes.large)
-                    .semantics { liveRegion = LiveRegionMode.Polite }
-                    .padding(horizontal = 22.dp, vertical = 12.dp)) {
-                    Text(ui(R.string.hovq_settings_saved), style = MaterialTheme.typography.labelLarge)
-                }
-            }
             AnimatedVisibility(showTabs, modifier = Modifier.align(Alignment.BottomCenter)
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
                 .padding(start = 16.dp, end = 16.dp, bottom = navigationBottomGap),
@@ -152,6 +140,7 @@ internal fun GlassLayout(tabs: List<HorizonTab>, selection: Int, showTabs: Boole
                     clearance = it + navigationBottomGap + 8.dp
                 }, select = select)
             }
+            GlassNoticeHost(Modifier.align(Alignment.TopCenter))
         }
     }
 }

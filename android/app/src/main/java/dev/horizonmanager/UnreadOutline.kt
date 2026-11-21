@@ -16,7 +16,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
@@ -44,10 +46,12 @@ internal fun rememberUnreadBorderClock(hasVisibleUnread: () -> Boolean): State<F
 
 internal fun Modifier.unreadOutline(shape: RoundedCornerShape, articleId: String, opacity: State<Float>,
                                     clock: State<Float>?): Modifier = drawWithCache {
-    val strokeWidth = .85.dp.toPx()
-    if (size.width <= strokeWidth || size.height <= strokeWidth) return@drawWithCache onDrawWithContent { drawContent() }
-    val inset = strokeWidth / 2
-    val inner = Size(size.width - strokeWidth, size.height - strokeWidth)
+    val strokeWidth = 1.45.dp.toPx()
+    val inset = 1.3.dp.toPx()
+    if (size.width <= inset * 2 || size.height <= inset * 2) {
+        return@drawWithCache onDrawWithContent { drawContent() }
+    }
+    val inner = Size(size.width - inset * 2, size.height - inset * 2)
     val corners = (shape.createOutline(inner, layoutDirection, this) as Outline.Rounded).roundRect
     val contour = Path().apply {
         addRoundRect(RoundRect(inset, inset, size.width - inset, size.height - inset,
@@ -57,12 +61,21 @@ internal fun Modifier.unreadOutline(shape: RoundedCornerShape, articleId: String
     val measure = PathMeasure().apply { setPath(contour, true) }
     val length = measure.length
     val stroke = Stroke(strokeWidth)
+    val shimmer = Brush.sweepGradient(listOf(
+        Color.White.copy(alpha = .34f), Color.White.copy(alpha = .16f), Color.White.copy(alpha = .27f),
+        Color.White.copy(alpha = .12f), Color.White.copy(alpha = .34f),
+    ))
     val segment = Path()
-    val segments = 16
-    val step = length * .15f / segments
-    val intensities = FloatArray(segments) { index ->
-        val ramp = sin(PI * (index + .5) / segments).toFloat()
-        .68f * ramp * ramp
+    val segments = 24
+    val step = length * .19f / segments
+    val weights = FloatArray(segments) { index ->
+        val t = (index + .5) / segments
+        val envelope = sin(PI * t).toFloat()
+        val detail = (.68 + .32 * sin(PI * (t * 3.5 + .14))).toFloat()
+        envelope * envelope * detail
+    }
+    val strokes = Array(segments) { index ->
+        Stroke(width = (1.25f + 2.1f * weights[index]).dp.toPx(), cap = StrokeCap.Round)
     }
     val phase = (articleId.hashCode().ushr(1) % 997) / 997f
 
@@ -70,16 +83,16 @@ internal fun Modifier.unreadOutline(shape: RoundedCornerShape, articleId: String
         drawContent()
         val alpha = opacity.value
         if (alpha <= 0f || length <= 0f) return@onDrawWithContent
-        drawPath(contour, Color.White, alpha = .28f * alpha, style = stroke)
+        drawPath(contour, shimmer, alpha = alpha, style = stroke)
         val time = clock?.value ?: return@onDrawWithContent
         val head = (time + phase).mod(1f) * length
         for (index in 0 until segments) {
             val start = (head + index * step) % length
-            val end = start + step + strokeWidth * .2f
+            val end = start + step
             segment.rewind()
             measure.getSegment(start, end.coerceAtMost(length), segment, true)
             if (end > length) measure.getSegment(0f, end - length, segment, true)
-            drawPath(segment, Color.White, alpha = intensities[index] * alpha, style = stroke)
+            drawPath(segment, Color.White, alpha = .92f * weights[index] * alpha, style = strokes[index])
         }
     }
 }

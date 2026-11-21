@@ -85,10 +85,13 @@ class MainActivity : ComponentActivity() {
                 onDispose { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
             }
             HorizonTheme(preset) {
-                HovqLinks {
-                    Manager(viewModel(), notificationServer, { notificationServer = "" }, preset) {
-                        preset = it
-                        preferences.edit().putString("preset", it.id).apply()
+                val notices = remember { NoticeQueue() }
+                CompositionLocalProvider(LocalNoticeQueue provides notices) {
+                    HovqLinks {
+                        Manager(viewModel(), notificationServer, { notificationServer = "" }, preset) {
+                            preset = it
+                            preferences.edit().putString("preset", it.id).apply()
+                        }
                     }
                 }
             }
@@ -147,7 +150,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         readingPrefs.registerOnSharedPreferenceChangeListener(listener)
         onDispose { readingPrefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
-    var savedNotice by remember { mutableStateOf(false) }
+    val notices = requireNotNull(LocalNoticeQueue.current).messages
     var localSave by remember { mutableIntStateOf(0) }
     val remoteSave by model.settingsSaved.collectAsStateWithLifecycle()
     var lastSave by remember { mutableIntStateOf(remoteSave) }
@@ -155,9 +158,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         if (remoteSave == lastSave && localSave == 0) return@LaunchedEffect
         lastSave = remoteSave
         launcherIcon = LauncherAppearance.current(ctx)
-        savedNotice = true
-        delay(2800)
-        savedNotice = false
+        notices.showSnackbar(ui(R.string.hovq_settings_saved))
     }
     var archiveIssue by rememberSaveable(currentServer?.id) { mutableStateOf("") }
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current
@@ -220,10 +221,9 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     var confirm by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
     var fileAction by rememberSaveable { mutableStateOf("") }
     var restoreFile by remember { mutableStateOf("") }
-    val errors = remember { SnackbarHostState() }
     LaunchedEffect(panel.userProblem) {
         val problem = panel.userProblem.takeIf(String::isNotEmpty) ?: return@LaunchedEffect
-        errors.showSnackbar(errorText(problem), duration = SnackbarDuration.Long)
+        notices.showSnackbar(errorText(problem), duration = SnackbarDuration.Long)
         model.consumeProblem(problem)
     }
     var backupDialog by remember { mutableStateOf("") }
@@ -237,7 +237,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                     ctx.contentResolver.openOutputStream(uri, "wt")?.use { it.write(content.toByteArray()) } ?: error("output")
                 }.isSuccess
             }
-            if (!saved) errors.showSnackbar(ui(R.string.ui_could_not_write_the_file))
+            if (!saved) notices.showSnackbar(ui(R.string.ui_could_not_write_the_file))
         }
     }
     val input = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -256,7 +256,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
             } catch (error: kotlinx.coroutines.CancellationException) {
                 throw error
             } catch (_: Exception) {
-                errors.showSnackbar(ui(R.string.ui_the_file_is_damaged_too_large))
+                notices.showSnackbar(ui(R.string.ui_the_file_is_damaged_too_large))
             }
         }
     }
@@ -361,7 +361,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     }
 
     val showTabs = panel.ready && !canGoBack && (tab != FEED || navVisible)
-    GlassLayout(tabs, tab, showTabs, unread = unread, dimmed = overlay, savedNotice = savedNotice, select = { chosen ->
+    GlassLayout(tabs, tab, showTabs, unread = unread, dimmed = overlay, select = { chosen ->
         if (chosen != tab || configPage.isNotEmpty() || openedIssue != null) {
             previousTab = tab
             tab = chosen
@@ -489,7 +489,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                                     runCatching { choice.apply(ctx) }.onSuccess {
                                         launcherIcon = choice
                                         localSave++
-                                    }.onFailure { scope.launch { errors.showSnackbar(ui(R.string.hovq_icon_error)) } }
+                                    }.onFailure { scope.launch { notices.showSnackbar(ui(R.string.hovq_icon_error)) } }
                                 }
                             }
                             "setup", "ssh" -> Setup(panel, model, forceEdit = screen.page == "ssh")
@@ -528,11 +528,6 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                     }
                 }
             }
-        }
-        SnackbarHost(errors, modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 8.dp)) { data ->
-            val theme = LocalHorizonPalette.current
-            Snackbar(data, containerColor = theme.panel(0.40f), contentColor = theme.text)
         }
     }
 }

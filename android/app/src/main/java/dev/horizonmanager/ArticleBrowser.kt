@@ -9,7 +9,6 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.Toast
 import androidx.browser.customtabs.CustomTabsClient
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.background
@@ -31,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.launch
 
 internal fun linkUri(value: String): Uri? {
     val url = value.trim()
@@ -47,13 +47,21 @@ internal fun linkUri(value: String): Uri? {
 internal fun HovqLinks(content: @Composable () -> Unit) {
     val context = LocalContext.current
     var fallback by rememberSaveable { mutableStateOf<String?>(null) }
-    val handler = remember(context) {
+    val notices = LocalNoticeQueue.current?.messages
+    val noticeScope = rememberCoroutineScope()
+    val showMissingHandler = remember(notices, noticeScope) {
+        {
+            noticeScope.launch { notices?.showSnackbar(ui(R.string.browser_no_handler)) }
+            Unit
+        }
+    }
+    val handler = remember(context, showMissingHandler) {
         object : UriHandler {
             override fun openUri(uri: String) {
                 val target = linkUri(uri) ?: return
                 when (target.scheme) {
-                    "mailto" -> context.tryOpen(Intent(Intent.ACTION_SENDTO, target))
-                    "tel" -> context.tryOpen(Intent(Intent.ACTION_DIAL, target))
+                    "mailto" -> context.tryOpen(Intent(Intent.ACTION_SENDTO, target), showMissingHandler)
+                    "tel" -> context.tryOpen(Intent(Intent.ACTION_DIAL, target), showMissingHandler)
                     else -> if (!openCustomTab(context, target)) fallback = target.toString()
                 }
             }
@@ -63,7 +71,7 @@ internal fun HovqLinks(content: @Composable () -> Unit) {
         Box(Modifier.fillMaxSize().then(if (fallback != null) Modifier.clearAndSetSemantics {} else Modifier)) {
             CompositionLocalProvider(LocalUriHandler provides handler, content = content)
         }
-        fallback?.let { address -> WebBrowser(address) { fallback = null } }
+        fallback?.let { address -> WebBrowser(address, showMissingHandler) { fallback = null } }
     }
 }
 
@@ -84,16 +92,18 @@ private fun openCustomTab(context: Context, uri: Uri): Boolean {
     }
 }
 
-private fun Context.tryOpen(intent: Intent) {
+private fun Context.tryOpen(intent: Intent, onUnavailable: () -> Unit) {
     try {
         startActivity(intent)
     } catch (_: ActivityNotFoundException) {
-        Toast.makeText(this, ui(R.string.browser_no_handler), Toast.LENGTH_SHORT).show()
+        onUnavailable()
+    } catch (_: SecurityException) {
+        onUnavailable()
     }
 }
 
 @Composable
-private fun WebBrowser(initial: String, close: () -> Unit) {
+private fun WebBrowser(initial: String, onUnavailable: () -> Unit, close: () -> Unit) {
     val context = LocalContext.current
     var webView by remember { mutableStateOf<WebView?>(null) }
     var current by rememberSaveable(initial) { mutableStateOf(initial) }
@@ -105,45 +115,49 @@ private fun WebBrowser(initial: String, close: () -> Unit) {
     Dialog(onDismissRequest = back, properties = DialogProperties(
         dismissOnClickOutside = false, usePlatformDefaultWidth = false, decorFitsSystemWindows = false,
     )) {
-        Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).editorialInsets()) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                GlassIconAction(Icons.AutoMirrored.Filled.ArrowBack, ui(R.string.ui_back), onClick = back)
-                Text(current, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodySmall)
-                Box {
-                    GlassIconAction(Icons.Default.MoreVert, ui(R.string.browser_actions)) { menu = true }
-                    DropdownMenu(menu, { menu = false }) {
-                        DropdownMenuItem(text = { Text(ui(R.string.browser_open_external)) }, onClick = {
-                            menu = false
-                            linkUri(current)?.let { context.tryOpen(Intent(Intent.ACTION_VIEW, it).addCategory(Intent.CATEGORY_BROWSABLE)) }
-                        })
+        DialogNoticeSurface {
+            Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).editorialInsets()) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    GlassIconAction(Icons.AutoMirrored.Filled.ArrowBack, ui(R.string.ui_back), onClick = back)
+                    Text(current, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodySmall)
+                    Box {
+                        GlassIconAction(Icons.Default.MoreVert, ui(R.string.browser_actions)) { menu = true }
+                        DropdownMenu(menu, { menu = false }) {
+                            DropdownMenuItem(text = { Text(ui(R.string.browser_open_external)) }, onClick = {
+                                menu = false
+                                linkUri(current)?.let {
+                                    context.tryOpen(Intent(Intent.ACTION_VIEW, it).addCategory(Intent.CATEGORY_BROWSABLE), onUnavailable)
+                                }
+                            })
+                        }
                     }
                 }
-            }
-            AndroidView(
-                factory = { host ->
-                    WebView(host).apply {
-                        settings.allowFileAccess = false
-                        settings.allowContentAccess = false
-                        settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                        settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = true
-                        webViewClient = object : WebViewClient() {
-                            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
-                                !isWeb(request.url.toString())
+                AndroidView(
+                    factory = { host ->
+                        WebView(host).apply {
+                            settings.allowFileAccess = false
+                            settings.allowContentAccess = false
+                            settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                            settings.javaScriptEnabled = true
+                            settings.domStorageEnabled = true
+                            webViewClient = object : WebViewClient() {
+                                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
+                                    !isWeb(request.url.toString())
 
-                            override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
-                                if (isWeb(url)) current = url
+                                override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+                                    if (isWeb(url)) current = url
+                                }
                             }
+                            webView = this
+                            loadUrl(current)
                         }
-                        webView = this
-                        loadUrl(current)
-                    }
-                },
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                onReset = null,
-                onRelease = { it.destroy() },
-            )
+                    },
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    onReset = null,
+                    onRelease = { it.destroy() },
+                )
+            }
         }
     }
 }

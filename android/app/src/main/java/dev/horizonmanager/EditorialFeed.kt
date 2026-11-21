@@ -353,12 +353,12 @@ internal fun NewsScreen(
                 enter = fadeIn(tween(navigationSlideMillis)) + slideInVertically(tween(navigationSlideMillis)) { -it },
                 exit = fadeOut(tween(navigationSlideMillis)) + slideOutVertically(tween(navigationSlideMillis)) { -it },
             ) {
-                Column(Modifier.fillMaxWidth().onSizeChanged { size ->
-                    headerHeight = with(density) { size.height.toDp() }
-                }) {
-                    FloatingFeedHeader(issue, filters, loaded, archived, bubble, full, {
-                        if (full) full = false else back()
-                    }) { bubble = !bubble }
+                Column(Modifier.fillMaxWidth()) {
+                    FloatingFeedHeader(issue, filters, loaded, archived, bubble, full,
+                        Modifier.onSizeChanged { size -> headerHeight = with(density) { size.height.toDp() } },
+                        back = { if (full) full = false else back() },
+                        toggleBubble = { bubble = !bubble },
+                    )
                     if (!bubble && !full && loaded) {
                         PinnedNewsControls(filters, panel.articles, controlsHeight)
                     }
@@ -391,12 +391,12 @@ internal fun NewsScreen(
 @Composable
 private fun FloatingFeedHeader(issue: JSONObject?, filters: NewsFilters, loaded: Boolean,
                                archived: Boolean, bubble: Boolean, full: Boolean,
-                               back: () -> Unit, toggleBubble: () -> Unit) {
+                               modifier: Modifier, back: () -> Unit, toggleBubble: () -> Unit) {
     val title = ui(if (archived) R.string.archive else R.string.feed)
     val date = issue?.let { shortDigestDate(digestTime(it)) }.orEmpty()
     Row(
-        Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 5.dp, bottom = 4.dp)
-            .navigationGlass(RoundedCornerShape(26.dp)).padding(start = 16.dp, end = 4.dp, top = 1.dp, bottom = 1.dp),
+        modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 5.dp, bottom = 4.dp)
+            .navigationGlass(feedGlassShape).padding(start = 16.dp, end = 4.dp, top = 1.dp, bottom = 1.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (archived || full) {
@@ -567,7 +567,7 @@ internal fun PublicationTile(
     val key = article.optString("id")
     val cover = artwork(artworkServer, article, relay)
     val photoHeight = 112.dp
-    val shape = androidx.compose.foundation.shape.RoundedCornerShape(19.dp)
+    val shape = RoundedCornerShape(19.dp)
     val unread = flag?.read != true
     val borderAlpha = androidx.compose.animation.core.animateFloatAsState(
         if (unread) 1f else 0f, tween(280), label = "Unread outline opacity",
@@ -602,7 +602,7 @@ internal fun PublicationTile(
                     )
                 else Spacer(Modifier.weight(1f))
                 val haptic = LocalHapticFeedback.current
-                GlassIconAction(
+                CoverIconAction(
                     if (flag?.saved == true) Icons.Default.Star
                     else ImageVector.vectorResource(R.drawable.ic_star_outline),
                     ui(
@@ -610,7 +610,6 @@ internal fun PublicationTile(
                         else R.string.add_to_favorites
                     ),
                     active = flag?.saved == true,
-                    onPhoto = true,
                 ) {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     save()

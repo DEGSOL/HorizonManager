@@ -1,10 +1,23 @@
 package dev.horizonmanager
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
 
 class EditorialBehaviorTest {
+    @Test
+    fun coverActionsUseLocalContrastAfterTheCenterCrop() {
+        val lightAndDark = IntArray(40 * 20) { index ->
+            if (index % 40 < 20) 0xfffafafa.toInt() else 0xff151515.toInt()
+        }
+        val artwork = CoverLuminance(40, 20, lightAndDark)
+        val frame = Size(100f, 100f)
+        assertTrue(artwork.prefersBlack(frame, Offset(20f, 50f), 24f))
+        assertFalse(artwork.prefersBlack(frame, Offset(80f, 50f), 24f))
+    }
+
     @Test
     fun unreadBadgeHidesZeroAndCapsItsVisibleNumber() {
         assertEquals(listOf(null, "1", "9", "12", "99", "99+", "99+"),

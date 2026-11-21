@@ -9,6 +9,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -77,22 +78,18 @@ internal fun orderArticles(articles: List<JSONObject>, order: NewsOrder): List<J
 
 @Composable
 internal fun GlassIconAction(icon: ImageVector, description: String, enabled: Boolean = true,
-                            active: Boolean? = null, onPhoto: Boolean = false, onClick: () -> Unit) {
+                            active: Boolean? = null, onClick: () -> Unit) {
     val palette = LocalHorizonPalette.current
     val indicator by animateColorAsState(if (active == true) palette.tint.copy(alpha = 0.27f) else Color.Transparent,
         tween(180), label = "icon highlight")
     val tint by animateColorAsState(when {
         !enabled -> palette.muted.copy(alpha = 0.53f)
         active == true -> palette.link
-        onPhoto -> Color.White
         else -> palette.text
     }, tween(180), label = "icon tint")
     val glyph: @Composable () -> Unit = {
         Icon(icon, description,
-            Modifier.size(36.dp).then(
-                if (onPhoto) Modifier.frost(CircleShape, active = active == true, onPhoto = true)
-                else Modifier.background(indicator, CircleShape)
-            ).padding(8.dp),
+            Modifier.size(36.dp).background(indicator, CircleShape).padding(8.dp),
             tint = tint)
     }
     if (active != null) IconToggleButton(active, { onClick() }, Modifier.size(48.dp), enabled, content = glyph)
@@ -130,25 +127,56 @@ private fun FeedToolbarButton(icon: ImageVector, description: String, enabled: B
     }
 }
 
+internal val feedGlassShape = RoundedCornerShape(26.dp)
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun PinnedNewsControls(filters: NewsFilters, articles: List<JSONObject>, maxHeight: Dp) {
     val scopes = listOf(NewsScope.All to R.string.ui_all, NewsScope.Unread to R.string.ui_unread, NewsScope.Saved to R.string.ui_saved)
     Reveal(filters.searchOpen) {
-        OutlinedTextField(value = filters.query, onValueChange = { filters.query = it },
-            modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 10.dp),
-            label = { Text(ui(R.string.ui_search_downloaded_articles)) }, singleLine = true, colors = horizonFieldColors(),
+        TextField(
+            value = filters.query,
+            onValueChange = { filters.query = it },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp)
+                .navigationGlass(feedGlassShape),
+            label = { Text(ui(R.string.ui_search_downloaded_articles)) },
+            singleLine = true,
+            shape = feedGlassShape,
+            colors = TextFieldDefaults.colors(
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                focusedLabelColor = Color.White,
+                unfocusedLabelColor = Color(0xFFC4C4C4),
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                cursorColor = Color.White,
+            ),
             trailingIcon = if (filters.query.isEmpty()) null else ({
-                GlassIconAction(Icons.Default.Close, ui(R.string.clear_search)) { filters.query = "" }
-            }))
+                IconButton(onClick = { filters.query = "" }) {
+                    Icon(Icons.Default.Close, ui(R.string.clear_search), tint = Color.White)
+                }
+            }),
+        )
     }
     Reveal(filters.optionsOpen) {
         Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
-            .glassPanel(MaterialTheme.shapes.large, raised = true)
-            .heightIn(max = maxHeight).verticalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
+            .navigationGlass(feedGlassShape)
+            .heightIn(max = maxHeight).verticalScroll(rememberScrollState())
+            .padding(horizontal = 14.dp, vertical = 8.dp)) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 scopes.forEach { (mode, title) ->
-                    FilterChip(selected = filters.scope == mode, onClick = { filters.scope = mode }, label = { Text(ui(title)) })
+                    FilterChip(
+                        selected = filters.scope == mode,
+                        onClick = { filters.scope = mode },
+                        label = { Text(ui(title)) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            labelColor = Color(0xFFD6D6D6),
+                            selectedLabelColor = Color.White,
+                            selectedContainerColor = Color(0xFF414141),
+                        ),
+                    )
                 }
             }
             val hasScore = remember(articles) { articles.any { it.optDouble("score").isFinite() } }
