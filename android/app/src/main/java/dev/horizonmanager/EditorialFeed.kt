@@ -48,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Velocity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.Instant
@@ -67,7 +68,7 @@ internal fun NewsScreen(
     sources: () -> Unit,
     back: () -> Unit,
     nav: (Boolean) -> Unit,
-    focus: (Boolean) -> Unit,
+    focus: (ReadingOverlay) -> Unit,
 ) {
     val run = issue?.optString("id").orEmpty()
     val loaded = run.isNotEmpty() && panel.selectedRun == run && panel.markdown.isNotEmpty()
@@ -80,10 +81,16 @@ internal fun NewsScreen(
             panel.articles.find { loaded && it.optString("id") == openId }
         }
     val blocked = bubble || article != null
-    SideEffect { focus(blocked) }
+    SideEffect {
+        focus(when {
+            article != null -> ReadingOverlay.Article
+            bubble -> ReadingOverlay.Digest
+            else -> ReadingOverlay.None
+        })
+    }
     DisposableEffect(Unit) {
         onDispose {
-            focus(false)
+            focus(ReadingOverlay.None)
             nav(true)
         }
     }
@@ -142,7 +149,7 @@ internal fun NewsScreen(
     val density = LocalDensity.current
     val threshold = with(density) { 34.dp.toPx() }
     val scroll =
-        remember(threshold) {
+        remember(run, archived, threshold) {
             object : NestedScrollConnection {
                 var movement = 0f
 
@@ -167,8 +174,8 @@ internal fun NewsScreen(
                 }
             }
         }
-    LaunchedEffect(state) {
-        snapshotFlow { state.firstVisibleItemIndex == 0 && state.firstVisibleItemScrollOffset == 0 }
+    LaunchedEffect(state, run) {
+        snapshotFlow { !state.canScrollBackward }
             .collect { if (it) barsRevealed = true }
     }
     LaunchedEffect(controlsOpen) { if (controlsOpen) barsRevealed = true }
@@ -181,19 +188,20 @@ internal fun NewsScreen(
     }
     val layer = androidx.compose.ui.graphics.rememberGraphicsLayer()
     val scene = remember(layer) { GlassScene(layer) }
+    val topInset = WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding()
     BoxWithConstraints(
         Modifier.fillMaxSize()
             .windowInsetsPadding(
-                WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
+                WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
             )
             .imePadding()
             .clip(androidx.compose.ui.graphics.RectangleShape)
     ) {
         val fontScale = androidx.compose.ui.platform.LocalDensity.current.fontScale
         val columns = if (maxWidth / fontScale < 295.dp) 1 else 2
-        val controlsHeight = maxHeight * .45f
+        val controlsHeight = (maxHeight - topInset).coerceAtLeast(0.dp) * .45f
         Box(Modifier.fillMaxSize().then(
-            if (article != null) Modifier.blur(3.dp).clearAndSetSemantics {} else Modifier
+            if (article != null) Modifier.clearAndSetSemantics {} else Modifier
         )) {
             Box(
                 Modifier.fillMaxSize()
@@ -207,7 +215,7 @@ internal fun NewsScreen(
                             PaddingValues(
                                 start = 18.dp,
                                 end = 18.dp,
-                                top = headerHeight + 6.dp,
+                                top = topInset + headerHeight + 6.dp,
                                 bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
                                     LocalNavigationClearance.current,
                             )
@@ -223,7 +231,7 @@ internal fun NewsScreen(
                             PaddingValues(
                                 start = 12.dp,
                                 end = 12.dp,
-                                top = headerHeight + 4.dp,
+                                top = topInset + headerHeight + 4.dp,
                                 bottom =
                                     WindowInsets.navigationBars
                                         .asPaddingValues()
@@ -307,7 +315,7 @@ internal fun NewsScreen(
                 )
             AnimatedVisibility(
                 bubble,
-                modifier = Modifier.padding(top = headerHeight),
+                modifier = Modifier.padding(top = topInset + headerHeight),
                 enter =
                     androidx.compose.animation.fadeIn() +
                         androidx.compose.animation.expandVertically(),
@@ -349,7 +357,7 @@ internal fun NewsScreen(
         CompositionLocalProvider(LocalGlassScene provides scene) {
             AnimatedVisibility(
                 barsVisible,
-                modifier = Modifier.align(Alignment.TopCenter),
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = topInset),
                 enter = fadeIn(tween(navigationSlideMillis)) + slideInVertically(tween(navigationSlideMillis)) { -it },
                 exit = fadeOut(tween(navigationSlideMillis)) + slideOutVertically(tween(navigationSlideMillis)) { -it },
             ) {
@@ -394,6 +402,7 @@ private fun FloatingFeedHeader(issue: JSONObject?, filters: NewsFilters, loaded:
                                modifier: Modifier, back: () -> Unit, toggleBubble: () -> Unit) {
     val title = ui(if (archived) R.string.archive else R.string.feed)
     val date = issue?.let { shortDigestDate(digestTime(it)) }.orEmpty()
+    val palette = LocalHorizonPalette.current
     Row(
         modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 5.dp, bottom = 4.dp)
             .navigationGlass(feedGlassShape).padding(start = 16.dp, end = 4.dp, top = 1.dp, bottom = 1.dp),
@@ -401,20 +410,20 @@ private fun FloatingFeedHeader(issue: JSONObject?, filters: NewsFilters, loaded:
     ) {
         if (archived || full) {
             IconButton(onClick = back, modifier = Modifier.size(48.dp)) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, ui(R.string.ui_back), tint = Color.White)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, ui(R.string.ui_back), tint = palette.text)
             }
         }
         Text(
             buildAnnotatedString {
                 append(title)
                 if (date.isNotBlank()) withStyle(SpanStyle(
-                    fontWeight = FontWeight.Light, color = Color(0xFFC4C4C4), fontSize = 25.sp,
+                    fontWeight = FontWeight.Light, color = palette.muted, fontSize = 25.sp,
                 )) { append(" " + date) }
             },
             Modifier.weight(1f).clickable(role = Role.Button, onClick = toggleBubble)
                 .heightIn(min = 48.dp).wrapContentHeight(Alignment.CenterVertically).padding(vertical = 5.dp),
             style = MaterialTheme.typography.displaySmall,
-            color = Color(0xFFF5F5F5),
+            color = palette.text,
         )
         if (!bubble && !full) NewsToolbar(filters, loaded)
     }
@@ -452,7 +461,7 @@ internal fun DigestBubble(
         Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
             .widthIn(max = 455.dp)
             .fillMaxWidth()
-            .frost(MaterialTheme.shapes.medium)
+            .navigationGlass(MaterialTheme.shapes.medium)
             .pointerInput(Unit) { detectTapGestures { } }
             .semantics { paneTitle = ui(R.string.mr_details) }
             .padding(start = 14.dp, end = 6.dp, top = 9.dp, bottom = 9.dp)
@@ -689,8 +698,8 @@ internal fun ArchiveScreen(
     issues: List<JSONObject>,
     panel: Panel,
     model: ManagerModel,
+    top: Dp,
     open: (JSONObject) -> Unit,
-    header: @Composable () -> Unit,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val local by
@@ -732,12 +741,11 @@ internal fun ArchiveScreen(
         }
     val theme = LocalHorizonPalette.current
     LazyColumn(
-        Modifier.fillMaxSize().editorialInsets(),
+        Modifier.fillMaxSize().editorialSideBottomInsets(),
         state = rememberLazyListState(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 90.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = top, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        item("header") { header() }
         item("summary") {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
@@ -846,3 +854,7 @@ internal fun Modifier.editorialInsets(): Modifier =
             WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
         )
         .navigationBarsPadding()
+
+@Composable
+internal fun Modifier.editorialSideBottomInsets(): Modifier =
+    windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))

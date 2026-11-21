@@ -116,14 +116,15 @@ internal fun NewsToolbar(filters: NewsFilters, enabled: Boolean) {
 @Composable
 private fun FeedToolbarButton(icon: ImageVector, description: String, enabled: Boolean,
                               active: Boolean, toggle: () -> Unit) {
+    val palette = LocalHorizonPalette.current
     Box(
         Modifier.size(48.dp).toggleable(active, enabled = enabled, role = Role.Button,
-            interactionSource = null, indication = ripple(bounded = false, radius = 21.dp, color = Color.White),
+            interactionSource = null, indication = ripple(bounded = false, radius = 21.dp, color = palette.text),
             onValueChange = { toggle() }),
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, description, Modifier.size(22.dp),
-            tint = Color.White.copy(alpha = if (!enabled) .40f else if (active) 1f else .76f))
+            tint = palette.text.copy(alpha = if (!enabled) .40f else if (active) 1f else .76f))
     }
 }
 
@@ -132,6 +133,7 @@ internal val feedGlassShape = RoundedCornerShape(26.dp)
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun PinnedNewsControls(filters: NewsFilters, articles: List<JSONObject>, maxHeight: Dp) {
+    val palette = LocalHorizonPalette.current
     val scopes = listOf(NewsScope.All to R.string.ui_all, NewsScope.Unread to R.string.ui_unread, NewsScope.Saved to R.string.ui_saved)
     Reveal(filters.searchOpen) {
         TextField(
@@ -143,19 +145,19 @@ internal fun PinnedNewsControls(filters: NewsFilters, articles: List<JSONObject>
             singleLine = true,
             shape = feedGlassShape,
             colors = TextFieldDefaults.colors(
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White,
-                focusedLabelColor = Color.White,
-                unfocusedLabelColor = Color(0xFFC4C4C4),
+                focusedTextColor = palette.text,
+                unfocusedTextColor = palette.text,
+                focusedLabelColor = palette.text,
+                unfocusedLabelColor = palette.muted,
                 focusedContainerColor = Color.Transparent,
                 unfocusedContainerColor = Color.Transparent,
                 focusedIndicatorColor = Color.Transparent,
                 unfocusedIndicatorColor = Color.Transparent,
-                cursorColor = Color.White,
+                cursorColor = palette.text,
             ),
             trailingIcon = if (filters.query.isEmpty()) null else ({
                 IconButton(onClick = { filters.query = "" }) {
-                    Icon(Icons.Default.Close, ui(R.string.clear_search), tint = Color.White)
+                    Icon(Icons.Default.Close, ui(R.string.clear_search), tint = palette.text)
                 }
             }),
         )
@@ -172,9 +174,9 @@ internal fun PinnedNewsControls(filters: NewsFilters, articles: List<JSONObject>
                         onClick = { filters.scope = mode },
                         label = { Text(ui(title)) },
                         colors = FilterChipDefaults.filterChipColors(
-                            labelColor = Color(0xFFD6D6D6),
-                            selectedLabelColor = Color.White,
-                            selectedContainerColor = Color(0xFF414141),
+                            labelColor = palette.muted,
+                            selectedLabelColor = palette.text,
+                            selectedContainerColor = palette.glassSelection,
                         ),
                     )
                 }

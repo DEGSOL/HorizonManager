@@ -4,19 +4,16 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.compositeOver
-import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalDensity
@@ -70,35 +67,19 @@ internal fun CoverIconAction(icon: ImageVector, description: String, active: Boo
         Modifier.size(48.dp).then(touch).semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
-        val painter = rememberVectorPainter(icon)
-        Box(Modifier.size(24.dp).onPlaced { coordinates ->
-            val parent = surface?.placement?.coordinates
-            if (parent?.isAttached == true && coordinates.isAttached) {
-                val position = parent.localPositionOf(
-                    coordinates, Offset(coordinates.size.width / 2f, coordinates.size.height / 2f),
-                )
-                val height = minOf(parent.size.height.toFloat(), surface.photoHeight ?: Float.MAX_VALUE)
-                sample = GlyphSample(Size(parent.size.width.toFloat(), height), position)
-            }
-        }.drawWithCache {
-            val foreground = ColorFilter.tint(if (black) Color.Black else Color.White)
-            val outline = ColorFilter.tint(if (black) Color.White else Color.Black)
-            val edge = 1.dp.toPx()
-            val diagonal = .7071f * edge
-            val offsets = listOf(
-                Offset(edge, 0f), Offset(-edge, 0f), Offset(0f, edge), Offset(0f, -edge),
-                Offset(diagonal, diagonal), Offset(-diagonal, diagonal),
-                Offset(diagonal, -diagonal), Offset(-diagonal, -diagonal),
-            )
-            onDrawBehind {
-                with(painter) {
-                    // Outline the glyph itself so it stays legible over local light and dark details.
-                    for (offset in offsets) translate(offset.x, offset.y) {
-                        draw(size, colorFilter = outline)
-                    }
-                    draw(size, colorFilter = foreground)
+        Icon(
+            icon, contentDescription = null,
+            modifier = Modifier.size(24.dp).onPlaced { coordinates ->
+                val parent = surface?.placement?.coordinates
+                if (parent?.isAttached == true && coordinates.isAttached) {
+                    val position = parent.localPositionOf(
+                        coordinates, Offset(coordinates.size.width / 2f, coordinates.size.height / 2f),
+                    )
+                    val height = minOf(parent.size.height.toFloat(), surface.photoHeight ?: Float.MAX_VALUE)
+                    sample = GlyphSample(Size(parent.size.width.toFloat(), height), position)
                 }
-            }
-        })
+            },
+            tint = if (black) Color.Black else Color.White,
+        )
     }
 }

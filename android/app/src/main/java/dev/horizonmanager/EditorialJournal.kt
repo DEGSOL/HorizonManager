@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import org.json.JSONArray
 import org.json.JSONObject
@@ -74,7 +75,7 @@ internal fun matchesEventLevel(filter: String, level: String) =
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model: ManagerModel, export: (String) -> Unit,
-                     header: @Composable () -> Unit) {
+                     top: Dp) {
     var level by rememberSaveable { mutableStateOf("") }
     var component by rememberSaveable { mutableStateOf("") }
     var period by rememberSaveable { mutableStateOf("all") }
@@ -104,9 +105,9 @@ internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model:
                     })
         }
     }
-    LazyColumn(Modifier.fillMaxSize().editorialInsets(), state = rememberLazyListState(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        item("heading") { header() }
+    LazyColumn(Modifier.fillMaxSize().editorialSideBottomInsets(), state = rememberLazyListState(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = top, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item("filters") {
             Tile {
                 SettingHeading(ui(R.string.journal_activity_title), R.string.journal_activity_help)

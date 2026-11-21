@@ -8,11 +8,12 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
@@ -29,19 +30,27 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 internal val LocalHorizonPalette = staticCompositionLocalOf { ThemePreset.Graphite }
+private val LocalSettingsGlass = staticCompositionLocalOf { false }
+private val LocalSettingsTile = staticCompositionLocalOf { false }
 
 private fun ThemePreset.colors() = darkColorScheme(
     primary = tint, onPrimary = Color(0xFF19130E),
@@ -115,32 +124,82 @@ internal fun horizonFieldColors() = LocalHorizonPalette.current.let { palette ->
 
 @Composable
 internal fun GlassLayout(tabs: List<HorizonTab>, selection: Int, showTabs: Boolean, select: (Int) -> Unit,
-                         unread: Int, dimmed: Boolean = false,
+                         unread: Int, overlay: ReadingOverlay = ReadingOverlay.None,
                          content: @Composable BoxScope.() -> Unit) {
     val palette = LocalHorizonPalette.current
-    val sceneLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
+    val sceneLayer = rememberGraphicsLayer()
     val scene = remember(sceneLayer) { GlassScene(sceneLayer) }
     var clearance by remember { mutableStateOf(defaultNavigationClearance) }
-    Box(Modifier.fillMaxSize().background(palette.background).drawBehind {
-        val center = androidx.compose.ui.geometry.Offset(size.width * .15f, size.height * 1.02f)
-        drawCircle(androidx.compose.ui.graphics.Brush.radialGradient(
-            listOf(palette.tint.copy(alpha=.095f), Color.Transparent), center, size.width*.64f),
-            radius=size.width*.64f, center=center)
-    }.imePadding()) {
-        CompositionLocalProvider(LocalNavigationClearance provides clearance) {
-            Box(Modifier.fillMaxSize().recordScene(scene), content = content)
+    val statusHeight = WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding()
+    Box(Modifier.fillMaxSize().background(palette.background).imePadding()) {
+        Box(Modifier.fillMaxSize().then(
+            if (overlay == ReadingOverlay.Article) Modifier.blur(5.dp) else Modifier
+        )) {
+            CompositionLocalProvider(LocalNavigationClearance provides clearance) {
+                Box(Modifier.fillMaxSize().recordScene(scene).background(palette.background).drawBehind {
+                    val center = androidx.compose.ui.geometry.Offset(size.width * .15f, size.height * 1.02f)
+                    drawCircle(androidx.compose.ui.graphics.Brush.radialGradient(
+                        listOf(palette.tint.copy(alpha = .095f), Color.Transparent), center, size.width * .64f),
+                        radius = size.width * .64f, center = center)
+                }, content = content)
+            }
+            CompositionLocalProvider(LocalGlassScene provides scene) {
+                if (statusHeight > 0.dp) {
+                    Spacer(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(statusHeight)
+                        .navigationGlass(RectangleShape, outlined = false))
+                }
+                AnimatedVisibility(showTabs, modifier = Modifier.align(Alignment.BottomCenter)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
+                    .padding(start = 16.dp, end = 16.dp, bottom = navigationBottomGap),
+                    enter = fadeIn(tween(160)) + slideInVertically(tween(navigationSlideMillis)) { it * 2 },
+                    exit = fadeOut(tween(140)) + slideOutVertically(tween(navigationSlideMillis)) { it * 2 }) {
+                    BoxWithConstraints(Modifier.widthIn(max = 520.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        val width = (maxWidth / 2).coerceAtLeast(156.dp).coerceAtMost(maxWidth)
+                        GlassNavigation(tabs, selection, unread, width, overlay, measured = {
+                            clearance = it + navigationBottomGap + 8.dp
+                        }, select = select)
+                    }
+                }
+            }
         }
         CompositionLocalProvider(LocalGlassScene provides scene) {
-            AnimatedVisibility(showTabs, modifier = Modifier.align(Alignment.BottomCenter)
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
-                .padding(start = 16.dp, end = 16.dp, bottom = navigationBottomGap),
-                enter = fadeIn(tween(160)) + slideInVertically(tween(navigationSlideMillis)) { it * 2 },
-                exit = fadeOut(tween(140)) + slideOutVertically(tween(navigationSlideMillis)) { it * 2 }) {
-                GlassNavigation(tabs, selection, unread, dimmed, measured = {
-                    clearance = it + navigationBottomGap + 8.dp
-                }, select = select)
-            }
             GlassNoticeHost(Modifier.align(Alignment.TopCenter))
+        }
+    }
+}
+
+@Composable
+internal fun SettingsPage(
+    heading: String, back: (() -> Unit)?, action: (@Composable () -> Unit)? = null,
+    content: @Composable (Dp) -> Unit,
+) {
+    val layer = rememberGraphicsLayer()
+    val scene = remember(layer) { GlassScene(layer) }
+    val density = LocalDensity.current
+    val statusInset = WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding()
+    var toolbarHeight by remember { mutableStateOf(54.dp) }
+    Box(Modifier.fillMaxSize()) {
+        Box(Modifier.matchParentSize().recordScene(scene)) {
+            CompositionLocalProvider(LocalSettingsGlass provides true) {
+                content(statusInset + toolbarHeight + 16.dp)
+            }
+        }
+        CompositionLocalProvider(LocalGlassScene provides scene) {
+            Row(Modifier.align(Alignment.TopCenter).fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+                .padding(horizontal = 16.dp, vertical = 6.dp)
+                .onSizeChanged { toolbarHeight = with(density) { it.height.toDp() } }
+                .navigationGlass(feedGlassShape)
+                .pointerInput(Unit) { detectTapGestures {} }
+                .heightIn(min = 54.dp).padding(start = if (back == null) 18.dp else 4.dp, end = 10.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                if (back != null) {
+                    GlassIconAction(Icons.AutoMirrored.Filled.ArrowBack,
+                        ui(R.string.ui_back), onClick = back)
+                }
+                Text(heading, Modifier.weight(1f).padding(vertical = 10.dp), style = MaterialTheme.typography.titleLarge)
+                action?.invoke()
+            }
         }
     }
 }
@@ -151,19 +210,23 @@ internal fun Tile(modifier: Modifier = Modifier, accented: Boolean = false,
     val shape = MaterialTheme.shapes.large
     val palette = LocalHorizonPalette.current
     val face = if (accented) palette.elevated else palette.card
+    val surface = if (LocalSettingsGlass.current) Modifier.glassSurface(shape, raised = accented)
+        else Modifier.clip(shape).background(face)
     Column(
-        Modifier.fillMaxWidth().clip(shape).background(face)
+        Modifier.fillMaxWidth().then(surface)
             .then(modifier).padding(horizontal = 15.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(9.dp),
-        content = content,
-    )
+    ) {
+        CompositionLocalProvider(LocalSettingsTile provides true) { content() }
+    }
 }
 
 @Composable
 internal fun GlassSettingRow(title: String, subtitle: String, enabled: Boolean = true,
                              @StringRes help: Int? = null, open: () -> Unit) {
     val palette = LocalHorizonPalette.current
-    Column {
+    val standalone = LocalSettingsGlass.current && !LocalSettingsTile.current
+    Column(if (standalone) Modifier.glassSurface(MaterialTheme.shapes.large).padding(horizontal = 10.dp) else Modifier) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f).clickable(enabled = enabled, role = Role.Button, onClick = open)
                 .heightIn(min = 57.dp).padding(horizontal = 4.dp, vertical = 8.dp),
@@ -176,7 +239,9 @@ internal fun GlassSettingRow(title: String, subtitle: String, enabled: Boolean =
             }
             if (help != null) SettingHelp(title, help)
         }
-        androidx.compose.material3.HorizontalDivider(color = palette.elevated.copy(alpha = .65f), thickness = .5.dp)
+        if (!standalone) androidx.compose.material3.HorizontalDivider(
+            color = palette.text.copy(alpha = .10f), thickness = .5.dp,
+        )
     }
 }
 
@@ -197,21 +262,5 @@ internal fun SettingHeading(title: String, @StringRes help: Int) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
         SettingHelp(title, help)
-    }
-}
-
-@Composable
-internal fun Modifier.glassPanel(shape: Shape, raised: Boolean = false): Modifier {
-    val palette = LocalHorizonPalette.current
-    return clip(shape)
-        .background((if (raised) palette.card else palette.elevated).copy(alpha = 0.96f))
-        .border(1.dp, palette.muted.copy(alpha = 0.15f), shape)
-}
-
-@Composable
-internal fun GlassToolbarButton(title: String, onClick: () -> Unit) {
-    Box(Modifier.glassPanel(CircleShape).clickable(role = Role.Button, onClick = onClick)
-        .heightIn(min = 48.dp).padding(horizontal = 15.dp), contentAlignment = Alignment.Center) {
-        Text(title, color = LocalHorizonPalette.current.text, style = MaterialTheme.typography.labelLarge)
     }
 }

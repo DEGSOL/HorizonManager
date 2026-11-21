@@ -10,6 +10,9 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.Insets
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.ViewModelProvider
 import java.io.File
 import java.time.Instant
@@ -45,11 +48,11 @@ class FluidScreensTest {
     private fun bytes(name: String) =
         requireNotNull(javaClass.getResourceAsStream("/fluid/" + name)).use { it.readBytes() }
 
-    private fun snapshot(name: String): Bitmap {
+    private fun snapshot(name: String, captureDialog: Boolean = true): Bitmap {
         compose.waitForIdle()
         val bmp =
             compose.runOnIdle {
-                val dialog = ShadowDialog.getLatestDialog()?.takeIf { it.isShowing }
+                val dialog = ShadowDialog.getLatestDialog()?.takeIf { captureDialog && it.isShowing }
                 val root = (dialog?.window ?: compose.activity.window).decorView
                 Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888).also {
                     val capture =
@@ -84,7 +87,10 @@ class FluidScreensTest {
 
     // Only the test owns this snapshot. The released app reads ManagerModel's agent/cache flow.
     @Suppress("UNCHECKED_CAST")
-    private fun loadIssue(longHeadline: String? = null, observeServer: Boolean = false, articleCount: Int = 105): String {
+    private fun loadIssue(
+        longHeadline: String? = null, observeServer: Boolean = false,
+        articleCount: Int = 105, showEmptyFeedFirst: Boolean = false,
+    ): String {
         val now = Instant.now()
         val date = now.minusSeconds(900).toString()
         val server =
@@ -167,41 +173,112 @@ class FluidScreensTest {
                 JSONObject().put("id", "current").put("language", "ru").put("markdown", "# Тестовый выпуск")
                     .put("items", JSONArray(stories)).put("total", stories.size).toString()))
         }
+        val loaded = Panel(
+            server = server,
+            servers = listOf(server),
+            ready = true,
+            selectedRun = "current",
+            syncedDigest = "current",
+            language = "ru",
+            markdown = "# Тестовый выпуск",
+            articles = stories,
+            total = stories.size,
+            config = cfg.getJSONObject("config"),
+            schema = cfg.getJSONObject("schema"),
+            schedule = JSONObject().put("spec", JSONObject()
+                .put("mode", "calendar").put("hour", 9).put("minute", 0)
+                .put("zone", "UTC").put("days", JSONArray((0..6).toList())))
+                .put("next", now.plusSeconds(3600).epochSecond),
+            archive = listOf(issue) + archive,
+            status = JSONObject().put("agent", "0.1.4").put("media_search", false),
+            events = listOf(
+                JSONObject().put("time", now.toString()).put("code", "SCHEDULE_SKIPPED_ACTIVE")
+                    .put("component", "scheduler").put("level", "WARNING"),
+                JSONObject().put("time", now.toString()).put("code", "filter")
+                    .put("component", "horizon").put("level", "INFO"),
+            ),
+        )
+        val model = ViewModelProvider(compose.activity)[ManagerModel::class.java]
+        val field = ManagerModel::class.java.getDeclaredField("mutable").apply { isAccessible = true }
+        val state = field.get(model) as MutableStateFlow<Panel>
+        if (showEmptyFeedFirst) {
+            compose.runOnIdle {
+                state.value = loaded.copy(selectedRun = "", syncedDigest = "", markdown = "", articles = emptyList(),
+                    total = 0, archive = emptyList())
+            }
+            text(R.string.ui_news_will_appear_here_after_horizon).assertIsDisplayed()
+        }
         compose.runOnIdle {
-            val model = ViewModelProvider(compose.activity)[ManagerModel::class.java]
-            val field =
-                ManagerModel::class.java.getDeclaredField("mutable").apply { isAccessible = true }
-            (field.get(model) as MutableStateFlow<Panel>).value =
-                Panel(
-                    server = server,
-                    servers = listOf(server),
-                    ready = true,
-                    selectedRun = "current",
-                    syncedDigest = "current",
-                    language = "ru",
-                    markdown = "# Тестовый выпуск",
-                    articles = stories,
-                    total = stories.size,
-                    config = cfg.getJSONObject("config"),
-                    schema = cfg.getJSONObject("schema"),
-                    schedule = JSONObject().put("spec", JSONObject()
-                        .put("mode", "calendar").put("hour", 9).put("minute", 0)
-                        .put("zone", "UTC").put("days", JSONArray((0..6).toList())))
-                        .put("next", now.plusSeconds(3600).epochSecond),
-                    archive = listOf(issue) + archive,
-                    status = JSONObject().put("agent", "0.1.4").put("media_search", false),
-                    events = listOf(
-                        JSONObject().put("time", now.toString()).put("code", "SCHEDULE_SKIPPED_ACTIVE")
-                            .put("component", "scheduler").put("level", "WARNING"),
-                        JSONObject().put("time", now.toString()).put("code", "filter")
-                            .put("component", "horizon").put("level", "INFO"),
-                    ),
-                )
+            state.value = loaded
             if (observeServer) ManagerModel::class.java.getDeclaredMethod("observe", String::class.java)
                 .apply { isAccessible = true }.invoke(model, server.id)
         }
         compose.waitForIdle()
         return ui(R.string.feed) + " " + shortDigestDate(date)
+    }
+
+    @Test
+    fun firstDigestHidesAndRestoresBothBarsWithoutChangingTabs() {
+        val heading = loadIssue(articleCount = 30, showEmptyFeedFirst = true)
+        val header = compose.onNodeWithText(heading)
+        val tab = compose.onNodeWithContentDescription(ui(R.string.settings))
+        val feed = compose.onNode(hasScrollToIndexAction())
+        header.assertIsDisplayed()
+        tab.assertIsDisplayed()
+        feed.performTouchInput { swipeUp(durationMillis = 420) }
+        header.assertDoesNotExist()
+        tab.assertDoesNotExist()
+        feed.performTouchInput { swipeDown(durationMillis = 420) }
+        header.assertIsDisplayed()
+        tab.assertIsDisplayed()
+    }
+
+    @Test
+    fun bothNavigationBarsUseTheSelectedTheme() {
+        val heading = loadIssue(articleCount = 12)
+        val title = compose.onNodeWithText(heading).getUnclippedBoundsInRoot()
+        val tab = compose.onNodeWithContentDescription(ui(R.string.settings)).getUnclippedBoundsInRoot()
+        val graphite = snapshot("17-graphite-navigation")
+        compose.runOnUiThread {
+            compose.activity.getSharedPreferences("appearance", android.content.Context.MODE_PRIVATE)
+                .edit().putString("preset", ThemePreset.Ocean.id).apply()
+        }
+        val ocean = snapshot("18-ocean-navigation")
+        val density = compose.activity.resources.displayMetrics.density
+        fun excessBlue(bitmap: Bitmap, x: Float, y: Float): Int {
+            val color = bitmap.getPixel((x * density).toInt(), (y * density).toInt())
+            return android.graphics.Color.blue(color) - android.graphics.Color.red(color)
+        }
+        for ((x, y) in listOf(title.left.value + 5f to title.top.value + 2f,
+            tab.left.value + 5f to tab.top.value + 12f)) {
+            assertTrue("The Ocean glass should be bluer than Graphite",
+                excessBlue(ocean, x, y) > excessBlue(graphite, x, y) + 8)
+        }
+    }
+
+    @Test
+    fun feedScrollsBehindTheStatusBarGlass() {
+        val heading = loadIssue(articleCount = 30)
+        val density = compose.activity.resources.displayMetrics.density
+        compose.runOnUiThread {
+            val root = compose.activity.findViewById<android.view.View>(android.R.id.content)
+            val status = WindowInsetsCompat.Type.statusBars()
+            ViewCompat.dispatchApplyWindowInsets(root, WindowInsetsCompat.Builder()
+                .setInsets(status, Insets.of(0, (24 * density).toInt(), 0, 0))
+                .setVisible(status, true)
+                .build())
+        }
+        assertTrue(compose.onNodeWithText(heading).getUnclippedBoundsInRoot().top > 24.dp)
+        val beforeScroll = snapshot("19-status-inset")
+        compose.onNode(hasScrollToIndexAction()).performTouchInput {
+            swipeUp(startY = height * .63f, endY = height * .39f, durationMillis = 500)
+        }
+        val scrolled = snapshot("20-status-glass")
+        val y = (12 * density).toInt()
+        val backdropChanged = (scrolled.width / 10 until scrolled.width * 9 / 10 step 8).any { x ->
+            beforeScroll.getPixel(x, y) != scrolled.getPixel(x, y)
+        }
+        assertTrue("Content should remain visible through the status bar glass while scrolling", backdropChanged)
     }
 
     @Test
@@ -374,9 +451,29 @@ class FluidScreensTest {
         text(R.string.mr_latest).assertDoesNotExist()
         val settingsTab = compose.onNodeWithContentDescription(ui(R.string.settings))
         val settingsBounds = settingsTab.getUnclippedBoundsInRoot()
+        val titleBounds = compose.onNodeWithText(heading).getUnclippedBoundsInRoot()
+        val openBackground = snapshot("01-before-article")
         compose.onNodeWithText(headlines[0]).performClick()
         compose.onNodeWithContentDescription(ui(R.string.ui_original_source)).assertExists()
         settingsTab.assertIsNotEnabled()
+        val blurredBackground = snapshot("03-blurred-background", captureDialog = false)
+        val density = compose.activity.resources.displayMetrics.density
+        fun contrast(bitmap: Bitmap): Long {
+            val left = (titleBounds.left.value * density).toInt()
+            val top = (titleBounds.top.value * density).toInt()
+            val right = left + (155 * density).toInt()
+            val bottom = (titleBounds.bottom.value * density).toInt()
+            var difference = 0L
+            for (y in top until bottom) for (x in left until right) {
+                difference += kotlin.math.abs(
+                    android.graphics.Color.red(bitmap.getPixel(x + 1, y)) -
+                        android.graphics.Color.red(bitmap.getPixel(x, y)),
+                )
+            }
+            return difference
+        }
+        assertTrue("The feed header should blur behind the modal",
+            contrast(blurredBackground) < contrast(openBackground) * .8f)
         val openArticle = snapshot("03-article")
         // Sample the narrow left margin beside the text in the fixed portrait fixture.
         val x = openArticle.width / 25
@@ -422,7 +519,10 @@ class FluidScreensTest {
         back()
         text(R.string.ui_maintenance).performClick()
         text(R.string.ui_secrets).performClick()
-        text(R.string.ui_back).performClick()
+        val backButton = compose.onNodeWithContentDescription(ui(R.string.ui_back))
+        val secretsTitle = text(R.string.ui_secrets)
+        assertTrue(backButton.getUnclippedBoundsInRoot().right <= secretsTitle.getUnclippedBoundsInRoot().left)
+        backButton.performClick()
         text(R.string.journal).assertExists()
         back()
         text(R.string.mr_server).performClick()
@@ -471,6 +571,8 @@ class FluidScreensTest {
         val widths = bounds.map { (it.right - it.left).value }
         assertTrue(widths.max() - widths.min() <= 1f)
         assertTrue(bounds.all { it.top == bounds.first().top && it.bottom == bounds.first().bottom })
+        assertTrue("The compact bar should cover about half the viewport", widths.sum() in 177f..200f)
+        assertTrue(bounds.all { it.bottom - it.top in 48.dp..55.dp })
         snapshot("14-glass-navigation")
 
         compose.onNodeWithText(headlines[0]).performClick()

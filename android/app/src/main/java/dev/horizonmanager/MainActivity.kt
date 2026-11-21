@@ -7,6 +7,7 @@ import android.content.ClipboardManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.ui.graphics.graphicsLayer
 import kotlinx.coroutines.CancellationException
@@ -72,7 +73,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         notificationServer = notificationTarget(intent)
-        enableEdgeToEdge()
+        enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
         if (Build.VERSION.SDK_INT >= 29) window.isNavigationBarContrastEnforced = false
         val preferences = getSharedPreferences("appearance", MODE_PRIVATE)
         setContent {
@@ -136,8 +137,8 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     var route by rememberSaveable(currentServer?.id) { mutableStateOf("") }
     val configPage = route.substringAfterLast('/')
     var previousTab by rememberSaveable { mutableIntStateOf(FEED) }
-    var navVisible by remember(tab) { mutableStateOf(true) }
-    var overlay by remember(tab, currentServer?.id) { mutableStateOf(false) }
+    var navVisible by remember(tab, currentServer?.id) { mutableStateOf(true) }
+    var overlay by remember(tab, currentServer?.id) { mutableStateOf(ReadingOverlay.None) }
     val feedFilters = rememberSaveable(currentServer?.id, saver = NewsFilters.Saver) { NewsFilters() }
     val screenState = rememberSaveableStateHolder()
     val readingPrefs = remember(ctx) { ctx.getSharedPreferences("reading", android.content.Context.MODE_PRIVATE) }
@@ -361,7 +362,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     }
 
     val showTabs = panel.ready && !canGoBack && (tab != FEED || navVisible)
-    GlassLayout(tabs, tab, showTabs, unread = unread, dimmed = overlay, select = { chosen ->
+    GlassLayout(tabs, tab, showTabs, unread = unread, overlay = overlay, select = { chosen ->
         if (chosen != tab || configPage.isNotEmpty() || openedIssue != null) {
             previousTab = tab
             tab = chosen
@@ -429,102 +430,101 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                 "feed" -> ui(R.string.feed)
                 else -> label(screen.page)
             }
-            val action: (@Composable () -> Unit)? = when {
-                screenBack -> ({ GlassToolbarButton(ui(R.string.ui_back), ::goBack) })
-                screen.page == "setup" -> ({ GlassToolbarButton(ui(R.string.settings)) { openSettings("") } })
-                else -> null
-            }
-            val toolbar: (@Composable () -> Unit)? = if (screen.reading) ({
-                NewsToolbar(filters, displayedIssue?.optString("id") == panel.selectedRun && panel.markdown.isNotEmpty())
+            val action: (@Composable () -> Unit)? = if (screen.page == "setup") ({
+                GlassIconAction(Icons.Default.Settings, ui(R.string.settings)) { openSettings("") }
             }) else null
-            val header: @Composable () -> Unit = { Header(heading, action, toolbar) }
             screenState.SaveableStateProvider("${currentServer?.id.orEmpty()}/${screen.page}/${screen.issueId}") {
                 when {
                     screen.reading -> NewsScreen(panel, model, displayedIssue, filters, archived,
                         { openSettings("ai") }, { openSettings("sources") }, ::goBack,
                         { if (screen == currentDestination) navVisible = it },
                         { if (screen == currentDestination) overlay = it })
-                    screen.page == "archive" -> ArchiveScreen(issues.archive, panel, model,
-                        { archiveIssue = it.getString("id") }, header)
-                    screen.page == "favorites" -> FavoritesScreen(model, panel.servers, header) {
+                    screen.page == "favorites" -> FavoritesScreen(model, panel.servers, {
+                        Text(heading, Modifier.padding(top = 6.dp, bottom = 8.dp),
+                            style = MaterialTheme.typography.headlineLarge)
+                    }) {
                         if (screen == currentDestination) overlay = it
                     }
-                    screen.page == "journal" -> Journal(panel, { description, run -> confirm = description to run }, model,
-                        { model.prepareExportDocument(it); output.launch("horizon-journal.json") }, header)
-                    else -> Column(Modifier.fillMaxSize().editorialInsets().verticalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        header()
-                        Reveal(panel.busy) { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+                    else -> SettingsPage(heading, if (screenBack) ::goBack else null, action) { top ->
                         when (screen.page) {
-                            "servers" -> {
-                                panel.servers.forEach { server -> key(server.id) {
-                                    val endpoint = "${server.user} @ ${server.host} · ${server.port}"
-                                    val detail = if (server.id == currentServer?.id) "${ui(R.string.ui_selected)} · $endpoint" else endpoint
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Box(Modifier.weight(1f)) {
-                                            GlassSettingRow(server.name, detail, enabled = !panel.busy) {
-                                                model.select(server)
-                                                route = ""
-                                                archiveIssue = ""
-                                                tab = FEED
-                                                manageServers = false
+                            "archive" -> ArchiveScreen(issues.archive, panel, model, top) { archiveIssue = it.getString("id") }
+                            "journal" -> Journal(panel, { description, run -> confirm = description to run }, model,
+                                { model.prepareExportDocument(it); output.launch("horizon-journal.json") }, top)
+                            else -> Column(Modifier.fillMaxSize().editorialSideBottomInsets().verticalScroll(rememberScrollState())
+                                .padding(start = 16.dp, end = 16.dp, top = top, bottom = 10.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Reveal(panel.busy) { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+                                when (screen.page) {
+                                    "servers" -> {
+                                        panel.servers.forEach { server -> key(server.id) {
+                                            val endpoint = "${server.user} @ ${server.host} · ${server.port}"
+                                            val detail = if (server.id == currentServer?.id) "${ui(R.string.ui_selected)} · $endpoint" else endpoint
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Box(Modifier.weight(1f)) {
+                                                    GlassSettingRow(server.name, detail, enabled = !panel.busy) {
+                                                        model.select(server)
+                                                        route = ""
+                                                        archiveIssue = ""
+                                                        tab = FEED
+                                                        manageServers = false
+                                                    }
+                                                }
+                                                GlassIconAction(Icons.Default.Delete, ui(R.string.server_remove_named, server.name),
+                                                    enabled = !panel.busy) {
+                                                    confirm = ui(R.string.server_remove_message, server.name) to { model.removeServer(server.id) }
+                                                }
                                             }
-                                        }
-                                        GlassIconAction(Icons.Default.Delete, ui(R.string.server_remove_named, server.name),
-                                            enabled = !panel.busy) {
-                                            confirm = ui(R.string.server_remove_message, server.name) to { model.removeServer(server.id) }
+                                        } }
+                                        Button(onClick = { model.add(); manageServers = false; tab = FEED }, enabled = !panel.busy) {
+                                            Text(ui(R.string.ui_add_server))
                                         }
                                     }
-                                } }
-                                Button(onClick = { model.add(); manageServers = false; tab = FEED }, enabled = !panel.busy) {
-                                    Text(ui(R.string.ui_add_server))
-                                }
-                            }
-                            "theme" -> ThemeSettings(preset) { choice ->
-                                if (preset != choice) { selectTheme(choice); localSave++ }
-                            }
-                            "icon" -> IconSettings(launcherIcon) { choice ->
-                                if (launcherIcon != choice) {
-                                    runCatching { choice.apply(ctx) }.onSuccess {
-                                        launcherIcon = choice
+                                    "theme" -> ThemeSettings(preset) { choice ->
+                                        if (preset != choice) { selectTheme(choice); localSave++ }
+                                    }
+                                    "icon" -> IconSettings(launcherIcon) { choice ->
+                                        if (launcherIcon != choice) {
+                                            runCatching { choice.apply(ctx) }.onSuccess {
+                                                launcherIcon = choice
+                                                localSave++
+                                            }.onFailure { scope.launch { notices.showSnackbar(ui(R.string.hovq_icon_error)) } }
+                                        }
+                                    }
+                                    "setup", "ssh" -> Setup(panel, model, forceEdit = screen.page == "ssh")
+                                    "sources" -> Sources(panel, model) { if (configPage == screen.page) dirtyPage = it }
+                                    "control" -> Control(panel, model, { description, action -> confirm = description to action }, ::openSettings)
+                                    "connection" -> ConnectionSettings(panel, model, { if (configPage == screen.page) dirtyPage = it }) {
+                                        editVerification = panel.sshVerification
+                                        editServer = true
+                                    }
+                                    "alerts" -> NotificationSettings(panel, model,
+                                        { if (Build.VERSION.SDK_INT >= 33) permission.launch(Manifest.permission.POST_NOTIFICATIONS) },
+                                        { openSettings("delivery") })
+                                    "maintenance" -> ServerMaintenance(panel, model, ::openSettings)
+                                    "transfer" -> TransferSettings(panel,
+                                        { device -> backupDialog = if (device) "device_export" else "vps_export" },
+                                        { device ->
+                                            fileAction = if (device) "device" else "vps"
+                                            input.launch(arrayOf("*/*"))
+                                        })
+                                    "reading" -> ReadingPreferences(defaultOrder) {
+                                        defaultOrder = it
+                                        readingPrefs.edit().putString("default_order", it.name).apply()
                                         localSave++
-                                    }.onFailure { scope.launch { notices.showSnackbar(ui(R.string.hovq_icon_error)) } }
+                                    }
+                                    "local" -> LocalReadingData(panel)
+                                    "digest_settings" -> DigestSettings(::openSettings)
+                                    "ai_settings" -> AiSettings(panel, model, ::openSettings)
+                                    "settings", "news_settings", "server_settings", "interface" ->
+                                        SettingsHome(panel, preset, ::openSettings, screen.page) { manageServers = true }
+                                    "images" -> ImageSettings(panel, model)
+                                    else -> CompositionLocalProvider(LocalEditorBack provides editorBack) {
+                                        SettingsForm(panel, model, screen.page) { if (configPage == screen.page) dirtyPage = it }
+                                    }
                                 }
-                            }
-                            "setup", "ssh" -> Setup(panel, model, forceEdit = screen.page == "ssh")
-                            "sources" -> Sources(panel, model) { if (configPage == screen.page) dirtyPage = it }
-                            "control" -> Control(panel, model, { description, action -> confirm = description to action }, ::openSettings)
-                            "connection" -> ConnectionSettings(panel, model, { if (configPage == screen.page) dirtyPage = it }) {
-                                editVerification = panel.sshVerification
-                                editServer = true
-                            }
-                            "alerts" -> NotificationSettings(panel, model,
-                                { if (Build.VERSION.SDK_INT >= 33) permission.launch(Manifest.permission.POST_NOTIFICATIONS) },
-                                { openSettings("delivery") })
-                            "maintenance" -> ServerMaintenance(panel, model, ::openSettings)
-                            "transfer" -> TransferSettings(panel,
-                                { device -> backupDialog = if (device) "device_export" else "vps_export" },
-                                { device ->
-                                    fileAction = if (device) "device" else "vps"
-                                    input.launch(arrayOf("*/*"))
-                                })
-                            "reading" -> ReadingPreferences(defaultOrder) {
-                                defaultOrder = it
-                                readingPrefs.edit().putString("default_order", it.name).apply()
-                                localSave++
-                            }
-                            "local" -> LocalReadingData(panel)
-                            "digest_settings" -> DigestSettings(::openSettings)
-                            "ai_settings" -> AiSettings(panel, model, ::openSettings)
-                            "settings", "news_settings", "server_settings", "interface" ->
-                                SettingsHome(panel, preset, ::openSettings, screen.page) { manageServers = true }
-                            "images" -> ImageSettings(panel, model)
-                            else -> CompositionLocalProvider(LocalEditorBack provides editorBack) {
-                                SettingsForm(panel, model, screen.page) { if (configPage == screen.page) dirtyPage = it }
+                                Spacer(Modifier.height(if (showTabs) LocalNavigationClearance.current else 10.dp))
                             }
                         }
-                        Spacer(Modifier.height(if (showTabs) LocalNavigationClearance.current else 10.dp))
                     }
                 }
             }
@@ -536,24 +536,6 @@ private suspend fun androidx.lifecycle.LifecycleOwner.repeatAt(
     minimum: androidx.lifecycle.Lifecycle.State, block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit,
 ) = this.lifecycle.repeatOnLifecycle(minimum, block)
 
-@Composable
-private fun Header(heading: String, action: (@Composable () -> Unit)?, toolbar: (@Composable () -> Unit)?) {
-    BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 8.dp)) {
-        val minToolbarWidth = if (action == null) 118 else 208
-        val split = toolbar != null && maxWidth < (minToolbarWidth + 112 * LocalConfiguration.current.fontScale).dp
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(heading, style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.onBackground)
-                }
-                action?.invoke()
-                if (!split) toolbar?.invoke()
-            }
-            if (split) Box(Modifier.align(Alignment.End)) { toolbar?.invoke() }
-        }
-    }
-}
 
 @Composable
 internal fun PasswordDialog(title: String, detail: String, minimum: Int = 0, maximum: Int = Int.MAX_VALUE, close: () -> Unit, proceed: (String) -> Unit) {

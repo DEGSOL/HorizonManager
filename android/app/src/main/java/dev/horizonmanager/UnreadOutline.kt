@@ -66,8 +66,10 @@ internal fun Modifier.unreadOutline(shape: RoundedCornerShape, articleId: String
         Color.White.copy(alpha = .12f), Color.White.copy(alpha = .34f),
     ))
     val segment = Path()
-    val segments = 24
-    val step = length * .19f / segments
+    val highlights = 3
+    val segments = 12
+    val spacing = length / highlights
+    val step = length * .115f / segments
     val weights = FloatArray(segments) { index ->
         val t = (index + .5) / segments
         val envelope = sin(PI * t).toFloat()
@@ -87,11 +89,13 @@ internal fun Modifier.unreadOutline(shape: RoundedCornerShape, articleId: String
         val time = clock?.value ?: return@onDrawWithContent
         val head = (time + phase).mod(1f) * length
         for (index in 0 until segments) {
-            val start = (head + index * step) % length
-            val end = start + step
             segment.rewind()
-            measure.getSegment(start, end.coerceAtMost(length), segment, true)
-            if (end > length) measure.getSegment(0f, end - length, segment, true)
+            for (highlight in 0 until highlights) {
+                val start = (head + highlight * spacing + index * step) % length
+                val end = start + step
+                measure.getSegment(start, end.coerceAtMost(length), segment, true)
+                if (end > length) measure.getSegment(0f, end - length, segment, true)
+            }
             drawPath(segment, Color.White, alpha = .92f * weights[index] * alpha, style = strokes[index])
         }
     }

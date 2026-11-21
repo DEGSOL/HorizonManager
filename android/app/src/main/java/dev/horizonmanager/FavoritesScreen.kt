@@ -37,7 +37,7 @@ internal fun FavoritesScreen(
     model: ManagerModel,
     servers: List<Server>,
     header: @Composable () -> Unit,
-    focus: (Boolean) -> Unit,
+    focus: (ReadingOverlay) -> Unit,
 ) {
     val favorites by model.favorites.collectAsStateWithLifecycle(initialValue = emptyList())
     var selected by rememberSaveable(stateSaver = openFavoriteSaver) { mutableStateOf<SavedPublication?>(null) }
@@ -45,8 +45,8 @@ internal fun FavoritesScreen(
     val movingBorder = rememberUnreadBorderClock {
         selected == null && grid.layoutInfo.visibleItemsInfo.any { favorites.getOrNull(it.index)?.read == false }
     }
-    SideEffect { focus(selected != null) }
-    DisposableEffect(Unit) { onDispose { focus(false) } }
+    SideEffect { focus(if (selected != null) ReadingOverlay.Article else ReadingOverlay.None) }
+    DisposableEffect(Unit) { onDispose { focus(ReadingOverlay.None) } }
     Box(Modifier.fillMaxSize().editorialInsets()) {
         Column(Modifier.fillMaxSize().then(
             if (selected != null) Modifier.clearAndSetSemantics {} else Modifier
