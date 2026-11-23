@@ -18,14 +18,15 @@ from uuid import UUID, uuid4
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from src.mcp.horizon_adapter import dicts_to_items
 from src.models import SOURCE_REGISTRY
 from src.processing.content import split_content
 
 from . import VERSION, backup, jobs, push, router_catalog
 from .article_context import find_item, key_for, localized_context, previous_context, read_json
-from .configuration import DIGEST_LANGUAGES, MAX_HEADLINE_WORDS, MIN_HEADLINE_WORDS, DigestLanguageCode, ai_missing, schema, secret_name_allowed, validate
+from .configuration import (DIGEST_LANGUAGES, MAX_HEADLINE_CHARACTERS, MAX_HEADLINE_WORDS, MIN_HEADLINE_WORDS,
+                            DigestLanguageCode, ai_missing, schema, secret_name_allowed, validate)
 from .localized_digest import LocalizedSummarizer, restore_original_cards
 from .media import relay_cover
 from .scheduler import Schedule, next_run
@@ -70,6 +71,22 @@ class EnrichmentMode(Body):
 
 class HeadlineLength(Body):
     words: int = Field(strict=True, ge=MIN_HEADLINE_WORDS, le=MAX_HEADLINE_WORDS)
+
+
+class HeadlineRange(Body):
+    minimum: int = Field(strict=True, ge=1, le=MAX_HEADLINE_CHARACTERS)
+    maximum: int = Field(strict=True, ge=1, le=MAX_HEADLINE_CHARACTERS)
+
+    @model_validator(mode="after")
+    def ordered(self):
+        if self.minimum > self.maximum:
+            raise ValueError("minimum exceeds maximum")
+        return self
+
+
+def headline_range(db):
+    minimum, maximum = Store.headline_range(db)
+    return {"minimum": minimum, "maximum": maximum}
 
 
 class DigestLanguage(Body):
@@ -209,7 +226,8 @@ def create_app(root, token):
             next_at = db.execute("SELECT next FROM schedule WHERE id=1").fetchone()[0]
             language, chosen = store.digest_language(db)
             return {**health(), "digest_language": language, "digest_language_chosen": chosen,
-                    "digest_languages": DIGEST_LANGUAGES, "headline_max_words": store.headline_words(db), "disk_free": disk.free, "disk_total": disk.total,
+                    "digest_languages": DIGEST_LANGUAGES, "headline_max_words": store.headline_words(db),
+                    "headline_range": headline_range(db), "disk_free": disk.free, "disk_total": disk.total,
                     "media_search": store.media_search(db), "cover_relay": True, "enrichment_mode": store.enrichment_mode(db),
                     "load": os.getloadavg()[0], "cpu": os.cpu_count(), "memory": mem, "next": next_at}
 
@@ -232,8 +250,16 @@ def create_app(root, token):
     def set_headline_length(body: HeadlineLength):
         with store.db() as db:
             Store.set_headline_words(db, body.words)
+            db.execute("DELETE FROM headline_ranges WHERE id=1")
             Store.event(db, "HEADLINE_LENGTH_CHANGED")
             return {"words": store.headline_words(db)}
+
+    @app.put("/v1/headline-range")
+    def set_headline_range(body: HeadlineRange):
+        with store.db() as db:
+            Store.set_headline_range(db, body.minimum, body.maximum)
+            Store.event(db, "HEADLINE_LENGTH_CHANGED")
+            return headline_range(db)
 
     @app.put("/v1/digest-language")
     def set_digest_language(body: DigestLanguage):
@@ -641,11 +667,12 @@ def create_app(root, token):
             enrichment_mode = store.enrichment_mode(db)
             language, chosen = store.digest_language(db)
             headline_words = store.headline_words(db)
+            characters = headline_range(db)
             Store.event(db, "BACKUP_EXPORTED")
         return {"archive": backup.pack({"horizon": REVISION, "settings": settings, "schedule": schedule,
                                         "media_search": media_search, "enrichment_mode": enrichment_mode,
                                         "digest_language": language, "digest_language_chosen": chosen,
-                                        "headline_max_words": headline_words}, body.password)}
+                                        "headline_max_words": headline_words, "headline_range": characters}, body.password)}
 
     @app.post("/v1/restore")
     def restore(body: ImportBackup):
@@ -655,6 +682,7 @@ def create_app(root, token):
                 fail(422, "BACKUP_VERSION")
             updated = payload["settings"]
             headline_words = HeadlineLength(words=payload["headline_max_words"]).words if "headline_max_words" in payload else None
+            characters = HeadlineRange.model_validate(payload["headline_range"]) if "headline_range" in payload else None
             for name, value in updated["secrets"].items():
                 if not secret_name_allowed(name) or not isinstance(value, str) or not 1 <= len(value) <= 8192 or "\0" in value:
                     fail(422, "SECRET_VALUE_INVALID")
@@ -682,6 +710,10 @@ def create_app(root, token):
                 Store.set_digest_language(db, payload["digest_language"])
             if headline_words is not None:
                 Store.set_headline_words(db, headline_words)
+                if characters is None:
+                    db.execute("DELETE FROM headline_ranges WHERE id=1")
+            if characters is not None:
+                Store.set_headline_range(db, characters.minimum, characters.maximum)
             Store.event(db, "BACKUP_RESTORED")
             return public(store.settings(db))
 

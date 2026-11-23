@@ -27,9 +27,23 @@ class DigestLocalizationTests(unittest.IsolatedAsyncioTestCase):
         calls = AsyncMock(return_value='{"items":[]}')
         config = SimpleNamespace(enrichment_concurrency=1, max_tokens=1500)
         with patch("horizon_manager.localized_digest.create_ai_client", return_value=SimpleNamespace(complete=calls)):
-            self.assertEqual(await complete_artifacts([item], "ru", config, headline_words=3), 0)
-        self.assertIn("2 to 3 words", calls.await_args.kwargs["system"])
-        self.assertEqual(item.processing.artifacts["ru"].title, "Компания представила новую…")
+            self.assertEqual(await complete_artifacts([item], "ru", config, headline_range=(3, 8)), 0)
+        self.assertIn("3 to 8 characters", calls.await_args.kwargs["system"])
+        self.assertEqual(item.processing.artifacts["ru"].title, "Компани…")
+
+    async def test_short_title_is_rewritten_and_spaces_and_punctuation_count(self):
+        short = article("Сбой")
+        short.content = "Новая модель появилась в открытом доступе."
+        correct = article("ИИ в РФ!")
+        correct.content = short.content
+        calls = AsyncMock(return_value='{"items":[{"id":"0","title":"Сбой ИИ!"}]}')
+        config = SimpleNamespace(enrichment_concurrency=1, max_tokens=1500)
+        with patch("horizon_manager.localized_digest.create_ai_client", return_value=SimpleNamespace(complete=calls)):
+            self.assertEqual(await complete_artifacts([short, correct], "ru", config, headline_range=(8, 8)), 0)
+        calls.assert_awaited_once()
+        self.assertEqual(json.loads(calls.await_args.kwargs["user"])[0]["title"], "Сбой")
+        self.assertEqual(short.processing.artifacts["ru"].title, "Сбой ИИ!")
+        self.assertEqual(correct.processing.artifacts["ru"].title, "ИИ в РФ!")
 
     async def test_preserves_successful_translation_when_another_item_fails(self):
         items = [article("First news"), article("Second news")]
@@ -100,13 +114,13 @@ class DigestLocalizationTests(unittest.IsolatedAsyncioTestCase):
         item = article("Source headline")
         long = "Компания представила новую модель и рассказала когда начнутся продажи во всех регионах страны"
         first = {"items": [{"id": "0", "title": long, "text": "Сохранённый перевод описания."}]}
-        second = {"items": [{"id": "0", "title": "Обновление"}]}
+        second = {"items": [{"id": "0", "title": "Я"}]}
         calls = AsyncMock(side_effect=[json.dumps(first), json.dumps(second)])
         config = SimpleNamespace(enrichment_concurrency=1, max_tokens=1536)
         with patch("horizon_manager.localized_digest.create_ai_client", return_value=SimpleNamespace(complete=calls)):
             self.assertEqual(await complete_artifacts([item], "ru", config), 0)
         self.assertEqual(calls.await_count, 2)
-        self.assertIn("2 to 10 words", calls.await_args_list[0].kwargs["system"])
+        self.assertIn("3 to 60 characters", calls.await_args_list[0].kwargs["system"])
         artifact = item.processing.artifacts["ru"]
-        self.assertEqual(artifact.title, "Компания представила новую модель и рассказала когда начнутся продажи во…")
+        self.assertEqual(artifact.title, "Компания представила новую модель и рассказала когда…")
         self.assertEqual(artifact.blocks[0].content, "Сохранённый перевод описания.")

@@ -85,6 +85,17 @@ internal val ThemePreset.glassSelection: Color
 internal fun Modifier.navigationGlass(shape: Shape, outlined: Boolean = true): Modifier =
     glassSurface(shape, backdrop = true, outlined = outlined)
 
+internal object ReadingGlass {
+    val base = Color(0xFFE0E0E0)
+    val raised = Color(0xFFF4F4F4)
+    val selection = Color(0xFFB5B5B5)
+    val text = Color(0xFF191919)
+    val muted = Color(0xFF3C3C3C)
+}
+
+internal fun Modifier.readingNavigationGlass(shape: Shape): Modifier =
+    glassSurface(shape, backdrop = true, lightNavigation = true)
+
 internal const val statusGlassFadeFraction = .47f
 
 internal fun Modifier.statusBarGlass(): Modifier =
@@ -100,14 +111,15 @@ internal fun Modifier.statusBarGlass(): Modifier =
 
 internal fun Modifier.glassSurface(
     shape: Shape, backdrop: Boolean = false, raised: Boolean = false, outlined: Boolean = true, menu: Boolean = false,
+    lightNavigation: Boolean = false,
 ): Modifier = composed {
     val palette = LocalHorizonPalette.current
     val blur = backdrop && backdropBlurAvailable
     val graphite = palette == ThemePreset.Graphite
-    val base = palette.glassBase
-    val top = if (raised) palette.glassSelection else palette.glassRaised
-    val edge = if (graphite) Color.White else palette.text
-    val surface = if (blur) glassBackdrop(shape, 22.dp, base, monochrome = graphite, menu = menu) else clip(shape)
+    val base = if (lightNavigation) ReadingGlass.base else palette.glassBase
+    val top = if (lightNavigation) ReadingGlass.raised else if (raised) palette.glassSelection else palette.glassRaised
+    val edge = if (lightNavigation || graphite) Color.White else palette.text
+    val surface = if (blur) glassBackdrop(shape, 22.dp, base, monochrome = lightNavigation || graphite, menu = menu) else clip(shape)
     surface.background(Brush.verticalGradient(listOf(
         top.copy(alpha = if (blur) .66f else .94f),
         base.copy(alpha = if (blur) .77f else .92f),

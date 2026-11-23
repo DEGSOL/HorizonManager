@@ -20,7 +20,7 @@ internal fun Sources(panel: Panel, model: ManagerModel, dirtyChange: (Boolean) -
     val profiles = panel.config.getJSONArray("profiles")
     val ids = profileIds(profiles)
     val original = config.getJSONObject("sources")
-    var working by remember(panel.config.optInt("revision")) { mutableStateOf(original.copyObject()) }
+    var working by remember(panel.server?.id, panel.config.optInt("revision")) { mutableStateOf(original.copyObject()) }
     var type by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("rss") }
     val dirty = working.toString() != original.toString()
     SideEffect { dirtyChange(dirty) }

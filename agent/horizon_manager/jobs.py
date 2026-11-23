@@ -127,9 +127,9 @@ async def execute(store, row, settings, enrichment_mode, digest_language):
         )
         with store.db() as db:
             search = store.media_search(db)
-            headline_words = store.headline_words(db)
+            headline_range = store.headline_range(db)
         process.stdin.write(json.dumps({"media_search": search, "enrichment_mode": enrichment_mode, "language": digest_language,
-                                        "headline_max_words": headline_words, "settings": settings,
+                                        "headline_range": headline_range, "settings": settings,
                                         "kind": row["kind"], "params": params}).encode())
         await process.stdin.drain()
         process.stdin.close()

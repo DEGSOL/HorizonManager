@@ -973,8 +973,12 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         api.put("digest-language", JSONObject().put("language", language))
     }
 
-    fun setHeadlineLength(words: Int) = mutate(setting = true) { api ->
-        api.put("headline-length", JSONObject().put("words", words))
+    fun setHeadlineRange(minimum: Int, maximum: Int) = mutate(setting = true) { api ->
+        val serverId = state.value.server?.id
+        val confirmed = api.put("headline-range", JSONObject().put("minimum", minimum).put("maximum", maximum)) as JSONObject
+        mutable.update {
+            if (it.server?.id == serverId) it.copy(status = it.status.copyObject().put("headline_range", confirmed)) else it
+        }
     }
 
     fun enrichmentMode(mode: String) = mutate(setting = true) { api ->
@@ -986,9 +990,21 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     }
 
     fun saveConfig(config: JSONObject, profiles: JSONArray, secrets: JSONObject = JSONObject()) {
-        mutate(full = true, setting = true) { api ->
-            api.put("config", JSONObject().put("revision", state.value.config.getInt("revision"))
-                .put("config", config).put("profiles", profiles).put("secrets", secrets))
+        val panel = state.value
+        val server = panel.server ?: return
+        val revision = panel.config.optInt("revision")
+        operation {
+            if (state.value.server?.id != server.id) return@operation
+            val savedConfig = withAgent(server) { api ->
+                api.put("config", JSONObject().put("revision", revision)
+                    .put("config", config).put("profiles", profiles).put("secrets", secrets)) as JSONObject
+            }
+            if (state.value.server?.id != server.id) return@operation
+            // The PUT response already contains the new config revision. Forms must see it
+            // before the success notice, even when the subsequent panel refresh is slow.
+            mutable.update { if (it.server?.id == server.id) it.copy(config = savedConfig) else it }
+            settingsSaved()
+            synchronize(server, everything = true)
         }
     }
 

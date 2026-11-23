@@ -13,7 +13,7 @@ from src.mcp.horizon_adapter import dicts_to_items, items_to_dicts
 from src.models import ContentArtifact, ContentBlock
 from src.processing.content import split_content
 
-from .configuration import DEFAULT_HEADLINE_WORDS
+from .configuration import DEFAULT_HEADLINE_RANGE
 
 LANGUAGE_NAMES = {
     "en": "English", "ru": "Russian", "de": "German", "fr": "French", "it": "Italian",
@@ -36,11 +36,10 @@ TRANSLATION_UNAVAILABLE = {
 }
 BATCH_SIZE = 4
 HEADLINE_INSTRUCTION = (
-    "Write each news headline in 2 to {maximum} words inclusive. Keep the main fact, names and numbers. "
-    "Use natural wording, with no emoji or clickbait. Check the word count before returning it. "
+    "Write each news headline in {minimum} to {maximum} characters inclusive, counting spaces and punctuation. "
+    "Keep the main fact, names and numbers. Use natural wording, with no emoji or clickbait. "
+    "Check the character count before returning it. "
 )
-WORD = re.compile(r"[^\W_]+(?:(?:[-‐‑'’]|(?<=\d)[.,](?=\d))[^\W_]+)*")
-CJK_LETTER = re.compile(r"[\u3040-\u30ff\u3400-\u9fff]")
 LABELS["ru"] = {
     "header": "Ежедневный дайджест Horizon",
     "source": "Первоисточник",
@@ -185,25 +184,31 @@ def _source_headline(item):
     return item.title
 
 
-def _headline_units(title, language, words):
-    # Japanese and Chinese commonly omit spaces. Use a visual length guard
-    # for these scripts in addition to the model's natural word-count rule.
-    if language in {"ja", "zh"} and CJK_LETTER.search(title):
-        return list(re.finditer(r"[^\W_]", title)), words * 3
-    return list(WORD.finditer(title)), words
+def _headline_text(value, language):
+    return " ".join(normalize_language(value, language).split())
 
 
-def _headline_fits(title, language, words):
-    units, maximum = _headline_units(title, language, words)
-    return 2 <= len(units) <= maximum
+def _headline_fits(title, limits):
+    minimum, maximum = limits
+    return minimum <= len(title) <= maximum
 
 
-def _headline_fallback(title, text, language, words):
-    for candidate in (title, text.strip().partition("\n")[0]):
-        units, maximum = _headline_units(candidate, language, words)
-        if len(units) >= 2:
-            return candidate[:units[maximum - 1].end()] + "…" if len(units) > maximum else candidate
-    return title
+def _headline_fallback(title, text, language, limits):
+    minimum, maximum = limits
+    candidates = (title, _headline_text(text.strip().partition("\n")[0], language))
+    for candidate in candidates:
+        if len(candidate) < minimum:
+            continue
+        if len(candidate) <= maximum:
+            return candidate
+        if maximum == 1:
+            return candidate[:1]
+        boundary = candidate.rfind(" ", 0, maximum)
+        if boundary >= max(1, minimum - 1):
+            return candidate[:boundary] + "…"
+        return candidate[:maximum - 1] + "…"
+    # The provider and original text cannot always supply a longer factual title.
+    return max(candidates, key=len)
 
 
 def _response_rows(reply, single_id=None):
@@ -238,9 +243,10 @@ def _response_rows(reply, single_id=None):
     return rows
 
 
-async def complete_artifacts(items, language, config, report=None, *, headline_words=DEFAULT_HEADLINE_WORDS):
+async def complete_artifacts(items, language, config, report=None, *, headline_range=DEFAULT_HEADLINE_RANGE):
     """Publish single-language articles and reuse headlines that already fit."""
-    headline_instruction = HEADLINE_INSTRUCTION.format(maximum=headline_words)
+    minimum, maximum = headline_range
+    headline_instruction = HEADLINE_INSTRUCTION.format(minimum=minimum, maximum=maximum)
     missing = []
     headlines = []
     for item in items:
@@ -256,7 +262,8 @@ async def complete_artifacts(items, language, config, report=None, *, headline_w
                 continue
             artifact = _article_artifact(language, title, body[:1600])
             item.processing.artifacts[language] = artifact
-        if not _headline_fits(artifact.title, language, headline_words):
+        artifact.title = _headline_text(artifact.title, language)
+        if not _headline_fits(artifact.title, headline_range):
             headlines.append(artifact)
     if not missing and not headlines:
         return 0
@@ -313,12 +320,12 @@ async def complete_artifacts(items, language, config, report=None, *, headline_w
                     or not _has_expected_script(title, body, language)):
                 continue
             item = remaining.pop(key)
-            source_title = _source_headline(item)
-            if _native_text(source_title, language) and _headline_fits(source_title, language, headline_words):
+            source_title = _headline_text(_source_headline(item), language)
+            if _native_text(source_title, language) and _headline_fits(source_title, headline_range):
                 title = source_title
-            artifact = _article_artifact(language, " ".join(title.split()), body.strip()[:2500])
+            artifact = _article_artifact(language, _headline_text(title, language), body.strip()[:2500])
             item.processing.artifacts[language] = artifact
-            if not _headline_fits(artifact.title, language, headline_words):
+            if not _headline_fits(artifact.title, headline_range):
                 headlines.append(artifact)
         if remaining:
             return "LOCALIZATION_RESPONSE_INVALID"
@@ -332,8 +339,8 @@ async def complete_artifacts(items, language, config, report=None, *, headline_w
             code = await translate({key: item}, retry=True)
             if code:
                 artifact = source_artifact(item, language)
-                artifact.title = normalize_language(
-                    _headline_fallback(_source_headline(item), artifact.blocks[0].content, language, headline_words), language
+                artifact.title = _headline_fallback(
+                    _headline_text(_source_headline(item), language), artifact.blocks[0].content, language, headline_range
                 )
                 item.processing.artifacts[language] = artifact
             return code
@@ -357,7 +364,7 @@ async def complete_artifacts(items, language, config, report=None, *, headline_w
         try:
             async with limit, asyncio.timeout(35):
                 reply = await client.complete(system=instructions, user=json.dumps(payload, ensure_ascii=False),
-                                              max_tokens=min(config.max_tokens, max(256, 128 * len(batch))))
+                                              max_tokens=min(config.max_tokens, max(256, (maximum + 32) * len(batch))))
             rows = _response_rows(reply) if isinstance(reply, str) and reply.strip() else []
         except Exception:
             rows = []
@@ -376,11 +383,13 @@ async def complete_artifacts(items, language, config, report=None, *, headline_w
             seen.add(key)
             title = row.get("title")
             if isinstance(title, str):
-                title = normalize_language(" ".join(title.split()), language)
-                if _headline_fits(title, language, headline_words) and _has_expected_script(title, "", language):
+                title = _headline_text(title, language)
+                if _headline_fits(title, headline_range) and _has_expected_script(title, "", language):
                     accepted[key] = title
         for index, artifact in enumerate(batch):
-            artifact.title = accepted.get(str(index)) or _headline_fallback(artifact.title, descriptions[index], language, headline_words)
+            artifact.title = accepted.get(str(index)) or _headline_fallback(
+                artifact.title, descriptions[index], language, headline_range
+            )
 
     await asyncio.gather(*(rewrite_headlines(headlines[index:index + BATCH_SIZE])
                            for index in range(0, len(headlines), BATCH_SIZE)))

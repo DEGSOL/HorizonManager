@@ -1,6 +1,8 @@
 <resources>
-    <string name="hovq_headline_limit">Nombre maximal de mots par titre</string>
-    <string name="hovq_headline_help">Saisissez de 2 à 30 mots pour les titres des prochains résumés. La valeur par défaut est 10.</string>
+    <string name="hovq_headline_range">Longueur du titre</string>
+    <string name="hovq_headline_min">Minimum de caractères</string>
+    <string name="hovq_headline_max">Maximum de caractères</string>
+    <string name="hovq_headline_help">Choisissez une plage de 1 à 240 caractères pour les prochains résumés. Les espaces et la ponctuation comptent.</string>
     <string name="hovq_headline_save">Enregistrer la longueur des titres</string>
     <string name="hovq_headline_upgrade">Mettez à jour l’agent du VPS pour modifier la longueur des titres.</string>
     <string name="hovq_digest_notifications">Notifications des nouveaux résumés</string>

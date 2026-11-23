@@ -1,6 +1,8 @@
 <resources>
-    <string name="hovq_headline_limit">Максимум слов в заголовке</string>
-    <string name="hovq_headline_help">От 2 до 30 слов для заголовков будущих дайджестов. По умолчанию 10.</string>
+    <string name="hovq_headline_range">Длина заголовка</string>
+    <string name="hovq_headline_min">Минимум символов</string>
+    <string name="hovq_headline_max">Максимум символов</string>
+    <string name="hovq_headline_help">Задайте диапазон от 1 до 240 символов для новых дайджестов. Пробелы и знаки препинания учитываются.</string>
     <string name="hovq_headline_save">Сохранить длину заголовка</string>
     <string name="hovq_headline_upgrade">Обновите агент на VPS, чтобы менять длину заголовков.</string>
     <string name="hovq_digest_notifications">Уведомления о новых дайджестах</string>

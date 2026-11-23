@@ -1,6 +1,8 @@
 <resources>
-    <string name="hovq_headline_limit">Maximum words per headline</string>
-    <string name="hovq_headline_help">Enter 2–30 words for headlines in future digests. The default is 10.</string>
+    <string name="hovq_headline_range">Headline length</string>
+    <string name="hovq_headline_min">Minimum characters</string>
+    <string name="hovq_headline_max">Maximum characters</string>
+    <string name="hovq_headline_help">Choose a range from 1 to 240 characters for future digests. Spaces and punctuation count.</string>
     <string name="hovq_headline_save">Save headline length</string>
     <string name="hovq_headline_upgrade">Update the VPS agent to change headline length.</string>
     <string name="hovq_digest_notifications">New digest notifications</string>

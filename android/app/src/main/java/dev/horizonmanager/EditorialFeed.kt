@@ -405,29 +405,29 @@ private fun FloatingFeedHeader(issue: JSONObject?, filters: NewsFilters, loaded:
                                modifier: Modifier, back: () -> Unit, toggleBubble: () -> Unit) {
     val title = ui(if (archived) R.string.archive else R.string.feed)
     val date = issue?.let { shortDigestDate(digestTime(it)) }.orEmpty()
-    val palette = LocalHorizonPalette.current
     Row(
         modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 5.dp, bottom = 4.dp)
-            .height(readingBarHeight()).navigationGlass(feedGlassShape).padding(start = 16.dp, end = 4.dp),
+            .height(readingBarHeight()).readingNavigationGlass(feedGlassShape).padding(start = 16.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (archived || full) {
             IconButton(onClick = back, modifier = Modifier.size(48.dp)) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, ui(R.string.ui_back), tint = palette.text)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, ui(R.string.ui_back), tint = ReadingGlass.text)
             }
         }
         Text(
             buildAnnotatedString {
                 append(title)
                 if (date.isNotBlank()) withStyle(SpanStyle(
-                    fontWeight = FontWeight.Light, color = palette.muted,
+                    fontWeight = FontWeight.Light, color = ReadingGlass.muted,
                 )) { append(" " + date) }
             },
-            Modifier.weight(1f).clickable(role = Role.Button, onClick = toggleBubble)
+            Modifier.weight(1f).clickable(interactionSource = null, indication = ripple(color = ReadingGlass.text),
+                role = Role.Button, onClick = toggleBubble)
                 .heightIn(min = 48.dp).wrapContentHeight(Alignment.CenterVertically).padding(vertical = 5.dp),
             style = if (LocalConfiguration.current.screenWidthDp < 350) MaterialTheme.typography.headlineMedium
                 else MaterialTheme.typography.displaySmall,
-            maxLines = 1, overflow = TextOverflow.Ellipsis, color = palette.text,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, color = ReadingGlass.text,
         )
         if (!bubble && !full) NewsToolbar(filters, loaded)
     }
@@ -654,7 +654,7 @@ internal fun PublicationTile(
         }
         if (unread || showBorder) {
             Spacer(Modifier.matchParentSize().graphicsLayer()
-                .unreadOutline(shape, key, borderAlpha, movingBorder, cover?.luminance, photoHeight))
+                .unreadOutline(shape, key, borderAlpha, movingBorder))
         }
     }
 }

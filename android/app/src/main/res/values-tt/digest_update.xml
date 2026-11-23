@@ -1,6 +1,8 @@
 <resources>
-    <string name="hovq_headline_limit">Башисемдәге сүзләрнең иң күп саны</string>
-    <string name="hovq_headline_help">Киләсе дайджестларның башисемнәре өчен 2–30 сүз сайлагыз. Килешенгән сан — 10.</string>
+    <string name="hovq_headline_range">Башисем озынлыгы</string>
+    <string name="hovq_headline_min">Иң аз тамга саны</string>
+    <string name="hovq_headline_max">Иң күп тамга саны</string>
+    <string name="hovq_headline_help">Яңа чыгарылышлар өчен 1–240 тамга аралыгын сайлагыз. Буш урыннар һәм тыныш билгеләре санала.</string>
     <string name="hovq_headline_save">Башисем озынлыгын саклау</string>
     <string name="hovq_headline_upgrade">Башисем озынлыгын үзгәртү өчен VPS агентын яңартыгыз.</string>
     <string name="hovq_digest_notifications">Яңа дайджестлар турында хәбәрләр</string>

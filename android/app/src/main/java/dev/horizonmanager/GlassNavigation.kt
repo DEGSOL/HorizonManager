@@ -124,7 +124,6 @@ internal fun GlassNavigation(
     measured: (Dp) -> Unit, select: (Int) -> Unit,
 ) {
     val haptic = LocalHapticFeedback.current
-    val palette = LocalHorizonPalette.current
     val density = LocalDensity.current
     val direction = if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1f else 1f
     val position = remember { Animatable(selection.toFloat()) }
@@ -138,7 +137,7 @@ internal fun GlassNavigation(
                 drawContent()
                 drawRect(Color.Black.copy(alpha = .37f))
             } else Modifier)
-            .navigationGlass(CircleShape)
+            .readingNavigationGlass(CircleShape)
             .padding(NavigationStyle.inset),
     ) {
         val segment = maxWidth / tabs.size
@@ -150,12 +149,12 @@ internal fun GlassNavigation(
                 .padding(horizontal = 2.dp)
                 .clip(CircleShape)
                 .background(Brush.verticalGradient(listOf(
-                    palette.glassSelection.copy(alpha = .94f),
-                    palette.glassSelection.copy(alpha = .58f),
+                    ReadingGlass.selection.copy(alpha = .94f),
+                    ReadingGlass.selection.copy(alpha = .58f),
                 )))
                 .border(1.dp, Brush.verticalGradient(listOf(
-                    palette.text.copy(alpha = .25f),
-                    palette.text.copy(alpha = .10f),
+                    ReadingGlass.text.copy(alpha = .25f),
+                    ReadingGlass.text.copy(alpha = .10f),
                 )), CircleShape))
         }
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).selectableGroup()) {
@@ -176,13 +175,12 @@ private fun GlassNavigationButton(
     tab: HorizonTab, selected: Boolean, unread: Int, enabled: Boolean,
     modifier: Modifier, open: () -> Unit,
 ) {
-    val palette = LocalHorizonPalette.current
     val label = ui(tab.label)
     val unreadDescription = if (unread > 0) ui(R.string.nav_unread, unread) else null
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val iconScale by animateFloatAsState(if (pressed) .95f else 1f, tween(130), label = "Tab press")
-    val tint by animateColorAsState(if (selected) palette.text else palette.muted,
+    val tint by animateColorAsState(if (selected) ReadingGlass.text else ReadingGlass.muted,
         tween(260), label = "Tab color")
     Column(
         modifier.fillMaxHeight().heightIn(min = readingBarHeight() - NavigationStyle.inset * 2)
@@ -207,7 +205,6 @@ private fun GlassNavigationButton(
 
 @Composable
 private fun UnreadBadge(count: Int, modifier: Modifier) {
-    val palette = LocalHorizonPalette.current
     val label = unreadBadgeText(count)
     val pulse = remember { Animatable(1f) }
     var previous by remember { mutableIntStateOf(count) }
@@ -225,12 +222,12 @@ private fun UnreadBadge(count: Int, modifier: Modifier) {
         Box(
             Modifier.graphicsLayer { scaleX = pulse.value; scaleY = pulse.value }
                 .defaultMinSize(minWidth = 17.dp, minHeight = 17.dp).clip(CircleShape)
-                .background(Brush.verticalGradient(listOf(palette.glassSelection, palette.glassRaised)))
-                .border(.8.dp, palette.text.copy(alpha = .50f), CircleShape)
+                .background(Brush.verticalGradient(listOf(ReadingGlass.muted, ReadingGlass.text)))
+                .border(.8.dp, Color.White.copy(alpha = .50f), CircleShape)
                 .padding(horizontal = 3.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Text(label ?: lastLabel, Modifier.clearAndSetSemantics {}, color = palette.text,
+            Text(label ?: lastLabel, Modifier.clearAndSetSemantics {}, color = Color.White,
                 fontSize = 9.sp, lineHeight = 12.sp, fontWeight = FontWeight.SemiBold)
         }
     }

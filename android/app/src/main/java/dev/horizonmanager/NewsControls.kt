@@ -116,15 +116,14 @@ internal fun NewsToolbar(filters: NewsFilters, enabled: Boolean) {
 @Composable
 private fun FeedToolbarButton(icon: ImageVector, description: String, enabled: Boolean,
                               active: Boolean, toggle: () -> Unit) {
-    val palette = LocalHorizonPalette.current
     Box(
         Modifier.size(48.dp).toggleable(active, enabled = enabled, role = Role.Button,
-            interactionSource = null, indication = ripple(bounded = false, radius = 21.dp, color = palette.text),
+            interactionSource = null, indication = ripple(bounded = false, radius = 21.dp, color = ReadingGlass.text),
             onValueChange = { toggle() }),
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, description, Modifier.size(22.dp),
-            tint = palette.text.copy(alpha = if (!enabled) .40f else if (active) 1f else .76f))
+            tint = ReadingGlass.text.copy(alpha = if (!enabled) .40f else if (active) 1f else .76f))
     }
 }
 

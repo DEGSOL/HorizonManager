@@ -163,7 +163,7 @@ internal fun GlassLayout(tabs: List<HorizonTab>, selection: Int, showTabs: Boole
             }
         }
         CompositionLocalProvider(LocalGlassScene provides scene, LocalMenuScene provides scene) {
-            GlassNoticeHost(Modifier.align(Alignment.TopCenter))
+            GlassNoticeHost(bottomClearance = clearance)
             modal()
         }
     }

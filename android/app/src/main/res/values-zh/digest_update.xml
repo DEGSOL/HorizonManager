@@ -1,6 +1,8 @@
 <resources>
-    <string name="hovq_headline_limit">标题的最大词数</string>
-    <string name="hovq_headline_help">将今后摘要的标题长度设为 2 至 30 个词。默认值为 10。</string>
+    <string name="hovq_headline_range">标题长度</string>
+    <string name="hovq_headline_min">最少字符数</string>
+    <string name="hovq_headline_max">最多字符数</string>
+    <string name="hovq_headline_help">为今后的摘要设置 1 至 240 个字符的范围。空格和标点也计入。</string>
     <string name="hovq_headline_save">保存标题长度</string>
     <string name="hovq_headline_upgrade">更新 VPS 上的代理后即可更改标题长度。</string>
     <string name="hovq_digest_notifications">新摘要通知</string>

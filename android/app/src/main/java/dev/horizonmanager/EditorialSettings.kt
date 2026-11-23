@@ -22,10 +22,10 @@ internal fun SettingsExpandable(title: Int, description: Int, content: @Composab
 
 @Composable
 private fun CountField(title: Int, value: String, update: (String) -> Unit, valid: Boolean,
-                       hint: Int, help: Int? = null) {
+                       hint: Int? = null, help: Int? = null) {
     OutlinedTextField(value, { update(it.filter(Char::isDigit).take(9)) }, modifier = Modifier.fillMaxWidth(),
         label = { Text(ui(title)) }, singleLine = true, isError = !valid,
-        supportingText = { Text(ui(hint)) },
+        supportingText = if (hint == null) null else ({ Text(ui(hint)) }),
         trailingIcon = if (help == null) null else ({ SettingHelp(ui(title), help) }),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), colors = horizonFieldColors())
 }
@@ -36,11 +36,17 @@ internal fun DigestRulesForm(panel: Panel, model: ManagerModel, base: JSONObject
     val original = base.optJSONObject("digest") ?: JSONObject()
     val collection = base.optJSONObject("collection") ?: JSONObject()
     val revision = panel.config.optInt("revision")
-    val savedHeadline = panel.status.optString("headline_max_words")
-    var headline by rememberSaveable(savedHeadline) { mutableStateOf(savedHeadline) }
-    val headlineDirty = savedHeadline.isNotEmpty() && headline != savedHeadline
-    val headlineWords = headline.toIntOrNull()
-    val headlineValid = headlineWords != null && headlineWords in 2..30
+    val savedHeadline = panel.status.optJSONObject("headline_range")
+    val savedMinimum = savedHeadline?.optString("minimum").orEmpty()
+    val savedMaximum = savedHeadline?.optString("maximum").orEmpty()
+    val serverId = panel.server?.id
+    var headlineMinimum by rememberSaveable(serverId, savedMinimum, savedMaximum) { mutableStateOf(savedMinimum) }
+    var headlineMaximum by rememberSaveable(serverId, savedMinimum, savedMaximum) { mutableStateOf(savedMaximum) }
+    val headlineDirty = savedHeadline != null && (headlineMinimum != savedMinimum || headlineMaximum != savedMaximum)
+    val minimumCharacters = headlineMinimum.toIntOrNull()
+    val maximumCharacters = headlineMaximum.toIntOrNull()
+    val validMinimum = minimumCharacters != null && minimumCharacters in 1..240
+    val validMaximum = maximumCharacters != null && minimumCharacters != null && maximumCharacters in minimumCharacters..240
     var hours by rememberSaveable(revision) { mutableStateOf(collection.optInt("time_window_hours", 24).toString()) }
     var maximum by rememberSaveable(revision) { mutableStateOf(articleField(original, "max_items")) }
     var draft by rememberSaveable(revision) { mutableStateOf(original.toString()) }
@@ -71,15 +77,18 @@ internal fun DigestRulesForm(panel: Panel, model: ManagerModel, base: JSONObject
             R.string.digest_max_hint, R.string.setting_help_issue_limit)
     }
     Tile {
-        if (savedHeadline.isEmpty()) {
-            Text(ui(R.string.hovq_headline_limit), style = MaterialTheme.typography.titleMedium)
+        Text(ui(R.string.hovq_headline_range), style = MaterialTheme.typography.titleMedium)
+        if (savedHeadline == null) {
             Text(ui(R.string.hovq_headline_upgrade), style = MaterialTheme.typography.bodySmall)
         } else {
-            CountField(R.string.hovq_headline_limit, headline, { headline = it }, headlineValid,
-                R.string.hovq_headline_help)
+            Text(ui(R.string.hovq_headline_help), style = MaterialTheme.typography.bodySmall)
+            CountField(R.string.hovq_headline_min, headlineMinimum, { headlineMinimum = it }, validMinimum)
+            CountField(R.string.hovq_headline_max, headlineMaximum, { headlineMaximum = it }, validMaximum)
             if (headlineDirty) {
-                Button(enabled = !panel.busy && headlineValid,
-                    onClick = { headlineWords?.let(model::setHeadlineLength) }) {
+                Button(enabled = !panel.busy && validMinimum && validMaximum, onClick = {
+                    if (minimumCharacters != null && maximumCharacters != null)
+                        model.setHeadlineRange(minimumCharacters, maximumCharacters)
+                }) {
                     Text(ui(R.string.hovq_headline_save))
                 }
             }

@@ -1,6 +1,8 @@
 <resources>
-    <string name="hovq_headline_limit">見出しの最大単語数</string>
-    <string name="hovq_headline_help">今後のダイジェストの見出しを2～30語で設定します。初期値は10語です。</string>
+    <string name="hovq_headline_range">見出しの長さ</string>
+    <string name="hovq_headline_min">最小文字数</string>
+    <string name="hovq_headline_max">最大文字数</string>
+    <string name="hovq_headline_help">今後のダイジェストの見出しは1〜240文字で範囲を指定します。空白や句読点も数えます。</string>
     <string name="hovq_headline_save">見出しの長さを保存</string>
     <string name="hovq_headline_upgrade">見出しの長さを変更するには、VPSのエージェントを更新してください。</string>
     <string name="hovq_digest_notifications">新着ダイジェストの通知</string>

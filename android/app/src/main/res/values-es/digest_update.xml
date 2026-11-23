@@ -1,6 +1,8 @@
 <resources>
-    <string name="hovq_headline_limit">Máximo de palabras por titular</string>
-    <string name="hovq_headline_help">Elige entre 2 y 30 palabras para los titulares de próximos resúmenes. El valor predeterminado es 10.</string>
+    <string name="hovq_headline_range">Longitud del titular</string>
+    <string name="hovq_headline_min">Mínimo de caracteres</string>
+    <string name="hovq_headline_max">Máximo de caracteres</string>
+    <string name="hovq_headline_help">Elige un intervalo de 1 a 240 caracteres para futuros resúmenes. Los espacios y signos de puntuación cuentan.</string>
     <string name="hovq_headline_save">Guardar longitud del titular</string>
     <string name="hovq_headline_upgrade">Actualiza el agente del VPS para cambiar la longitud de los titulares.</string>
     <string name="hovq_digest_notifications">Notificaciones de nuevos resúmenes</string>

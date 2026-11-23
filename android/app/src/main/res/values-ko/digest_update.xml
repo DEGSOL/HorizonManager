@@ -1,6 +1,8 @@
 <resources>
-    <string name="hovq_headline_limit">제목당 최대 단어 수</string>
-    <string name="hovq_headline_help">향후 다이제스트 제목에 사용할 단어 수를 2~30개로 설정합니다. 기본값은 10개입니다.</string>
+    <string name="hovq_headline_range">제목 길이</string>
+    <string name="hovq_headline_min">최소 문자 수</string>
+    <string name="hovq_headline_max">최대 문자 수</string>
+    <string name="hovq_headline_help">향후 다이제스트의 제목은 1~240자 범위로 지정하세요. 공백과 문장 부호도 포함됩니다.</string>
     <string name="hovq_headline_save">제목 길이 저장</string>
     <string name="hovq_headline_upgrade">제목 길이를 변경하려면 VPS 에이전트를 업데이트하세요.</string>
     <string name="hovq_digest_notifications">새 다이제스트 알림</string>

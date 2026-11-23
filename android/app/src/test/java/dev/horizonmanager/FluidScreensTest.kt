@@ -192,7 +192,8 @@ class FluidScreensTest {
                 .put("zone", "UTC").put("days", JSONArray((0..6).toList())))
                 .put("next", now.plusSeconds(3600).epochSecond),
             archive = listOf(issue) + archive,
-            status = JSONObject().put("agent", agentVersion).put("media_search", false).put("headline_max_words", 10),
+            status = JSONObject().put("agent", agentVersion).put("media_search", false)
+                .put("headline_range", JSONObject().put("minimum", 3).put("maximum", 60)),
             events = listOf(
                 JSONObject().put("time", now.toString()).put("code", "SCHEDULE_SKIPPED_ACTIVE")
                     .put("component", "scheduler").put("level", "WARNING"),
@@ -268,7 +269,7 @@ class FluidScreensTest {
     }
 
     @Test
-    fun bothNavigationBarsUseTheSelectedTheme() {
+    fun bothNavigationBarsStayLightGreyAcrossThemes() {
         val heading = loadIssue(articleCount = 12)
         val title = compose.onNodeWithText(heading).getUnclippedBoundsInRoot()
         val tab = compose.onNodeWithContentDescription(ui(R.string.settings)).getUnclippedBoundsInRoot()
@@ -279,15 +280,17 @@ class FluidScreensTest {
         }
         val ocean = snapshot("18-ocean-navigation")
         val density = compose.activity.resources.displayMetrics.density
-        fun excessBlue(bitmap: Bitmap, x: Float, y: Float): Int {
-            val color = bitmap.getPixel((x * density).toInt(), (y * density).toInt())
-            return android.graphics.Color.blue(color) - android.graphics.Color.red(color)
-        }
         for ((x, y) in listOf(title.left.value + 5f to title.top.value + 2f,
             tab.left.value + 5f to tab.top.value + 12f)) {
-            assertTrue("The Ocean glass should be bluer than Graphite",
-                excessBlue(ocean, x, y) > excessBlue(graphite, x, y) + 8)
+            for (bitmap in listOf(graphite, ocean)) {
+                val color = bitmap.getPixel((x * density).toInt(), (y * density).toInt())
+                val channels = listOf(android.graphics.Color.red(color), android.graphics.Color.green(color),
+                    android.graphics.Color.blue(color))
+                assertTrue("Navigation glass should stay light and neutral", channels.min() >= 155 &&
+                    channels.max() - channels.min() <= 4)
+            }
         }
+        assertNotEquals("The surrounding screen still follows the theme", graphite.getPixel(8, 8), ocean.getPixel(8, 8))
     }
 
     @Test
@@ -313,10 +316,9 @@ class FluidScreensTest {
             beforeScroll.getPixel(x, y) != scrolled.getPixel(x, y)
         }
         assertTrue("Content should remain visible through the status bar glass while scrolling", backdropChanged)
-        val center = beforeScroll.width / 2
-        val top = android.graphics.Color.red(beforeScroll.getPixel(center, 1))
-        val lower = android.graphics.Color.red(beforeScroll.getPixel(center, (23 * density).toInt()))
-        assertTrue("The status glass should fade as it approaches its lower edge", lower < top)
+        val gutter = (5 * density).toInt()
+        fun redAt(y: Int) = android.graphics.Color.red(scrolled.getPixel(gutter, (y * density).toInt()))
+        assertTrue("The status glass should fade below the status inset", redAt(24) > redAt(30) && redAt(30) > redAt(36))
     }
 
     @Test
@@ -399,7 +401,13 @@ class FluidScreensTest {
         text(R.string.mr_news).performClick()
         text(R.string.settings_digest_rules).performClick()
         text(R.string.digest_basic_title).assertIsDisplayed()
-        text(R.string.digest_groups_title).performClick()
+        val maximum = compose.onNode(hasSetTextAction() and hasText(ui(R.string.hovq_headline_max)))
+        maximum.performScrollTo().performTextReplacement("2")
+        text(R.string.hovq_headline_save).performScrollTo().assertIsNotEnabled()
+        maximum.performScrollTo().performTextReplacement("8")
+        text(R.string.hovq_headline_save).performScrollTo().assertIsEnabled()
+        maximum.performScrollTo().performTextReplacement("60")
+        text(R.string.digest_groups_title).performScrollTo().performClick()
         text(R.string.digest_group_add).performScrollTo().performClick()
         text(R.string.digest_categories_detail).performScrollTo().assertIsDisplayed()
         text(R.string.ui_cancel).performScrollTo().performClick()
@@ -430,6 +438,41 @@ class FluidScreensTest {
     }
 
     @Test
+    @Suppress("UNCHECKED_CAST")
+    fun savedTelegramConfigurationClearsBackWarningWhileSyncContinues() {
+        loadIssue(articleCount = 4)
+        tab(R.string.settings)
+        text(R.string.mr_news).performClick()
+        text(R.string.sources).performScrollTo().performClick()
+        text(R.string.ui_integration).performScrollTo().performClick()
+        compose.onNodeWithText(label("telegram")).performClick()
+        text(R.string.editorial_add_channel).performScrollTo().performClick()
+        val handle = "fixture_channel"
+        compose.onNode(hasSetTextAction() and hasText(ui(R.string.ui_public_channel))).performTextInput(handle)
+        text(R.string.editorial_done).performClick()
+        text(R.string.ui_apply_source_settings).performScrollTo().assertIsEnabled()
+        back()
+        text(R.string.editorial_discard_prompt).assertIsDisplayed()
+        text(R.string.ui_cancel).performClick()
+
+        compose.runOnIdle {
+            val model = ViewModelProvider(compose.activity)[ManagerModel::class.java]
+            val state = ManagerModel::class.java.getDeclaredField("mutable").apply { isAccessible = true }
+                .get(model) as MutableStateFlow<Panel>
+            val current = state.value
+            val confirmed = current.config.copyObject().put("revision", current.config.getInt("revision") + 1)
+            confirmed.getJSONObject("config").getJSONObject("sources").getJSONObject("telegram")
+                .getJSONArray("channels").put(JSONObject().put("enabled", true).put("channel", handle))
+            state.value = current.copy(config = confirmed, busy = true, syncing = true)
+            ManagerModel::class.java.getDeclaredMethod("settingsSaved").apply { isAccessible = true }.invoke(model)
+        }
+        text(R.string.hovq_settings_saved).assertIsDisplayed()
+        back()
+        text(R.string.editorial_discard_prompt).assertDoesNotExist()
+        text(R.string.settings_digest_rules).assertExists()
+    }
+
+    @Test
     fun appIconSettingsSaveAndBackupsOfferTwoTargets() {
         loadIssue()
         tab(R.string.settings)
@@ -439,7 +482,10 @@ class FluidScreensTest {
         assertEquals(LauncherAppearance.Dark, LauncherAppearance.current(compose.activity))
         val notice = text(R.string.hovq_settings_saved)
         notice.assertIsDisplayed()
-        assertTrue(notice.getUnclippedBoundsInRoot().top < 64.dp)
+        val density = compose.activity.resources.displayMetrics.density
+        val screenBottom = (compose.activity.window.decorView.height / density).dp
+        val noticeBottomGap = screenBottom - notice.getUnclippedBoundsInRoot().bottom
+        assertTrue("The saved notice should sit just above the bottom bar", noticeBottomGap in 70.dp..130.dp)
         compose.mainClock.advanceTimeBy(5_000)
         notice.assertDoesNotExist()
         back()

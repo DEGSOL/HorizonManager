@@ -186,8 +186,15 @@ class AgentTests(unittest.TestCase):
         self.assertTrue(self.client.put("/v1/media-search", json={"enabled": True}).json()["enabled"])
         self.assertEqual(self.client.put("/v1/digest-language", json={"language": "ru"}).json(), {"language": "ru"})
         self.assertEqual(self.client.get("/v1/status").json()["headline_max_words"], 10)
+        self.assertEqual(self.client.get("/v1/status").json()["headline_range"], {"minimum": 3, "maximum": 60})
         self.assertEqual(self.client.put("/v1/headline-length", json={"words": 31}).status_code, 422)
         self.assertEqual(self.client.put("/v1/headline-length", json={"words": 16}).json(), {"words": 16})
+        self.assertEqual(self.client.get("/v1/status").json()["headline_range"], {"minimum": 3, "maximum": 96})
+        self.assertEqual(self.client.put("/v1/headline-range", json={"minimum": 8, "maximum": 3}).status_code, 422)
+        self.assertEqual(self.client.put("/v1/headline-range", json={"minimum": 0, "maximum": 8}).status_code, 422)
+        self.assertEqual(self.client.put("/v1/headline-range", json={"minimum": 3, "maximum": 241}).status_code, 422)
+        limits = {"minimum": 3, "maximum": 8}
+        self.assertEqual(self.client.put("/v1/headline-range", json=limits).json(), limits)
         self.assertEqual(before, self.client.get("/v1/config").json())
         backup = self.client.post("/v1/backup", json={"password": "long-password-for-tests"}).json()["archive"]
         self.client.put("/v1/media-search", json={"enabled": False})
@@ -199,6 +206,7 @@ class AgentTests(unittest.TestCase):
         self.assertTrue(status["media_search"])
         self.assertEqual(status["digest_language"], "ru")
         self.assertEqual(status["headline_max_words"], 16)
+        self.assertEqual(status["headline_range"], limits)
 
     def test_digest_language_upgrade_keeps_old_choice_and_accepts_all_new_codes(self):
         import sqlite3
@@ -224,7 +232,7 @@ class AgentTests(unittest.TestCase):
     def test_generation_uses_one_new_language(self):
         self.assertEqual(self.client.put("/v1/config", json=self.config()).status_code, 200)
         self.assertEqual(self.client.put("/v1/digest-language", json={"language": "fr"}).status_code, 200)
-        self.assertEqual(self.client.put("/v1/headline-length", json={"words": 5}).status_code, 200)
+        self.assertEqual(self.client.put("/v1/headline-range", json={"minimum": 12, "maximum": 30}).status_code, 200)
         run = uuid4()
         self.assertLess(self.client.post("/v1/jobs", json={"id": str(run)}).status_code, 300)
         job = self.wait(run.hex)
@@ -232,7 +240,7 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(job["result"]["languages"], ["fr"])
         self.assertEqual(len(self.fixture.translation_requests), 1)
         self.assertIn("into French", self.fixture.translation_requests[0])
-        self.assertIn("2 to 5 words", self.fixture.translation_requests[0])
+        self.assertIn("12 to 30 characters", self.fixture.translation_requests[0])
         digest = self.client.get(f"/v1/digests/{run.hex}/fr").json()
         self.assertIn("Revue du jour Horizon", digest["markdown"])
         self.assertEqual(digest["items"][0]["title"], "Article technique de test")

@@ -165,11 +165,13 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     var localSave by remember { mutableIntStateOf(0) }
     val remoteSave by model.settingsSaved.collectAsStateWithLifecycle()
     var lastSave by remember { mutableIntStateOf(remoteSave) }
+    var lastLocalSave by remember { mutableIntStateOf(localSave) }
     LaunchedEffect(remoteSave, localSave) {
-        if (remoteSave == lastSave && localSave == 0) return@LaunchedEffect
+        if (remoteSave == lastSave && localSave == lastLocalSave) return@LaunchedEffect
         lastSave = remoteSave
+        lastLocalSave = localSave
         launcherIcon = LauncherAppearance.current(ctx)
-        notices.showSnackbar(ui(R.string.hovq_settings_saved))
+        notices.showSnackbar(SavedNotice(ui(R.string.hovq_settings_saved)))
     }
     var archiveIssue by rememberSaveable(currentServer?.id) { mutableStateOf("") }
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current

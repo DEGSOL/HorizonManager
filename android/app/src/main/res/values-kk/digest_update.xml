@@ -1,6 +1,8 @@
 <resources>
-    <string name="hovq_headline_limit">Тақырыптағы ең көп сөз саны</string>
-    <string name="hovq_headline_help">Алдағы дайджест тақырыптарына 2–30 сөзді таңдаңыз. Әдепкі мәні — 10.</string>
+    <string name="hovq_headline_range">Тақырып ұзындығы</string>
+    <string name="hovq_headline_min">Ең аз таңба саны</string>
+    <string name="hovq_headline_max">Ең көп таңба саны</string>
+    <string name="hovq_headline_help">Жаңа дайджесттерге 1–240 таңба аралығын таңдаңыз. Бос орындар мен тыныс белгілері есептеледі.</string>
     <string name="hovq_headline_save">Тақырып ұзындығын сақтау</string>
     <string name="hovq_headline_upgrade">Тақырып ұзындығын өзгерту үшін VPS агентін жаңартыңыз.</string>
     <string name="hovq_digest_notifications">Жаңа дайджест хабарландырулары</string>

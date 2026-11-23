@@ -1,6 +1,8 @@
 <resources>
-    <string name="hovq_headline_limit">Maximale Wörter pro Überschrift</string>
-    <string name="hovq_headline_help">Für künftige Ausgaben sind 2–30 Wörter möglich. Standard sind 10.</string>
+    <string name="hovq_headline_range">Überschriftenlänge</string>
+    <string name="hovq_headline_min">Minimale Zeichenzahl</string>
+    <string name="hovq_headline_max">Maximale Zeichenzahl</string>
+    <string name="hovq_headline_help">Wähle für neue Ausgaben einen Bereich von 1 bis 240 Zeichen. Leerzeichen und Satzzeichen zählen mit.</string>
     <string name="hovq_headline_save">Überschriftenlänge speichern</string>
     <string name="hovq_headline_upgrade">Aktualisieren Sie den Agenten auf dem VPS, um die Überschriftenlänge zu ändern.</string>
     <string name="hovq_digest_notifications">Mitteilungen zu neuen Ausgaben</string>
