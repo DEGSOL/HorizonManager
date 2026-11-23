@@ -446,10 +446,7 @@ class FluidScreensTest {
         text(R.string.sources).performScrollTo().performClick()
         text(R.string.ui_integration).performScrollTo().performClick()
         compose.onNodeWithText(label("telegram")).performClick()
-        text(R.string.editorial_add_channel).performScrollTo().performClick()
-        val handle = "fixture_channel"
-        compose.onNode(hasSetTextAction() and hasText(ui(R.string.ui_public_channel))).performTextInput(handle)
-        text(R.string.editorial_done).performClick()
+        compose.onNode(isToggleable()).performClick()
         text(R.string.ui_apply_source_settings).performScrollTo().assertIsEnabled()
         back()
         text(R.string.editorial_discard_prompt).assertIsDisplayed()
@@ -462,7 +459,7 @@ class FluidScreensTest {
             val current = state.value
             val confirmed = current.config.copyObject().put("revision", current.config.getInt("revision") + 1)
             confirmed.getJSONObject("config").getJSONObject("sources").getJSONObject("telegram")
-                .getJSONArray("channels").put(JSONObject().put("enabled", true).put("channel", handle))
+                .put("enabled", true)
             state.value = current.copy(config = confirmed, busy = true, syncing = true)
             ManagerModel::class.java.getDeclaredMethod("settingsSaved").apply { isAccessible = true }.invoke(model)
         }
