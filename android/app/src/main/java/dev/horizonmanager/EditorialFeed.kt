@@ -22,8 +22,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -358,6 +356,7 @@ internal fun NewsScreen(
             }
         }
         CompositionLocalProvider(LocalGlassScene provides scene) {
+            StatusGlass()
             AnimatedVisibility(
                 barsVisible,
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = topInset),
@@ -592,32 +591,14 @@ internal fun PublicationTile(
         .clickable(role = Role.Button, onClick = open), photoHeight = photoHeight) {
         Column {
             Row(
-                Modifier.fillMaxWidth().padding(start = 9.dp, end = 1.dp),
+                Modifier.fillMaxWidth().padding(end = 1.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.End,
             ) {
-                val category = if (isTelegram(article)) "Telegram"
-                    else articleField(article, "category").ifBlank { articleField(article, "source") }
-                if (category.isNotBlank())
-                    Text(
-                        category,
-                        Modifier.weight(1f, fill = false)
-                            .background(
-                                Color.Black.copy(alpha = .45f),
-                                androidx.compose.foundation.shape.CircleShape,
-                            )
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                        color = Color.White,
-                        style = MaterialTheme.typography.labelMedium,
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                else Spacer(Modifier.weight(1f))
                 val haptic = LocalHapticFeedback.current
                 CoverIconAction(
-                    if (flag?.saved == true) Icons.Default.Star
-                    else ImageVector.vectorResource(R.drawable.ic_star_outline),
+                    ImageVector.vectorResource(if (flag?.saved == true) R.drawable.ic_bookmark_filled
+                        else R.drawable.ic_bookmark_outline),
                     ui(
                         if (flag?.saved == true) R.string.remove_from_favorites
                         else R.string.add_to_favorites
@@ -642,16 +623,16 @@ internal fun PublicationTile(
                             platformStyle = PlatformTextStyle(includeFontPadding = true),
                         ),
                 )
-                val source = if (isTelegram(article)) telegramPublisher(article) else articleField(article, "source")
-                if (source.isNotBlank())
-                    Text(
-                        source,
-                        Modifier.padding(top = 6.dp),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xffd1d3d5),
-                    )
+                val metadataHeight = with(LocalDensity.current) { MaterialTheme.typography.bodySmall.lineHeight.toDp() }
+                Row(Modifier.fillMaxWidth().padding(top = 6.dp).heightIn(min = metadataHeight),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    PublicationSource(article, Modifier.weight(1f))
+                    PublicationScore(article)
+                }
             }
         }
+        Spacer(Modifier.matchParentSize().glassRim(shape))
         if (unread || showBorder) {
             Spacer(Modifier.matchParentSize().graphicsLayer()
                 .unreadOutline(shape, key, borderAlpha, movingBorder))
@@ -659,21 +640,10 @@ internal fun PublicationTile(
     }
 }
 
-internal fun articleSource(article: JSONObject): String =
-    listOf(
-            articleField(article, "source").takeIf(String::isNotBlank)?.let(::label).orEmpty(),
-            telegramPublisher(article),
-            articleField(article, "category"),
-            articleField(article, "profile"),
-        )
-        .filter(String::isNotBlank)
-        .distinctBy { it.lowercase(Locale.ROOT) }
-        .joinToString(" · ")
-
 private val telegramPost = Regex("/(?:s/)?([A-Za-z][A-Za-z0-9_]{3,31})/[0-9]+/?")
 private val telegramHosts = setOf("t.me", "telegram.me", "telegram.dog")
 
-private fun isTelegram(article: JSONObject) = articleField(article, "source").equals("telegram", true)
+internal fun isTelegram(article: JSONObject) = articleField(article, "source").equals("telegram", true)
 
 internal fun telegramPublisher(article: JSONObject): String {
     if (!isTelegram(article)) return ""
@@ -688,18 +658,6 @@ internal fun telegramPublisher(article: JSONObject): String {
     }
     return ""
 }
-
-internal fun articleMetadata(article: JSONObject): String =
-    listOf(
-            localTime(articleField(article, "time")),
-            article
-                .optDouble("score")
-                .takeIf(Double::isFinite)
-                ?.let { "%.1f / 10".format(appLocale(), it) }
-                .orEmpty(),
-        )
-        .filter(String::isNotBlank)
-        .joinToString(" · ")
 
 @Composable
 internal fun ArchiveScreen(

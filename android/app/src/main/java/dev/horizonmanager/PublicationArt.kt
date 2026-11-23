@@ -8,11 +8,13 @@ import android.os.SystemClock
 import android.util.AtomicFile
 import android.util.LruCache
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -20,6 +22,9 @@ import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -360,14 +365,16 @@ internal fun artwork(server: String, article: JSONObject, relay: (suspend () -> 
     }
 }
 
-private fun DrawScope.crop(image: ImageBitmap, frameHeight: Float = size.height) {
-    val scale = max(size.width / image.width, frameHeight / image.height)
+internal fun DrawScope.drawCoverImage(image: ImageBitmap, frame: Size = size, fit: Boolean = false) {
+    val sx = frame.width / image.width
+    val sy = frame.height / image.height
+    val scale = if (fit) min(sx, sy) else max(sx, sy)
     val w = max(1, (image.width * scale).roundToInt())
     val h = max(1, (image.height * scale).roundToInt())
     drawImage(
         image,
         dstOffset =
-            IntOffset(((size.width - w) / 2).roundToInt(), ((frameHeight - h) / 2).roundToInt()),
+            IntOffset(((frame.width - w) / 2).roundToInt(), ((frame.height - h) / 2).roundToInt()),
         dstSize = IntSize(w, h),
         filterQuality = FilterQuality.Medium,
     )
@@ -410,7 +417,7 @@ private fun DrawScope.drawTilePhoto(cover: Cover, photoBottom: Float, fadeStart:
     val bounds = androidx.compose.ui.geometry.Rect(0f, 0f, size.width, photoBottom)
     drawContext.canvas.saveLayer(bounds, Paint())
     clipRect(bottom = photoBottom) {
-        crop(cover.image, frameHeight = photoBottom)
+        drawCoverImage(cover.image, Size(size.width, photoBottom))
         drawRect(
             Brush.verticalGradient(listOf(Color.Black, Color.Transparent), fadeStart, photoBottom),
             size = androidx.compose.ui.geometry.Size(size.width, photoBottom),
@@ -427,16 +434,30 @@ internal fun PublicationCover(
     modifier: Modifier = Modifier,
     textHeight: Float = 0f,
     photoHeight: Dp? = null,
+    openPhoto: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val placement = remember { CoverPlacement() }
     val height = with(LocalDensity.current) { photoHeight?.toPx() }
-    val surface = remember(cover, height) { CoverActionSurface(placement, cover?.luminance, height) }
+    val surface = remember(cover, height) { CoverActionSurface(placement, cover, height) }
     Box(modifier.onPlaced { placement.coordinates = it }) {
         CoverSurface(cover, seed, Modifier.matchParentSize(), textHeight = textHeight, photoHeight = photoHeight)
+        if (cover != null && openPhoto != null) {
+            val description = ui(R.string.hovq_open_photo)
+            BoxWithConstraints(Modifier.matchParentSize()) {
+                val clearHeight = maxHeight - with(LocalDensity.current) { textHeight.toDp() } - articleCoverFadeLead
+                if (clearHeight > 0.dp) {
+                    Box(Modifier.fillMaxWidth().height(clearHeight)
+                        .clickable(interactionSource = null, indication = null, role = Role.Button, onClick = openPhoto)
+                        .semantics { contentDescription = description })
+                }
+            }
+        }
         CompositionLocalProvider(LocalCoverActionSurface provides surface, content = { content() })
     }
 }
+
+private val articleCoverFadeLead = 24.dp
 
 @Composable
 internal fun CoverSurface(
@@ -458,10 +479,10 @@ internal fun CoverSurface(
                 )
                 .get(Math.floorMod(seed.hashCode(), 5))
         val photoBottom = photoHeight?.toPx()?.let { min(it, size.height) }
-        val start = if (photoBottom == null) (size.height - textHeight - 24.dp.toPx()).coerceAtLeast(0f)
+        val start = if (photoBottom == null) (size.height - textHeight - articleCoverFadeLead.toPx()).coerceAtLeast(0f)
             else (photoBottom - 34.dp.toPx()).coerceAtLeast(0f)
         if (cover != null) {
-            if (photoBottom == null) crop(cover.image) else drawTilePhoto(cover, photoBottom, start)
+            if (photoBottom == null) drawCoverImage(cover.image) else drawTilePhoto(cover, photoBottom, start)
         } else {
             drawRect(
                 Brush.linearGradient(listOf(tone, palette.surface, lerp(tone, palette.tint, .3f)))
@@ -488,7 +509,7 @@ internal fun CoverSurface(
                 paint,
             )
             clipRect(top = start) {
-                crop(cover.soft)
+                drawCoverImage(cover.soft)
                 drawRect(
                     Brush.verticalGradient(
                         listOf(Color.Transparent, Color.Black),

@@ -63,19 +63,21 @@ internal fun BoxScope.GlassNoticeHost(bottomClearance: Dp = defaultNavigationCle
             .windowInsetsPadding(WindowInsets.safeDrawing.only(insets))
             .padding(start = 16.dp, end = 16.dp, top = if (atBottom) 0.dp else 8.dp,
                 bottom = if (atBottom) bottomClearance else 0.dp)
-            .widthIn(max = 520.dp),
+            .widthIn(max = navigationMaxWidth),
     ) { message ->
-        val wash = if (message.visuals is SavedNotice) savedNoticeWash() else Modifier
-        Text(
-            message.visuals.message,
-            Modifier.navigationGlass(RoundedCornerShape(22.dp))
-                .then(wash)
-                .padding(horizontal = 20.dp, vertical = 12.dp),
-            color = Color.White,
-            textAlign = TextAlign.Center,
-            style = MaterialTheme.typography.labelLarge,
-        )
+        if (message.visuals is SavedNotice) {
+            BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                NoticeLabel(message.visuals.message, Modifier.width(navigationBarWidth(maxWidth) * .85f), savedNoticeWash())
+            }
+        } else NoticeLabel(message.visuals.message)
     }
+}
+
+@Composable
+private fun NoticeLabel(message: String, modifier: Modifier = Modifier, wash: Modifier = Modifier) {
+    Text(message, modifier.navigationGlass(RoundedCornerShape(22.dp))
+        .then(wash).padding(horizontal = 20.dp, vertical = 12.dp),
+        color = Color.White, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelLarge)
 }
 
 @Composable
@@ -87,13 +89,13 @@ private fun savedNoticeWash(): Modifier {
     return Modifier.drawWithCache {
         val radius = maxOf(size.width * .65f, size.height * 1.5f)
         val violet = Brush.radialGradient(
-            listOf(Color(0xFF8E76DB).copy(alpha = .37f), Color.Transparent), Offset.Zero, radius,
+            listOf(Color(0xFF8B65EF).copy(alpha = .44f), Color.Transparent), Offset.Zero, radius,
         )
         val teal = Brush.radialGradient(
-            listOf(Color(0xFF45A9BA).copy(alpha = .34f), Color.Transparent), Offset.Zero, radius,
+            listOf(Color(0xFF32B4C7).copy(alpha = .41f), Color.Transparent), Offset.Zero, radius,
         )
         val amber = Brush.radialGradient(
-            listOf(Color(0xFFD69768).copy(alpha = .25f), Color.Transparent), Offset.Zero, radius,
+            listOf(Color(0xFFE2985A).copy(alpha = .30f), Color.Transparent), Offset.Zero, radius,
         )
         onDrawWithContent {
             val position = phase.value

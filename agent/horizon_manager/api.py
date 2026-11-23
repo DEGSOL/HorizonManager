@@ -639,10 +639,15 @@ def create_app(root, token):
             primary = next((block.get("content", "") for block in blocks if block.get("primary")), "")
             original = split_content(item.get("content")).main
             body = primary or original or analysis.get("summary", "")
+            publisher = next((name.strip() for name in (
+                metadata.get("source_name"), metadata.get("feed_name"), metadata.get("subreddit"),
+                metadata.get("repo"), metadata.get("domain"), item.get("author"),
+            ) if isinstance(name, str) and name.strip()), "")
             cards.append({
                 "id": item["id"], "title": artifact.get("title") or item["title"], "url": item["url"],
                 **({"media": media.get(item["id"], {})} if media is not None else {}),
                 "source": item["source_type"], "time": item["published_at"],
+                **({"publisher": publisher} if publisher else {}),
                 "category": metadata.get("category"),
                 **({"telegram_url": metadata["msg_url"]} if metadata.get("msg_url") else {}),
                 **({"telegram_channel": metadata.get("channel") or item.get("author")}

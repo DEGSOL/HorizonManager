@@ -307,6 +307,9 @@ class FluidScreensTest {
         }
         assertTrue(compose.onNodeWithText(heading).getUnclippedBoundsInRoot().top > 24.dp)
         val beforeScroll = snapshot("19-status-inset")
+        val headerEdge = beforeScroll.getPixel(beforeScroll.width / 2, (32 * density).toInt())
+        assertTrue("The light feed header should draw over the status glass fade",
+            android.graphics.Color.red(headerEdge) > 210)
         compose.onNode(hasScrollToIndexAction()).performTouchInput {
             swipeUp(startY = height * .63f, endY = height * .39f, durationMillis = 500)
         }
@@ -340,7 +343,9 @@ class FluidScreensTest {
     @Test
     fun searchAndFiltersStayUnderHeaderAndSettingsExplainParameters() {
         val heading = loadIssue()
-        compose.onAllNodesWithText("Telegram").onFirst().assertIsDisplayed()
+        compose.onAllNodesWithText("Telegram").assertCountEquals(0)
+        compose.onAllNodesWithText("· nasa_fixture").onFirst().assertIsDisplayed()
+        compose.onAllNodesWithText("8/10").onFirst().assertIsDisplayed()
         val list = compose.onNode(hasScrollToIndexAction())
         val firstStory = compose.onNodeWithText(headlines.first())
         val storyTop = firstStory.getUnclippedBoundsInRoot().top
@@ -473,12 +478,21 @@ class FluidScreensTest {
     fun appIconSettingsSaveAndBackupsOfferTwoTargets() {
         loadIssue()
         tab(R.string.settings)
+        val barWidth = listOf(R.string.feed, R.string.settings, R.string.favorites_title)
+            .sumOf {
+                val bounds = compose.onNodeWithContentDescription(ui(it)).getUnclippedBoundsInRoot()
+                (bounds.right - bounds.left).value.toDouble()
+            }
+            .toFloat() + 8f
         text(R.string.mr_interface).performClick()
         text(R.string.hovq_icon).performClick()
         text(R.string.hovq_icon_dark).performClick()
         assertEquals(LauncherAppearance.Dark, LauncherAppearance.current(compose.activity))
         val notice = text(R.string.hovq_settings_saved)
         notice.assertIsDisplayed()
+        val noticeBounds = notice.getUnclippedBoundsInRoot()
+        // Text semantics are inside the two 20 dp glass insets.
+        assertEquals(barWidth * .85f, (noticeBounds.right - noticeBounds.left).value + 40f, 1f)
         val density = compose.activity.resources.displayMetrics.density
         val screenBottom = (compose.activity.window.decorView.height / density).dp
         val noticeBottomGap = screenBottom - notice.getUnclippedBoundsInRoot().bottom
@@ -517,6 +531,28 @@ class FluidScreensTest {
         val shortX = ((shortTile.left.value + 66) * density).toInt()
         val longX = ((longTile.left.value + 66) * density).toInt()
         assertEquals(feed.getPixel(shortX, sampleY), feed.getPixel(longX, sampleY))
+    }
+
+    @Test
+    fun opensOnlyTheClearCoverInAnInAppViewerAndReturnsToTheArticle() {
+        loadIssue(articleCount = 4)
+        compose.onNodeWithText(headlines[0]).performClick()
+        val photo = compose.onNodeWithContentDescription(ui(R.string.hovq_open_photo))
+        val title = compose.onNodeWithText(headlines[0])
+        val viewerImage = compose.onNodeWithContentDescription(headlines[0])
+        assertTrue(photo.getUnclippedBoundsInRoot().bottom < title.getUnclippedBoundsInRoot().top)
+        title.performTouchInput { click() }
+        viewerImage.assertDoesNotExist()
+        photo.performTouchInput { click() }
+        viewerImage.assertIsDisplayed()
+        compose.onAllNodesWithContentDescription(ui(R.string.ui_back)).onLast().performClick()
+        viewerImage.assertDoesNotExist()
+        title.assertIsDisplayed()
+        photo.performClick()
+        viewerImage.assertIsDisplayed()
+        back()
+        viewerImage.assertDoesNotExist()
+        title.assertIsDisplayed()
     }
 
     @Test

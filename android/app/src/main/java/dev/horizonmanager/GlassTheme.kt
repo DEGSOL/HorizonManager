@@ -124,13 +124,13 @@ internal fun horizonFieldColors() = LocalHorizonPalette.current.let { palette ->
 @Composable
 internal fun GlassLayout(tabs: List<HorizonTab>, selection: Int, showTabs: Boolean, select: (Int) -> Unit,
                          unread: Int, overlay: ReadingOverlay = ReadingOverlay.None,
+                         statusGlassInContent: Boolean = false,
                          modal: @Composable () -> Unit = {},
                          content: @Composable BoxScope.() -> Unit) {
     val palette = LocalHorizonPalette.current
     val sceneLayer = rememberGraphicsLayer()
     val scene = remember(sceneLayer) { GlassScene(sceneLayer) }
     var clearance by remember { mutableStateOf(defaultNavigationClearance) }
-    val statusHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     Box(Modifier.fillMaxSize().background(palette.background).imePadding()) {
         Box(Modifier.fillMaxSize().then(
             if (overlay == ReadingOverlay.Article) Modifier.blur(5.dp) else Modifier
@@ -144,18 +144,14 @@ internal fun GlassLayout(tabs: List<HorizonTab>, selection: Int, showTabs: Boole
                 }, content = content)
             }
             CompositionLocalProvider(LocalGlassScene provides scene) {
-                if (statusHeight > 0.dp) {
-                    Spacer(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(statusHeight * (1f + statusGlassFadeFraction))
-                        .statusBarGlass())
-                }
+                if (!statusGlassInContent) StatusGlass()
                 AnimatedVisibility(showTabs, modifier = Modifier.align(Alignment.BottomCenter)
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
                     .padding(start = 16.dp, end = 16.dp, bottom = navigationBottomGap),
                     enter = fadeIn(tween(160)) + slideInVertically(tween(navigationSlideMillis)) { it * 2 },
                     exit = fadeOut(tween(140)) + slideOutVertically(tween(navigationSlideMillis)) { it * 2 }) {
-                    BoxWithConstraints(Modifier.widthIn(max = 520.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        val width = ((maxWidth / 2).coerceAtLeast(156.dp) * 1.5f).coerceAtMost(maxWidth)
-                        GlassNavigation(tabs, selection, unread, width, overlay, measured = {
+                    BoxWithConstraints(Modifier.widthIn(max = navigationMaxWidth).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        GlassNavigation(tabs, selection, unread, navigationBarWidth(maxWidth), overlay, measured = {
                             clearance = it + navigationBottomGap + 8.dp
                         }, select = select)
                     }

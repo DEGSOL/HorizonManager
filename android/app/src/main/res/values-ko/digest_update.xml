@@ -13,4 +13,5 @@
     <string name="hovq_agent_update_offer">이 버전의 Hovq 기능을 사용하려면 VPS의 Horizon 에이전트를 %1$s에서 %2$s로 업데이트하세요.</string>
     <string name="hovq_update_now">에이전트 업데이트</string>
     <string name="hovq_update_sudo">sudo 비밀번호(필요한 경우)</string>
+    <string name="hovq_open_photo">이미지 열기</string>
 </resources>

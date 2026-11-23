@@ -3,6 +3,7 @@ package dev.horizonmanager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -13,17 +14,19 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
@@ -61,17 +64,20 @@ internal fun ArticleDialog(
             .joinToString("\n\n")
 
     val cover = artwork(artworkServer, article, relay)
+    var showPhoto by rememberSaveable(article.optString("id")) { mutableStateOf(false) }
     var titleHeight by remember { mutableFloatStateOf(0f) }
+    val shape = MaterialTheme.shapes.extraLarge
     ArticleModal(article.optString("title"), close, captureMenu = actions) {
         Column(
             Modifier.widthIn(max = 620.dp)
                 .fillMaxWidth()
-                .clip(MaterialTheme.shapes.extraLarge)
+                .glassRim(shape)
+                .clip(shape)
                 .background(bodyColor)
                 .pointerInput(Unit) { detectTapGestures {} }
                 .verticalScroll(rememberScrollState())
         ) {
-            PublicationCover(cover, article.optString("id"), textHeight = titleHeight) {
+            PublicationCover(cover, article.optString("id"), textHeight = titleHeight, openPhoto = { showPhoto = true }) {
                 Column {
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
@@ -92,7 +98,8 @@ internal fun ArticleDialog(
                             }
                         val saved = flag?.saved == true
                         CoverIconAction(
-                            if (saved) Icons.Default.Star else ImageVector.vectorResource(R.drawable.ic_star_outline),
+                            ImageVector.vectorResource(if (saved) R.drawable.ic_bookmark_filled
+                                else R.drawable.ic_bookmark_outline),
                             ui(if (saved) R.string.remove_from_favorites else R.string.add_to_favorites),
                             active = saved,
                             onClick = onSave,
@@ -152,16 +159,13 @@ internal fun ArticleDialog(
                         Modifier.onSizeChanged { titleHeight = it.height.toFloat() }.padding(18.dp),
                         verticalArrangement = Arrangement.spacedBy(5.dp),
                     ) {
-                        Text(
-                            articleSource(article),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = Color(0xffdedfe0),
-                        )
+                        PublicationSource(article, detailed = true)
                         Text(
                             article.optString("title"),
                             style = MaterialTheme.typography.headlineMedium,
                             color = Color.White,
                         )
+                        PublicationScore(article, Modifier.align(Alignment.End))
                     }
                 }
             }
@@ -171,7 +175,7 @@ internal fun ArticleDialog(
                 verticalArrangement = Arrangement.spacedBy(13.dp),
             ) {
                 Text(
-                    articleMetadata(article),
+                    localTime(articleField(article, "time")),
                     style = MaterialTheme.typography.bodySmall,
                     color = theme.muted,
                 )
@@ -184,6 +188,28 @@ internal fun ArticleDialog(
                     val credit = listOf(articleField(media, "artist"), articleField(media, "license"))
                         .filter(String::isNotBlank).joinToString(" · ")
                     if (credit.isNotEmpty()) Text(credit, color = theme.muted, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+    if (showPhoto && cover != null) CoverViewer(cover, article.optString("title")) { showPhoto = false }
+}
+
+@Composable
+private fun CoverViewer(cover: Cover, description: String, close: () -> Unit) {
+    val placement = remember { CoverPlacement() }
+    val surface = remember(cover) { CoverActionSurface(placement, cover, fit = true) }
+    Dialog(onDismissRequest = close, properties = DialogProperties(
+        usePlatformDefaultWidth = false, decorFitsSystemWindows = false,
+    )) {
+        DialogMotion()
+        Box(Modifier.fillMaxSize().background(Color.Black).onPlaced { placement.coordinates = it }) {
+            Image(cover.image, description, Modifier.matchParentSize(), contentScale = ContentScale.Fit)
+            Box(Modifier.align(Alignment.TopStart)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+                .padding(12.dp)) {
+                CompositionLocalProvider(LocalCoverActionSurface provides surface) {
+                    CoverIconAction(Icons.AutoMirrored.Filled.ArrowBack, ui(R.string.ui_back), onClick = close)
                 }
             }
         }

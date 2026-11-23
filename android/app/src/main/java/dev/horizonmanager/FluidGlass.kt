@@ -98,6 +98,18 @@ internal fun Modifier.readingNavigationGlass(shape: Shape): Modifier =
 
 internal const val statusGlassFadeFraction = .47f
 
+@Composable
+internal fun BoxScope.StatusGlass() {
+    val height = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    if (height > 0.dp) {
+        Spacer(Modifier.align(androidx.compose.ui.Alignment.TopCenter).fillMaxWidth()
+            .height(height * (1f + statusGlassFadeFraction)).statusBarGlass())
+    }
+}
+
+internal fun Modifier.glassRim(shape: Shape, edge: Color = Color.White): Modifier =
+    border(1.dp, Brush.verticalGradient(listOf(edge.copy(alpha = .29f), edge.copy(alpha = .12f))), shape)
+
 internal fun Modifier.statusBarGlass(): Modifier =
     graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
         .drawWithCache {
@@ -123,7 +135,5 @@ internal fun Modifier.glassSurface(
     surface.background(Brush.verticalGradient(listOf(
         top.copy(alpha = if (blur) .66f else .94f),
         base.copy(alpha = if (blur) .77f else .92f),
-    ))).then(if (outlined) Modifier.border(1.dp, Brush.verticalGradient(listOf(
-        edge.copy(alpha = .29f), edge.copy(alpha = .12f),
-    )), shape) else Modifier)
+    ))).then(if (outlined) Modifier.glassRim(shape, edge) else Modifier)
 }

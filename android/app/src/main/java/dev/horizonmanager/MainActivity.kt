@@ -481,18 +481,19 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
             }
         }
     }
-    GlassLayout(tabs, tab, showTabs, unread = unread, overlay = overlay, select = ::selectTab, modal = releaseDialogs) {
-        val destination = when {
-            manageServers -> Screen("servers")
-            editServer -> Screen("ssh")
-            configPage == "archive" && openedIssue != null -> Screen("archived", archiveIssue)
-            configPage.isNotEmpty() -> Screen(configPage, route)
-            showingSetupSettings -> Screen("settings")
-            !panel.ready -> Screen("setup")
-            tab == FAVORITES -> Screen("favorites")
-            tab == SETTINGS -> Screen("settings")
-            else -> Screen("feed")
-        }
+    val destination = when {
+        manageServers -> Screen("servers")
+        editServer -> Screen("ssh")
+        configPage == "archive" && openedIssue != null -> Screen("archived", archiveIssue)
+        configPage.isNotEmpty() -> Screen(configPage, route)
+        showingSetupSettings -> Screen("settings")
+        !panel.ready -> Screen("setup")
+        tab == FAVORITES -> Screen("favorites")
+        tab == SETTINGS -> Screen("settings")
+        else -> Screen("feed")
+    }
+    GlassLayout(tabs, tab, showTabs, unread = unread, overlay = overlay, statusGlassInContent = destination.reading,
+        select = ::selectTab, modal = releaseDialogs) {
         val currentDestination by rememberUpdatedState(destination)
         AnimatedContent(destination,
             modifier = Modifier.align(Alignment.TopCenter)

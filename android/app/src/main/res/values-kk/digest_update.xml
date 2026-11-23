@@ -13,4 +13,5 @@
     <string name="hovq_agent_update_offer">Hovq-тың осы нұсқасындағы мүмкіндіктерді пайдалану үшін VPS-тегі Horizon агентін %1$s нұсқасынан %2$s нұсқасына жаңартыңыз.</string>
     <string name="hovq_update_now">Агентті жаңарту</string>
     <string name="hovq_update_sudo">Қажет болса, sudo құпиясөзі</string>
+    <string name="hovq_open_photo">Суретті ашу</string>
 </resources>

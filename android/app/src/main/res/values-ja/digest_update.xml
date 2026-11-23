@@ -13,4 +13,5 @@
     <string name="hovq_agent_update_offer">このバージョンのHovqの機能を使うには、VPS上のHorizonエージェントを%1$sから%2$sに更新してください。</string>
     <string name="hovq_update_now">エージェントを更新</string>
     <string name="hovq_update_sudo">sudoパスワード（必要な場合）</string>
+    <string name="hovq_open_photo">画像を開く</string>
 </resources>

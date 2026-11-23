@@ -13,4 +13,5 @@
     <string name="hovq_agent_update_offer">Actualiza el agente Horizon del VPS de %1$s a %2$s para utilizar las funciones de esta versión de Hovq.</string>
     <string name="hovq_update_now">Actualizar agente</string>
     <string name="hovq_update_sudo">Contraseña de sudo, si es necesaria</string>
+    <string name="hovq_open_photo">Abrir imagen</string>
 </resources>

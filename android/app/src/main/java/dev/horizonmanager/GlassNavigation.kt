@@ -72,6 +72,9 @@ internal fun readingBarHeight() = maxOf(60.dp, with(LocalDensity.current) {
 })
 
 internal val navigationBottomGap = 10.dp
+internal val navigationMaxWidth = 520.dp
+internal fun navigationBarWidth(available: Dp): Dp =
+    ((available / 2).coerceAtLeast(156.dp) * 1.5f).coerceAtMost(available)
 internal val defaultNavigationClearance = 60.dp + navigationBottomGap + 8.dp
 internal val LocalNavigationClearance = compositionLocalOf { defaultNavigationClearance }
 

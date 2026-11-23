@@ -13,4 +13,5 @@
     <string name="hovq_agent_update_offer">Обновите агент Horizon на VPS с версии %1$s до %2$s, чтобы пользоваться возможностями этой версии Hovq.</string>
     <string name="hovq_update_now">Обновить агент</string>
     <string name="hovq_update_sudo">Пароль sudo, если требуется</string>
+    <string name="hovq_open_photo">Открыть изображение</string>
 </resources>

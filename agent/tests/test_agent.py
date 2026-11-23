@@ -244,6 +244,7 @@ class AgentTests(unittest.TestCase):
         digest = self.client.get(f"/v1/digests/{run.hex}/fr").json()
         self.assertIn("Revue du jour Horizon", digest["markdown"])
         self.assertEqual(digest["items"][0]["title"], "Article technique de test")
+        self.assertEqual(digest["items"][0]["publisher"], "Working fixture")
 
     def test_config_atomic_and_backup_integrity(self):
         expected = self.config()
