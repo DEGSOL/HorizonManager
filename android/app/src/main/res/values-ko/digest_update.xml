@@ -1,0 +1,14 @@
+<resources>
+    <string name="hovq_headline_limit">제목당 최대 단어 수</string>
+    <string name="hovq_headline_help">향후 다이제스트 제목에 사용할 단어 수를 2~30개로 설정합니다. 기본값은 10개입니다.</string>
+    <string name="hovq_headline_save">제목 길이 저장</string>
+    <string name="hovq_headline_upgrade">제목 길이를 변경하려면 VPS 에이전트를 업데이트하세요.</string>
+    <string name="hovq_digest_notifications">새 다이제스트 알림</string>
+    <string name="hovq_push_delivery_help">ntfy 또는 설정된 UnifiedPush 서비스가 있으면 새 다이제스트가 Android 푸시 알림으로 도착합니다. 푸시를 사용할 수 없으면 백그라운드에서 새 다이제스트를 확인합니다.</string>
+    <string name="hovq_notification_offer">Hovq를 닫은 상태에서도 새 다이제스트 알림을 받으려면 Android 알림을 허용하세요.</string>
+    <string name="hovq_allow_notifications">알림 허용</string>
+    <string name="hovq_later">나중에</string>
+    <string name="hovq_agent_update_offer">이 버전의 Hovq 기능을 사용하려면 VPS의 Horizon 에이전트를 %1$s에서 %2$s로 업데이트하세요.</string>
+    <string name="hovq_update_now">에이전트 업데이트</string>
+    <string name="hovq_update_sudo">sudo 비밀번호(필요한 경우)</string>
+</resources>

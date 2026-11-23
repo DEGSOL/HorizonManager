@@ -1,0 +1,14 @@
+<resources>
+    <string name="hovq_headline_limit">Тақырыптағы ең көп сөз саны</string>
+    <string name="hovq_headline_help">Алдағы дайджест тақырыптарына 2–30 сөзді таңдаңыз. Әдепкі мәні — 10.</string>
+    <string name="hovq_headline_save">Тақырып ұзындығын сақтау</string>
+    <string name="hovq_headline_upgrade">Тақырып ұзындығын өзгерту үшін VPS агентін жаңартыңыз.</string>
+    <string name="hovq_digest_notifications">Жаңа дайджест хабарландырулары</string>
+    <string name="hovq_push_delivery_help">ntfy немесе бапталған UnifiedPush қызметі болса, жаңа дайджестер Android push-хабарландыруы ретінде келеді. Push қолжетімсіз болса, Hovq жаңа шығарылымдарды фонда тексереді.</string>
+    <string name="hovq_notification_offer">Hovq жабық кезде де жаңа дайджестер туралы білу үшін Android хабарландыруларына рұқсат беріңіз.</string>
+    <string name="hovq_allow_notifications">Хабарландыруларға рұқсат беру</string>
+    <string name="hovq_later">Кейін</string>
+    <string name="hovq_agent_update_offer">Hovq-тың осы нұсқасындағы мүмкіндіктерді пайдалану үшін VPS-тегі Horizon агентін %1$s нұсқасынан %2$s нұсқасына жаңартыңыз.</string>
+    <string name="hovq_update_now">Агентті жаңарту</string>
+    <string name="hovq_update_sudo">Қажет болса, sudo құпиясөзі</string>
+</resources>

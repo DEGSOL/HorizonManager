@@ -1,0 +1,14 @@
+<resources>
+    <string name="hovq_headline_limit">Nombre maximal de mots par titre</string>
+    <string name="hovq_headline_help">Saisissez de 2 à 30 mots pour les titres des prochains résumés. La valeur par défaut est 10.</string>
+    <string name="hovq_headline_save">Enregistrer la longueur des titres</string>
+    <string name="hovq_headline_upgrade">Mettez à jour l’agent du VPS pour modifier la longueur des titres.</string>
+    <string name="hovq_digest_notifications">Notifications des nouveaux résumés</string>
+    <string name="hovq_push_delivery_help">Avec ntfy ou un service UnifiedPush configuré, les nouveaux résumés arrivent par notification push Android. Si le service est indisponible, Hovq recherche les nouveaux résumés en arrière-plan.</string>
+    <string name="hovq_notification_offer">Autorisez les notifications Android pour être averti des nouveaux résumés même lorsque Hovq est fermé.</string>
+    <string name="hovq_allow_notifications">Autoriser les notifications</string>
+    <string name="hovq_later">Plus tard</string>
+    <string name="hovq_agent_update_offer">Mettez à jour l’agent Horizon sur le VPS de %1$s à %2$s pour utiliser les fonctions de cette version de Hovq.</string>
+    <string name="hovq_update_now">Mettre à jour l’agent</string>
+    <string name="hovq_update_sudo">Mot de passe sudo, si nécessaire</string>
+</resources>

@@ -1,0 +1,14 @@
+<resources>
+    <string name="hovq_headline_limit">Numero massimo di parole per titolo</string>
+    <string name="hovq_headline_help">Inserisci da 2 a 30 parole per i titoli delle prossime rassegne. Il valore predefinito è 10.</string>
+    <string name="hovq_headline_save">Salva la lunghezza dei titoli</string>
+    <string name="hovq_headline_upgrade">Aggiorna l’agente sul VPS per modificare la lunghezza dei titoli.</string>
+    <string name="hovq_digest_notifications">Notifiche per le nuove rassegne</string>
+    <string name="hovq_push_delivery_help">Con ntfy o un servizio UnifiedPush configurato, le nuove rassegne arrivano come notifiche push di Android. Se il servizio non è disponibile, Hovq cerca nuove rassegne in background.</string>
+    <string name="hovq_notification_offer">Consenti le notifiche Android per ricevere avvisi sulle nuove rassegne anche quando Hovq è chiuso.</string>
+    <string name="hovq_allow_notifications">Consenti notifiche</string>
+    <string name="hovq_later">Più tardi</string>
+    <string name="hovq_agent_update_offer">Aggiorna l’agente Horizon sul VPS dalla versione %1$s alla %2$s per usare le funzioni di questa versione di Hovq.</string>
+    <string name="hovq_update_now">Aggiorna agente</string>
+    <string name="hovq_update_sudo">Password di sudo, se necessaria</string>
+</resources>

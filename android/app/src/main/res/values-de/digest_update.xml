@@ -1,0 +1,14 @@
+<resources>
+    <string name="hovq_headline_limit">Maximale Wörter pro Überschrift</string>
+    <string name="hovq_headline_help">Für künftige Ausgaben sind 2–30 Wörter möglich. Standard sind 10.</string>
+    <string name="hovq_headline_save">Überschriftenlänge speichern</string>
+    <string name="hovq_headline_upgrade">Aktualisieren Sie den Agenten auf dem VPS, um die Überschriftenlänge zu ändern.</string>
+    <string name="hovq_digest_notifications">Mitteilungen zu neuen Ausgaben</string>
+    <string name="hovq_push_delivery_help">Mit ntfy oder einem eingerichteten UnifiedPush-Dienst kommen neue Ausgaben als Android-Push-Mitteilungen an. Ist Push nicht verfügbar, sucht Hovq im Hintergrund nach neuen Ausgaben.</string>
+    <string name="hovq_notification_offer">Erlauben Sie Android-Mitteilungen, um auch bei geschlossenem Hovq über neue Ausgaben informiert zu werden.</string>
+    <string name="hovq_allow_notifications">Mitteilungen erlauben</string>
+    <string name="hovq_later">Später</string>
+    <string name="hovq_agent_update_offer">Aktualisieren Sie den Horizon-Agenten auf dem VPS von %1$s auf %2$s, um die Funktionen dieser Hovq-Version zu nutzen.</string>
+    <string name="hovq_update_now">Agenten aktualisieren</string>
+    <string name="hovq_update_sudo">sudo-Passwort, falls erforderlich</string>
+</resources>

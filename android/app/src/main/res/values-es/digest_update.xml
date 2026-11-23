@@ -1,0 +1,14 @@
+<resources>
+    <string name="hovq_headline_limit">Máximo de palabras por titular</string>
+    <string name="hovq_headline_help">Elige entre 2 y 30 palabras para los titulares de próximos resúmenes. El valor predeterminado es 10.</string>
+    <string name="hovq_headline_save">Guardar longitud del titular</string>
+    <string name="hovq_headline_upgrade">Actualiza el agente del VPS para cambiar la longitud de los titulares.</string>
+    <string name="hovq_digest_notifications">Notificaciones de nuevos resúmenes</string>
+    <string name="hovq_push_delivery_help">Con ntfy o un servicio UnifiedPush configurado, los nuevos resúmenes llegan como notificaciones push de Android. Si el servicio no está disponible, Hovq busca nuevos resúmenes en segundo plano.</string>
+    <string name="hovq_notification_offer">Permite las notificaciones de Android para recibir avisos de nuevos resúmenes aunque Hovq esté cerrado.</string>
+    <string name="hovq_allow_notifications">Permitir notificaciones</string>
+    <string name="hovq_later">Más tarde</string>
+    <string name="hovq_agent_update_offer">Actualiza el agente Horizon del VPS de %1$s a %2$s para utilizar las funciones de esta versión de Hovq.</string>
+    <string name="hovq_update_now">Actualizar agente</string>
+    <string name="hovq_update_sudo">Contraseña de sudo, si es necesaria</string>
+</resources>
