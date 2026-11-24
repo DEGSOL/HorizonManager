@@ -158,7 +158,6 @@ private fun QuotaGroups(groups: JSONObject, groupBy: String, profiles: Map<Strin
         var categories by rememberSaveable { mutableStateOf(original?.optJSONArray("categories")?.strings()?.joinToString("\n").orEmpty()) }
         val members = categories.lineSequence().map(String::trim).filter(String::isNotEmpty).distinct().toList()
         val validLimit = (limit.toIntOrNull() ?: 0) > 0
-        HorizontalDivider()
         Text(ui(if (original != null) R.string.digest_groups_title else R.string.digest_group_add),
             style = MaterialTheme.typography.titleSmall)
         ValueField(ui(R.string.ui_name), name, { name = it })

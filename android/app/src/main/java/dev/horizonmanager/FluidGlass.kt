@@ -12,6 +12,8 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
@@ -90,21 +92,61 @@ internal fun Modifier.readingNavigationGlass(shape: Shape): Modifier =
 internal const val statusGlassFadeFraction = .47f
 
 @Composable
-internal fun BoxScope.StatusGlass() {
-    val height = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    if (height > 0.dp) {
-        Spacer(Modifier.align(androidx.compose.ui.Alignment.TopCenter).fillMaxWidth()
-            .height(height * (1f + statusGlassFadeFraction)).statusBarGlass())
-    }
+internal fun BoxScope.StatusGlass(extendIntoFeed: Boolean = false) {
+    val inset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    if (inset <= 0.dp) return
+
+    // Only the feed lets content scroll through the fade below the system bar.
+    val height = if (extendIntoFeed) inset * (1f + statusGlassFadeFraction) else inset
+    val fadeStart = if (extendIntoFeed) 1f / (1f + statusGlassFadeFraction) else .82f
+    Spacer(Modifier.align(androidx.compose.ui.Alignment.TopCenter).fillMaxWidth()
+        .height(height).statusBarGlass(fadeStart))
 }
 
 internal fun Modifier.glassRim(shape: Shape, edge: Color = Color.White): Modifier =
     border(1.dp, Brush.verticalGradient(listOf(edge.copy(alpha = .29f), edge.copy(alpha = .12f))), shape)
 
-internal fun Modifier.statusBarGlass(): Modifier =
+internal fun Modifier.publicationGlassRim(shape: Shape): Modifier = drawWithCache {
+    val outline = shape.createOutline(size, layoutDirection, this) as? Outline.Rounded
+        ?: return@drawWithCache onDrawWithContent { drawContent() }
+    val edge = Path().apply { addRoundRect(outline.roundRect) }
+    val innerShade = Brush.linearGradient(
+        0f to Color.Black.copy(alpha = .38f),
+        .45f to Color.Black.copy(alpha = .12f),
+        1f to Color.Black.copy(alpha = .32f),
+    )
+    val bevel = Brush.linearGradient(
+        0f to Color.White.copy(alpha = .29f),
+        .35f to Color.White.copy(alpha = .08f),
+        .62f to Color.Transparent,
+        1f to Color.White.copy(alpha = .19f),
+    )
+    val reflection = Brush.linearGradient(
+        0f to Color.White.copy(alpha = .73f),
+        .20f to Color.White.copy(alpha = .44f),
+        .49f to Color.White.copy(alpha = .13f),
+        .72f to Color.White.copy(alpha = .21f),
+        .91f to Color.White.copy(alpha = .50f),
+        1f to Color.White.copy(alpha = .34f),
+    )
+    // Clip the centered strokes to the original outline. The photo and text keep their bounds.
+    val shadeStroke = Stroke(6.dp.toPx())
+    val bevelStroke = Stroke(3.8.dp.toPx())
+    val rimStroke = Stroke(1.65.dp.toPx())
+    onDrawWithContent {
+        drawContent()
+        clipPath(edge) {
+            drawPath(edge, innerShade, style = shadeStroke)
+            drawPath(edge, bevel, style = bevelStroke)
+            drawPath(edge, reflection, style = rimStroke)
+        }
+    }
+}
+
+private fun Modifier.statusBarGlass(fadeStart: Float): Modifier =
     graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
         .drawWithCache {
-            val fade = Brush.verticalGradient((1f / (1f + statusGlassFadeFraction)) to Color.Black, 1f to Color.Transparent)
+            val fade = Brush.verticalGradient(fadeStart to Color.Black, 1f to Color.Transparent)
             onDrawWithContent {
                 drawContent()
                 drawRect(fade, blendMode = BlendMode.DstIn)

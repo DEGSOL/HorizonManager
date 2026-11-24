@@ -143,7 +143,8 @@ private fun TelegramRow(entry: JSONObject, index: Int, lastIndex: Int, testEnabl
     val currentHeight by rememberUpdatedState(height)
     val currentLastIndex by rememberUpdatedState(lastIndex)
     val display = if (enabled) ui(R.string.ui_enabled) else ui(R.string.ui_off)
-    Row(Modifier.fillMaxWidth().onSizeChanged { height = it.height }.padding(vertical = 2.dp),
+    Row(Modifier.fillMaxWidth().onSizeChanged { height = it.height }
+        .settingsItemSurface(highlighted = dragging).padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(48.dp).pointerInput(index) {
             var distance = 0f
@@ -181,7 +182,6 @@ private fun TelegramRow(entry: JSONObject, index: Int, lastIndex: Int, testEnabl
             }
         }
     }
-    HorizontalDivider()
 }
 
 private fun Modifier.editorialDescription(text: String): Modifier = semantics { contentDescription = text }

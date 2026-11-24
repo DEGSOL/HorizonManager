@@ -304,18 +304,76 @@ class FluidScreensTest {
         text(R.string.theme).assertDoesNotExist()
     }
 
-    @Test
-    fun feedScrollsBehindTheStatusBarGlass() {
-        val heading = loadIssue(articleCount = 30)
+    private fun statusInset(height: Int) {
         val density = compose.activity.resources.displayMetrics.density
         compose.runOnUiThread {
             val root = compose.activity.findViewById<android.view.View>(android.R.id.content)
             val status = WindowInsetsCompat.Type.statusBars()
             ViewCompat.dispatchApplyWindowInsets(root, WindowInsetsCompat.Builder()
-                .setInsets(status, Insets.of(0, (24 * density).toInt(), 0, 0))
+                .setInsets(status, Insets.of(0, (height * density).toInt(), 0, 0))
                 .setVisible(status, true)
                 .build())
         }
+    }
+
+    @Test
+    fun statusGlassStaysInsideSystemInsetInSettingsAndFavorites() {
+        loadIssue(articleCount = 4)
+        statusInset(44)
+        val density = compose.activity.resources.displayMetrics.density
+        fun checkGlass(name: String) {
+            val bitmap = snapshot(name)
+            val x = (4 * density).toInt()
+            val systemY = (20 * density).toInt()
+            val contentY = (52 * density).toInt()
+            assertNotEquals("The system status bar still has a glass backing",
+                HorizonPalette.background.toArgb(), bitmap.getPixel(x, systemY))
+            assertEquals("Status blur stays above the app content",
+                HorizonPalette.background.toArgb(), bitmap.getPixel(x, contentY))
+        }
+        tab(R.string.settings)
+        checkGlass("24-status-settings")
+        text(R.string.mr_interface).performClick()
+        text(R.string.hovq_icon).assertIsDisplayed()
+        checkGlass("25-status-settings-section")
+        back()
+        tab(R.string.favorites_title)
+        text(R.string.favorites_empty).assertIsDisplayed()
+        checkGlass("26-status-favorites")
+    }
+
+    @Test
+    fun serverCardTurnsGreenOnConnectionAndRedOnLoss() {
+        loadIssue(articleCount = 4)
+        tab(R.string.settings)
+        val viewModel = ViewModelProvider(compose.activity)[ManagerModel::class.java]
+        @Suppress("UNCHECKED_CAST")
+        val state = ManagerModel::class.java.getDeclaredField("mutable").apply { isAccessible = true }
+            .get(viewModel) as MutableStateFlow<Panel>
+        fun serverColor(name: String): Int {
+            val label = text(R.string.mr_server).getUnclippedBoundsInRoot()
+            val density = compose.activity.resources.displayMetrics.density
+            val bitmap = snapshot(name)
+            return bitmap.getPixel(bitmap.width * 7 / 8, ((label.top + label.bottom).value * density / 2).toInt())
+        }
+        compose.runOnIdle {
+            state.value = state.value.copy(connectionPhase = ConnectionPhase.Connected, connectionProblem = "")
+        }
+        val online = serverColor("27-server-connected")
+        assertTrue(android.graphics.Color.green(online) > android.graphics.Color.red(online) + 15)
+        assertTrue(android.graphics.Color.green(online) > android.graphics.Color.blue(online) + 15)
+        compose.runOnIdle {
+            state.value = state.value.copy(connectionPhase = ConnectionPhase.Idle, connectionProblem = "NETWORK_UNAVAILABLE")
+        }
+        val offline = serverColor("28-server-disconnected")
+        assertTrue(android.graphics.Color.red(offline) > android.graphics.Color.green(offline) + 15)
+    }
+
+    @Test
+    fun feedScrollsBehindTheStatusBarGlass() {
+        val heading = loadIssue(articleCount = 30)
+        val density = compose.activity.resources.displayMetrics.density
+        statusInset(24)
         assertTrue(compose.onNodeWithText(heading).getUnclippedBoundsInRoot().top > 24.dp)
         val beforeScroll = snapshot("19-status-inset")
         val headerEdge = beforeScroll.getPixel(beforeScroll.width / 2, (32 * density).toInt())

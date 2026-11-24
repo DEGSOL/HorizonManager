@@ -163,7 +163,6 @@ internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model:
                     Text(explanation)
                     val id = row.optString("job")
                     if (id.isNotBlank()) TextButton(onClick = { job = id; detail = null }) { Text(ui(R.string.ui_events_for_this_operation)) }
-                    HorizontalDivider()
                     Text(ui(R.string.journal_technical), style = MaterialTheme.typography.labelLarge)
                     val technical = listOf(code, row.optString("detail"), id).filter(String::isNotBlank).joinToString("\n")
                     if (technical.isNotBlank()) Text(technical, style = MaterialTheme.typography.bodySmall, color = theme.muted)

@@ -233,17 +233,31 @@ internal fun Tile(modifier: Modifier = Modifier, accented: Boolean = false,
 }
 
 @Composable
+internal fun Modifier.settingsItemSurface(highlighted: Boolean = false): Modifier {
+    val palette = LocalHorizonPalette.current
+    return clip(MaterialTheme.shapes.medium)
+        .background(if (highlighted) palette.glassSelection else palette.elevated.copy(alpha = .58f))
+}
+
+@Composable
 internal fun GlassSettingRow(title: String, subtitle: String, enabled: Boolean = true,
                              @StringRes help: Int? = null, open: () -> Unit) {
     val palette = LocalHorizonPalette.current
     val light = LocalLightGlass.current
     val text = if (light) ReadingGlass.text else palette.text
     val muted = if (light) ReadingGlass.muted else palette.muted
-    val standalone = LocalSettingsGlass.current && !LocalSettingsTile.current
-    Column(if (standalone) Modifier.glassSurface(MaterialTheme.shapes.large).padding(horizontal = 10.dp) else Modifier) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    val settings = LocalSettingsGlass.current
+    val rowSurface = when {
+        settings && !LocalSettingsTile.current ->
+            Modifier.glassSurface(if (light) feedGlassShape else MaterialTheme.shapes.large,
+                lightNavigation = light, outlined = false)
+        settings -> Modifier.settingsItemSurface()
+        else -> Modifier
+    }
+    Column {
+        Row(rowSurface.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f).clickable(enabled = enabled, role = Role.Button, onClick = open)
-                .heightIn(min = 57.dp).padding(horizontal = 4.dp, vertical = 8.dp),
+                .heightIn(min = 57.dp).padding(horizontal = if (settings) 14.dp else 4.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(title, style = MaterialTheme.typography.titleMedium, color = if (enabled) text else muted)
@@ -253,7 +267,7 @@ internal fun GlassSettingRow(title: String, subtitle: String, enabled: Boolean =
             }
             if (help != null) SettingHelp(title, help)
         }
-        if (!standalone) androidx.compose.material3.HorizontalDivider(
+        if (!settings) androidx.compose.material3.HorizontalDivider(
             color = text.copy(alpha = .14f), thickness = .5.dp,
         )
     }

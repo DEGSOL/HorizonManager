@@ -149,18 +149,20 @@ internal fun Control(panel: Panel, model: ManagerModel, confirm: (String, () -> 
     if (panel.jobs.isNotEmpty()) Tile {
         Text(ui(R.string.ui_job_history), style = MaterialTheme.typography.titleMedium)
         panel.jobs.take(25).forEach { job ->
-            val kind = when (job.optString("kind")) { "ai" -> ui(R.string.ui_ai_test); "source" -> ui(R.string.ui_source_test); "localize" -> ui(R.string.ui_translation); "article_context" -> ui(R.string.article_context_heading); else -> ui(R.string.ui_digest) }
-            Text("$kind · ${stateName(job.optString("state"))} · ${localTime(job.optString("created"))}")
-            Text(job.optString("id"), style = MaterialTheme.typography.labelSmall)
-            job.optJSONObject("result")?.let { result ->
-                val counts = listOf("raw" to ui(R.string.ui_collected), "scored" to ui(R.string.ui_scored), "kept" to ui(R.string.ui_in_issue), "enriched" to ui(R.string.ui_enriched))
-                    .mapNotNull { (key, title) -> if (result.has(key)) "$title ${result.getInt(key)}" else null }
-                if (counts.isNotEmpty()) Text(counts.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+            Column(Modifier.fillMaxWidth().settingsItemSurface().padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                val kind = when (job.optString("kind")) { "ai" -> ui(R.string.ui_ai_test); "source" -> ui(R.string.ui_source_test); "localize" -> ui(R.string.ui_translation); "article_context" -> ui(R.string.article_context_heading); else -> ui(R.string.ui_digest) }
+                Text("$kind · ${stateName(job.optString("state"))} · ${localTime(job.optString("created"))}")
+                Text(job.optString("id"), style = MaterialTheme.typography.labelSmall)
+                job.optJSONObject("result")?.let { result ->
+                    val counts = listOf("raw" to ui(R.string.ui_collected), "scored" to ui(R.string.ui_scored), "kept" to ui(R.string.ui_in_issue), "enriched" to ui(R.string.ui_enriched))
+                        .mapNotNull { (key, title) -> if (result.has(key)) "$title ${result.getInt(key)}" else null }
+                    if (counts.isNotEmpty()) Text(counts.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+                }
+                if (active == null && job.optString("kind") in setOf("ai", "run") && job.optString("state") in setOf("failed", "timeout", "interrupted")) {
+                    TextButton(onClick = { model.submit(job.optString("kind")) }) { Text(ui(R.string.ui_retry)) }
+                }
             }
-            if (active == null && job.optString("kind") in setOf("ai", "run") && job.optString("state") in setOf("failed", "timeout", "interrupted")) {
-                TextButton(onClick = { model.submit(job.optString("kind")) }) { Text(ui(R.string.ui_retry)) }
-            }
-            HorizontalDivider()
         }
     }
 }

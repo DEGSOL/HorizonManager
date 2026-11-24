@@ -18,7 +18,7 @@ private fun SettingsSection(@StringRes title: Int, content: @Composable ColumnSc
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(ui(title), Modifier.padding(start = 4.dp), style = MaterialTheme.typography.titleMedium,
             color = if (LocalLightGlass.current) LocalHorizonPalette.current.text else MaterialTheme.colorScheme.onSurfaceVariant)
-        Tile(content = content)
+        content()
     }
 }
 
@@ -31,7 +31,7 @@ internal fun SettingsHome(panel: Panel, open: (String) -> Unit, page: String, se
             val connected = panel.server != null && panel.ready &&
                 panel.connectionPhase == ConnectionPhase.Connected && panel.connectionProblem.isBlank()
             Column(Modifier.fillMaxWidth().glassSurface(feedGlassShape)
-                .savedNoticeWash(disconnected = !connected)
+                .savedNoticeWash(if (connected) NoticeWash.Connected else NoticeWash.Disconnected)
                 .clickable(role = Role.Button, onClick = rowPage("server_settings"))
                 .padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text(ui(R.string.mr_server), style = MaterialTheme.typography.labelLarge, color = Color.White)

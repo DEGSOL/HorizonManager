@@ -121,7 +121,6 @@ internal fun ScheduleForm(panel: Panel, model: ManagerModel, dirtyChange: (Boole
                     colors = horizonFieldColors())
             }
             "calendar" -> {
-                HorizontalDivider()
                 Text(ui(R.string.schedule_days), style = MaterialTheme.typography.titleSmall)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     for ((mask, title) in dayPresets) {
@@ -147,7 +146,6 @@ internal fun ScheduleForm(panel: Panel, model: ManagerModel, dirtyChange: (Boole
             }
         }
         Reveal(changed) {
-            HorizontalDivider()
             Text(ui(R.string.editorial_unsaved), color = palette.warning)
             Button(enabled = !panel.busy && when (mode) {
                 "interval" -> (parsedHours ?: 0) in 1..168

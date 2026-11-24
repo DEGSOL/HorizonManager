@@ -67,7 +67,7 @@ internal fun ArticleDialog(
         Column(
             Modifier.widthIn(max = 620.dp)
                 .fillMaxWidth()
-                .glassRim(shape)
+                .publicationGlassRim(shape)
                 .clip(shape)
                 .background(bodyColor)
                 .pointerInput(Unit) { detectTapGestures {} }

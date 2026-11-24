@@ -359,7 +359,7 @@ internal fun NewsScreen(
             }
         }
         CompositionLocalProvider(LocalGlassScene provides scene) {
-            StatusGlass()
+            StatusGlass(extendIntoFeed = true)
             AnimatedVisibility(
                 barsVisible,
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = topInset),
@@ -662,7 +662,7 @@ internal fun PublicationTile(
                 }
             }
         }
-        Spacer(Modifier.matchParentSize().glassRim(shape))
+        Spacer(Modifier.matchParentSize().publicationGlassRim(shape))
         if (unread || showBorder) {
             Spacer(Modifier.matchParentSize().graphicsLayer()
                 .unreadOutline(shape, key, borderAlpha, movingBorder))
@@ -800,9 +800,9 @@ internal fun ArchiveScreen(
                         )
                         .joinToString(" · ")
                 Row(
-                    Modifier.fillMaxWidth()
+                    Modifier.fillMaxWidth().settingsItemSurface()
                         .clickable(role = Role.Button) { open(issue) }
-                        .padding(vertical = 14.dp),
+                        .padding(start = 14.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
@@ -832,7 +832,6 @@ internal fun ArchiveScreen(
                         }
                     }
                 }
-                HorizontalDivider(color = theme.card)
             }
         }
         if (panel.hasMoreDigests)

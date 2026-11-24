@@ -82,20 +82,23 @@ private fun NoticeLabel(message: String, modifier: Modifier = Modifier, wash: Mo
 
 internal val noticeGlassShape = RoundedCornerShape(22.dp)
 
+internal enum class NoticeWash(val first: Color, val second: Color, val third: Color) {
+    Saved(Color(0xFF8B65EF), Color(0xFF32B4C7), Color(0xFFE2985A)),
+    Connected(Color(0xFF3BAD61), Color(0xFF21834B), Color(0xFF81CA73)),
+    Disconnected(Color(0xFFCD3A52), Color(0xFF9B243E), Color(0xFFE36767)),
+}
+
 @Composable
-internal fun Modifier.savedNoticeWash(disconnected: Boolean = false): Modifier {
+internal fun Modifier.savedNoticeWash(palette: NoticeWash = NoticeWash.Saved): Modifier {
     val phase = rememberInfiniteTransition(label = "Saved notice background").animateFloat(
         0f, 1f, infiniteRepeatable(tween(1800, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "Color movement",
     )
     return drawWithCache {
         val radius = maxOf(size.width * .65f, size.height * 1.5f)
-        val first = if (disconnected) Color(0xFFCD3A52) else Color(0xFF8B65EF)
-        val second = if (disconnected) Color(0xFF9B243E) else Color(0xFF32B4C7)
-        val third = if (disconnected) Color(0xFFE36767) else Color(0xFFE2985A)
-        val near = Brush.radialGradient(listOf(first.copy(alpha = .44f), Color.Transparent), Offset.Zero, radius)
-        val far = Brush.radialGradient(listOf(second.copy(alpha = .41f), Color.Transparent), Offset.Zero, radius)
-        val edge = Brush.radialGradient(listOf(third.copy(alpha = .30f), Color.Transparent), Offset.Zero, radius)
+        val near = Brush.radialGradient(listOf(palette.first.copy(alpha = .44f), Color.Transparent), Offset.Zero, radius)
+        val far = Brush.radialGradient(listOf(palette.second.copy(alpha = .41f), Color.Transparent), Offset.Zero, radius)
+        val edge = Brush.radialGradient(listOf(palette.third.copy(alpha = .30f), Color.Transparent), Offset.Zero, radius)
         onDrawWithContent {
             val position = phase.value
             translate(size.width * (.10f + position * .55f), size.height * .17f) {
