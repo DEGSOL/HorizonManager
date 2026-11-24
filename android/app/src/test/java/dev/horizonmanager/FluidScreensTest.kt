@@ -287,15 +287,18 @@ class FluidScreensTest {
         }
         val ocean = snapshot("18-ocean-navigation")
         val density = compose.activity.resources.displayMetrics.density
-        for ((x, y) in listOf(title.left.value + 5f to title.top.value + 2f,
-            tab.left.value + 5f to tab.top.value + 12f)) {
-            for (bitmap in listOf(graphite, ocean)) {
-                val color = bitmap.getPixel((x * density).toInt(), (y * density).toInt())
+        val points = listOf(title.left.value + 5f to title.top.value + 2f,
+            tab.left.value + 5f to tab.top.value + 12f)
+        for (bitmap in listOf(graphite, ocean)) {
+            val colors = points.map { (x, y) -> bitmap.getPixel((x * density).toInt(), (y * density).toInt()) }
+            for (color in colors) {
                 val channels = listOf(android.graphics.Color.red(color), android.graphics.Color.green(color),
                     android.graphics.Color.blue(color))
                 assertTrue("Navigation glass should stay light and neutral", channels.min() >= 155 &&
                     channels.max() - channels.min() <= 4)
             }
+            assertTrue("Feed header and bottom bar should have matching gray tints",
+                kotlin.math.abs(android.graphics.Color.red(colors[0]) - android.graphics.Color.red(colors[1])) <= 28)
         }
         assertEquals("Legacy presets must not change the default palette", graphite.getPixel(8, 8), ocean.getPixel(8, 8))
         tab(R.string.settings)
@@ -422,7 +425,7 @@ class FluidScreensTest {
         val beforeScroll = snapshot("19-status-inset")
         val headerEdge = beforeScroll.getPixel(beforeScroll.width / 2, (32 * density).toInt())
         assertTrue("The light feed header should draw over the status glass fade",
-            android.graphics.Color.red(headerEdge) > 210)
+            android.graphics.Color.red(headerEdge) >= 172)
         compose.onNode(hasScrollToIndexAction()).performTouchInput {
             swipeUp(startY = height * .63f, endY = height * .39f, durationMillis = 500)
         }
@@ -500,12 +503,20 @@ class FluidScreensTest {
         text(R.string.mr_news).performClick()
         text(R.string.ui_schedule).performClick()
         compose.onNode(hasText(ui(R.string.schedule_next)) or hasText(ui(R.string.schedule_last_known))).assertExists()
-        text(R.string.schedule_every_day).assertExists()
+        text(R.string.schedule_every_day).assertIsSelected()
+        text(R.string.schedule_workdays).assertIsNotSelected()
+        text(R.string.ui_mon).assertIsSelected()
         compose.onNodeWithText("09:00").assertExists()
         text(R.string.ui_interval_from_1_to_168_hours).assertDoesNotExist()
         text(R.string.ui_save_schedule).assertDoesNotExist()
         snapshot("08-schedule")
-        text(R.string.schedule_weekends).performScrollTo().performClick()
+        text(R.string.schedule_weekends).performScrollTo().performClick().assertIsSelected()
+        text(R.string.schedule_every_day).assertIsNotSelected()
+        text(R.string.ui_mon).assertIsNotSelected()
+        text(R.string.ui_sat).assertIsSelected()
+        snapshot("30-schedule-weekends")
+        text(R.string.ui_mon).performScrollTo().performClick().assertIsSelected()
+        text(R.string.schedule_weekends).assertIsNotSelected()
         text(R.string.ui_save_schedule).assertExists()
         text(R.string.ui_at_regular_intervals).performScrollTo().performClick()
         text(R.string.ui_interval_from_1_to_168_hours).assertExists()

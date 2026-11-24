@@ -89,29 +89,32 @@ internal enum class NoticeWash(val first: Color, val second: Color, val third: C
 }
 
 @Composable
-internal fun Modifier.savedNoticeWash(palette: NoticeWash = NoticeWash.Saved): Modifier {
-    val phase = rememberInfiniteTransition(label = "Saved notice background").animateFloat(
+internal fun rememberNoticeWashPhase(): State<Float> =
+    rememberInfiniteTransition(label = "Saved notice background").animateFloat(
         0f, 1f, infiniteRepeatable(tween(1800, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "Color movement",
     )
-    return drawWithCache {
-        val radius = maxOf(size.width * .65f, size.height * 1.5f)
-        val near = Brush.radialGradient(listOf(palette.first.copy(alpha = .44f), Color.Transparent), Offset.Zero, radius)
-        val far = Brush.radialGradient(listOf(palette.second.copy(alpha = .41f), Color.Transparent), Offset.Zero, radius)
-        val edge = Brush.radialGradient(listOf(palette.third.copy(alpha = .30f), Color.Transparent), Offset.Zero, radius)
-        onDrawWithContent {
-            val position = phase.value
-            translate(size.width * (.10f + position * .55f), size.height * .17f) {
-                drawCircle(near, radius, Offset.Zero)
-            }
-            translate(size.width * (.86f - position * .36f), size.height * .94f) {
-                drawCircle(far, radius, Offset.Zero)
-            }
-            translate(size.width * (1f - position * .80f), size.height * 1.24f) {
-                drawCircle(edge, radius, Offset.Zero)
-            }
-            drawContent()
+
+@Composable
+internal fun Modifier.savedNoticeWash(
+    palette: NoticeWash = NoticeWash.Saved, phase: State<Float> = rememberNoticeWashPhase(),
+): Modifier = drawWithCache {
+    val radius = maxOf(size.width * .65f, size.height * 1.5f)
+    val near = Brush.radialGradient(listOf(palette.first.copy(alpha = .44f), Color.Transparent), Offset.Zero, radius)
+    val far = Brush.radialGradient(listOf(palette.second.copy(alpha = .41f), Color.Transparent), Offset.Zero, radius)
+    val edge = Brush.radialGradient(listOf(palette.third.copy(alpha = .30f), Color.Transparent), Offset.Zero, radius)
+    onDrawWithContent {
+        val position = phase.value
+        translate(size.width * (.10f + position * .55f), size.height * .17f) {
+            drawCircle(near, radius, Offset.Zero)
         }
+        translate(size.width * (.86f - position * .36f), size.height * .94f) {
+            drawCircle(far, radius, Offset.Zero)
+        }
+        translate(size.width * (1f - position * .80f), size.height * 1.24f) {
+            drawCircle(edge, radius, Offset.Zero)
+        }
+        drawContent()
     }
 }
 

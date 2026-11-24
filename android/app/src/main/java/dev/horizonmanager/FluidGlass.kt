@@ -12,8 +12,6 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
@@ -45,7 +43,7 @@ internal val backdropBlurAvailable: Boolean
     @Composable get() = LocalGlassScene.current != null && Build.VERSION.SDK_INT >= 31
 
 private fun Modifier.glassBackdrop(
-    shape: Shape, radius: Dp, base: Color, monochrome: Boolean, menu: Boolean,
+    shape: Shape, radius: Dp, base: Color, monochrome: Boolean, menu: Boolean, tintStrength: Float,
 ): Modifier = composed {
     val scene = LocalGlassScene.current
     if (scene == null || Build.VERSION.SDK_INT < 31) return@composed clip(shape)
@@ -66,6 +64,7 @@ private fun Modifier.glassBackdrop(
                         val shift = origin - position
                         translate(shift.x, shift.y) { drawLayer(scene.layer) }
                     }
+                    if (tintStrength > 0f) drawRect(base, alpha = tintStrength)
                 }
                 drawLayer(sampled)
                 drawContent()
@@ -86,8 +85,13 @@ internal object ReadingGlass {
     val muted = Color(0xFF3C3C3C)
 }
 
-internal fun Modifier.readingNavigationGlass(shape: Shape): Modifier =
-    glassSurface(shape, backdrop = true, lightNavigation = true)
+private val readingBarBase = Color(0xFFBBBBBB)
+private val readingBarTop = Color(0xFFC4C4C4)
+
+internal fun Modifier.readingNavigationGlass(shape: Shape): Modifier = composed {
+    // The gray tint keeps the bars close in tone over both dark and light covers.
+    glassMaterial(shape, backdropBlurAvailable, readingBarBase, readingBarTop, outlined = true, tintStrength = .82f)
+}
 
 internal const val statusGlassFadeFraction = .47f
 
@@ -106,42 +110,15 @@ internal fun BoxScope.StatusGlass(extendIntoFeed: Boolean = false) {
 internal fun Modifier.glassRim(shape: Shape, edge: Color = Color.White): Modifier =
     border(1.dp, Brush.verticalGradient(listOf(edge.copy(alpha = .29f), edge.copy(alpha = .12f))), shape)
 
-internal fun Modifier.publicationGlassRim(shape: Shape): Modifier = drawWithCache {
-    val outline = shape.createOutline(size, layoutDirection, this) as? Outline.Rounded
-        ?: return@drawWithCache onDrawWithContent { drawContent() }
-    val edge = Path().apply { addRoundRect(outline.roundRect) }
-    val innerShade = Brush.linearGradient(
-        0f to Color.Black.copy(alpha = .38f),
-        .45f to Color.Black.copy(alpha = .12f),
-        1f to Color.Black.copy(alpha = .32f),
-    )
-    val bevel = Brush.linearGradient(
-        0f to Color.White.copy(alpha = .29f),
-        .35f to Color.White.copy(alpha = .08f),
-        .62f to Color.Transparent,
-        1f to Color.White.copy(alpha = .19f),
-    )
-    val reflection = Brush.linearGradient(
-        0f to Color.White.copy(alpha = .73f),
-        .20f to Color.White.copy(alpha = .44f),
-        .49f to Color.White.copy(alpha = .13f),
-        .72f to Color.White.copy(alpha = .21f),
-        .91f to Color.White.copy(alpha = .50f),
-        1f to Color.White.copy(alpha = .34f),
-    )
-    // Clip the centered strokes to the original outline. The photo and text keep their bounds.
-    val shadeStroke = Stroke(6.dp.toPx())
-    val bevelStroke = Stroke(3.8.dp.toPx())
-    val rimStroke = Stroke(1.65.dp.toPx())
-    onDrawWithContent {
-        drawContent()
-        clipPath(edge) {
-            drawPath(edge, innerShade, style = shadeStroke)
-            drawPath(edge, bevel, style = bevelStroke)
-            drawPath(edge, reflection, style = rimStroke)
-        }
-    }
-}
+private val publicationEdgeLight = Brush.linearGradient(
+    0f to Color.White.copy(alpha = .47f),
+    .28f to Color.White.copy(alpha = .24f),
+    .66f to Color.White.copy(alpha = .12f),
+    1f to Color.White.copy(alpha = .28f),
+)
+
+internal fun Modifier.publicationGlassRim(shape: Shape): Modifier =
+    border(.85.dp, publicationEdgeLight, shape)
 
 private fun Modifier.statusBarGlass(fadeStart: Float): Modifier =
     graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
@@ -162,8 +139,16 @@ internal fun Modifier.glassSurface(
     val blur = backdrop && backdropBlurAvailable
     val base = if (lightNavigation) ReadingGlass.base else palette.glassBase
     val top = if (lightNavigation) ReadingGlass.raised else if (raised) palette.glassSelection else palette.glassRaised
-    val surface = if (blur) glassBackdrop(shape, 22.dp, base, monochrome = true, menu = menu) else clip(shape)
-    surface.background(Brush.verticalGradient(listOf(
+    glassMaterial(shape, blur, base, top, outlined, menu)
+}
+
+private fun Modifier.glassMaterial(
+    shape: Shape, blur: Boolean, base: Color, top: Color, outlined: Boolean,
+    menu: Boolean = false, tintStrength: Float = 0f,
+): Modifier {
+    val surface = if (blur) glassBackdrop(shape, 22.dp, base, monochrome = true, menu = menu,
+        tintStrength = tintStrength) else clip(shape)
+    return surface.background(Brush.verticalGradient(listOf(
         top.copy(alpha = if (blur) .66f else .94f),
         base.copy(alpha = if (blur) .77f else .92f),
     ))).then(if (outlined) Modifier.glassRim(shape, Color.White) else Modifier)

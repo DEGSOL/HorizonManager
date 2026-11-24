@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.*
+import androidx.compose.material3.FilterChip as MaterialFilterChip
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -36,6 +37,23 @@ private fun JSONObject.scheduleDayMask(): Int = optJSONArray("days")?.let { arra
 
 private fun targetTime(hour: Int, minute: Int): String =
     LocalTime.of(hour, minute).format(DateTimeFormatter.ofPattern("HH:mm", appLocale()))
+
+@Composable
+private fun ScheduleDayChip(title: Int, selected: Boolean, enabled: Boolean, wash: State<Float>, select: () -> Unit) {
+    val shape = feedGlassShape
+    val surface = if (selected) Modifier.glassSurface(shape, outlined = false).savedNoticeWash(phase = wash)
+        else Modifier.settingsControlGlass(enabled)
+    MaterialFilterChip(
+        selected = selected, onClick = select, label = { Text(ui(title)) }, modifier = surface,
+        enabled = enabled, shape = shape, border = null,
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = Color.Transparent, selectedContainerColor = Color.Transparent,
+            disabledContainerColor = Color.Transparent, disabledSelectedContainerColor = Color.Transparent,
+            labelColor = ReadingGlass.text, selectedLabelColor = Color.White,
+            disabledLabelColor = if (selected) Color.White.copy(alpha = .74f) else ReadingGlass.muted,
+        ),
+    )
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -125,11 +143,11 @@ internal fun ScheduleForm(panel: Panel, model: ManagerModel, dirtyChange: (Boole
                     colors = horizonFieldColors(), shape = horizonFieldShape())
             }
             "calendar" -> {
+                val wash = rememberNoticeWashPhase()
                 Text(ui(R.string.schedule_days), style = MaterialTheme.typography.titleSmall)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     for ((mask, title) in dayPresets) {
-                        FilterChip(days == mask, { days = mask }, { Text(ui(title)) },
-                            enabled = !panel.busy, colors = chipColors)
+                        ScheduleDayChip(title, days == mask, !panel.busy, wash) { days = mask }
                     }
                 }
                 BoxWithConstraints {
@@ -138,8 +156,7 @@ internal fun ScheduleForm(panel: Panel, model: ManagerModel, dirtyChange: (Boole
                         maxItemsInEachRow = if (maxWidth >= 384.dp * fontScale) 7 else 4) {
                         weekdays.forEachIndexed { index, title ->
                             val day = 1 shl index
-                            FilterChip(days and day != 0, { days = days xor day }, { Text(ui(title)) },
-                                enabled = !panel.busy, colors = chipColors)
+                            ScheduleDayChip(title, days and day != 0, !panel.busy, wash) { days = days xor day }
                         }
                     }
                 }
