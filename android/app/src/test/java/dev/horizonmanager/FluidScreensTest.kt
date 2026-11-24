@@ -362,11 +362,55 @@ class FluidScreensTest {
         val online = serverColor("27-server-connected")
         assertTrue(android.graphics.Color.green(online) > android.graphics.Color.red(online) + 15)
         assertTrue(android.graphics.Color.green(online) > android.graphics.Color.blue(online) + 15)
+        val stamp = Instant.now().toString()
+        compose.runOnIdle { state.value = state.value.copy(lastContact = stamp) }
+        text(R.string.mr_server).performClick()
+        val lastCheck = compose.onNodeWithText(ui(R.string.editorial_last_contact, localTime(stamp)))
+        lastCheck.assertIsDisplayed()
+        val lastBounds = lastCheck.getUnclippedBoundsInRoot()
+        val density = compose.activity.resources.displayMetrics.density
+        val detail = snapshot("29-server-details-connected")
+        val detailColor = detail.getPixel(detail.width * 7 / 8, ((lastBounds.top + lastBounds.bottom).value * density / 2).toInt())
+        assertTrue(android.graphics.Color.green(detailColor) > android.graphics.Color.red(detailColor) + 15)
+        back()
         compose.runOnIdle {
             state.value = state.value.copy(connectionPhase = ConnectionPhase.Idle, connectionProblem = "NETWORK_UNAVAILABLE")
         }
         val offline = serverColor("28-server-disconnected")
         assertTrue(android.graphics.Color.red(offline) > android.graphics.Color.green(offline) + 15)
+    }
+
+    @Test
+    fun editSavedServerOpensItsDataWithoutSelectingIt() {
+        loadIssue(articleCount = 4)
+        val model = ViewModelProvider(compose.activity)[ManagerModel::class.java]
+        @Suppress("UNCHECKED_CAST")
+        val flow = ManagerModel::class.java.getDeclaredField("mutable").apply { isAccessible = true }
+            .get(model) as MutableStateFlow<Panel>
+        val active = requireNotNull(flow.value.server)
+        val other = active.copy(id = java.util.UUID.randomUUID().toString(), name = "Резервный VPS",
+            host = "backup.example.invalid", port = 2222, user = "backup", credential = "fixture-password",
+            https = "https://backup.example.invalid")
+        compose.runOnIdle { flow.value = flow.value.copy(servers = listOf(active, other)) }
+        tab(R.string.settings)
+        text(R.string.mr_server).performClick()
+        text(R.string.ui_servers).performClick()
+        compose.onNodeWithContentDescription("${ui(R.string.editorial_edit)} ${other.name}").performClick()
+
+        val dialog = hasAnyAncestor(isDialog())
+        compose.onNode(hasText(other.name) and dialog, useUnmergedTree = true).assertIsDisplayed()
+        compose.onNode(hasText(other.host) and dialog, useUnmergedTree = true).assertIsDisplayed()
+        compose.onNode(hasText(other.port.toString()) and dialog, useUnmergedTree = true).assertIsDisplayed()
+        compose.onNode(hasText(other.user) and dialog, useUnmergedTree = true).assertIsDisplayed()
+        val save = text(R.string.ui_save_connection).assertIsNotEnabled()
+        compose.onNode(hasText(other.name) and hasSetTextAction() and dialog, useUnmergedTree = true)
+            .performTextReplacement("Резервный сервер")
+        save.assertIsEnabled()
+        assertEquals(active.id, flow.value.server?.id)
+        back()
+        save.assertDoesNotExist()
+        assertEquals(other, flow.value.servers.find { it.id == other.id })
+        assertEquals(active.id, flow.value.server?.id)
     }
 
     @Test

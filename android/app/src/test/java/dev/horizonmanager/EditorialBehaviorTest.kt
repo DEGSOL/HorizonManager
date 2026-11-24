@@ -8,6 +8,20 @@ import org.junit.Test
 
 class EditorialBehaviorTest {
     @Test
+    fun editingSshFieldsKeepsTheSavedProfileIdentity() {
+        val saved = Server("same-id", "Home", "old.example", 22, "user", false,
+            "fixture-password", "", "SHA256:expected", "fixture-token", installed = true,
+            https = "https://agent.example", background = true)
+        val draft = ServerDraft(saved).copy(name = " Home VPS ", host = "[2001:db8::123]", port = " 2222 ")
+        val result = requireNotNull(draft.update(saved))
+        assertEquals(saved.copy(name = "Home VPS", host = "2001:db8::123", port = 2222), result)
+        assertFalse(result.sameSshAddress(saved))
+        assertTrue(result.sameSshCredentials(saved))
+        assertNull(draft.copy(port = "65536").update(saved))
+        assertNull(draft.copy(credential = "").update(saved))
+    }
+
+    @Test
     fun titleShadowIsAlwaysTheOppositeColorOfItsText() {
         for (luminance in listOf(.02f, .178f, .179f, .80f)) {
             val ink = CoverInk.at(luminance, 4f, 1f)

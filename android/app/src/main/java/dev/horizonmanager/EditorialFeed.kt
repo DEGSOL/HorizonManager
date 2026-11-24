@@ -489,109 +489,110 @@ internal fun DigestBubble(
     sources: () -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
-    val p = LocalHorizonPalette.current
-    Column(
-        Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
-            .widthIn(max = 455.dp)
-            .fillMaxWidth()
-            .navigationGlass(MaterialTheme.shapes.medium)
-            .pointerInput(Unit) { detectTapGestures { } }
-            .semantics { paneTitle = ui(R.string.mr_details) }
-            .padding(start = 14.dp, end = 6.dp, top = 9.dp, bottom = 9.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                ImageVector.vectorResource(R.drawable.ic_archive),
-                null,
-                Modifier.size(23.dp),
-                tint = p.link,
-            )
-            Text(
-                ui(if (archived) R.string.mr_archive_issue else R.string.mr_latest),
-                Modifier.weight(1f).padding(start = 9.dp),
-                style = MaterialTheme.typography.titleLarge,
-            )
-            Box {
-                GlassIconAction(Icons.Default.MoreVert, ui(R.string.editorial_digest_actions)) {
-                    menu = true
-                }
-                GlassDropdownMenu(menu, { menu = false }) {
-                    if (!archived) {
-                        DropdownMenuItem(
-                            { Text(ui(R.string.ui_start_collection)) },
-                            {
-                                menu = false
-                                generate()
-                            },
-                            enabled = canRun,
-                        )
-                        if (issue != null)
+    CompositionLocalProvider(LocalLightGlass provides true) {
+        Column(
+            Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                .widthIn(max = 455.dp)
+                .fillMaxWidth()
+                .readingNavigationGlass(feedGlassShape)
+                .pointerInput(Unit) { detectTapGestures { } }
+                .semantics { paneTitle = ui(R.string.mr_details) }
+                .padding(start = 14.dp, end = 6.dp, top = 9.dp, bottom = 9.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    ImageVector.vectorResource(R.drawable.ic_archive),
+                    null,
+                    Modifier.size(23.dp),
+                    tint = ReadingGlass.text,
+                )
+                Text(
+                    ui(if (archived) R.string.mr_archive_issue else R.string.mr_latest),
+                    Modifier.weight(1f).padding(start = 9.dp),
+                    style = MaterialTheme.typography.titleLarge, color = ReadingGlass.text,
+                )
+                Box {
+                    GlassIconAction(Icons.Default.MoreVert, ui(R.string.editorial_digest_actions)) {
+                        menu = true
+                    }
+                    GlassDropdownMenu(menu, { menu = false }) {
+                        if (!archived) {
                             DropdownMenuItem(
-                                { Text(ui(R.string.archive_early)) },
+                                { Text(ui(R.string.ui_start_collection)) },
                                 {
                                     menu = false
-                                    archive()
+                                    generate()
+                                },
+                                enabled = canRun,
+                            )
+                            if (issue != null)
+                                DropdownMenuItem(
+                                    { Text(ui(R.string.archive_early)) },
+                                    {
+                                        menu = false
+                                        archive()
+                                    },
+                                )
+                        }
+                        if (canTranslate)
+                            DropdownMenuItem(
+                                { Text(ui(R.string.ui_translate_issue)) },
+                                {
+                                    menu = false
+                                    translate()
+                                },
+                                enabled = canRun,
+                            )
+                        if (ai != null) {
+                            DropdownMenuItem(
+                                { Text(ui(R.string.ui_configure_ai)) },
+                                {
+                                    menu = false
+                                    ai()
                                 },
                             )
+                            DropdownMenuItem(
+                                { Text(ui(R.string.ui_add_a_source)) },
+                                {
+                                    menu = false
+                                    sources()
+                                },
+                            )
+                        }
+                        if (archived && !canTranslate)
+                            DropdownMenuItem(
+                                { Text(ui(R.string.editorial_open_digest)) },
+                                {
+                                    menu = false
+                                    details()
+                                },
+                                enabled = loaded,
+                            )
                     }
-                    if (canTranslate)
-                        DropdownMenuItem(
-                            { Text(ui(R.string.ui_translate_issue)) },
-                            {
-                                menu = false
-                                translate()
-                            },
-                            enabled = canRun,
-                        )
-                    if (ai != null) {
-                        DropdownMenuItem(
-                            { Text(ui(R.string.ui_configure_ai)) },
-                            {
-                                menu = false
-                                ai()
-                            },
-                        )
-                        DropdownMenuItem(
-                            { Text(ui(R.string.ui_add_a_source)) },
-                            {
-                                menu = false
-                                sources()
-                            },
-                        )
-                    }
-                    if (archived && !canTranslate)
-                        DropdownMenuItem(
-                            { Text(ui(R.string.editorial_open_digest)) },
-                            {
-                                menu = false
-                                details()
-                            },
-                            enabled = loaded,
-                        )
                 }
             }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                issue?.let {
-                    Text(localTime(digestTime(it)), style = MaterialTheme.typography.labelLarge)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    issue?.let {
+                        Text(localTime(digestTime(it)), style = MaterialTheme.typography.labelLarge, color = ReadingGlass.text)
+                    }
+                    Text(
+                        listOfNotNull(count?.let { ui(R.string.editorial_article_count, it) }, status)
+                            .joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ReadingGlass.muted,
+                    )
                 }
-                Text(
-                    listOfNotNull(count?.let { ui(R.string.editorial_article_count, it) }, status)
-                        .joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = p.muted,
+                GlassIconAction(Icons.Filled.Refresh, ui(R.string.ui_sync), syncEnabled, onClick = sync)
+                GlassIconAction(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    ui(R.string.editorial_open_digest),
+                    loaded,
+                    onClick = details,
                 )
             }
-            GlassIconAction(Icons.Filled.Refresh, ui(R.string.ui_sync), syncEnabled, onClick = sync)
-            GlassIconAction(
-                Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                ui(R.string.editorial_open_digest),
-                loaded,
-                onClick = details,
-            )
+            if (busy) DottedProgress(Modifier.fillMaxWidth().padding(top = 6.dp))
         }
-        if (busy) DottedProgress(Modifier.fillMaxWidth().padding(top = 6.dp))
     }
 }
 
@@ -800,7 +801,7 @@ internal fun ArchiveScreen(
                         )
                         .joinToString(" · ")
                 Row(
-                    Modifier.fillMaxWidth().settingsItemSurface()
+                    Modifier.fillMaxWidth().settingsControlGlass()
                         .clickable(role = Role.Button) { open(issue) }
                         .padding(start = 14.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -808,17 +809,17 @@ internal fun ArchiveScreen(
                     Text(
                         shortDigestDate(digestTime(issue)),
                         style = MaterialTheme.typography.headlineMedium,
-                        color = theme.link,
+                        color = ReadingGlass.text,
                     )
                     Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
                         Text(
                             localTime(digestTime(issue)),
-                            style = MaterialTheme.typography.titleSmall,
+                            style = MaterialTheme.typography.titleSmall, color = ReadingGlass.text,
                         )
                         Text(
                             details.ifBlank { ui(R.string.editorial_open_digest) },
                             style = MaterialTheme.typography.bodySmall,
-                            color = theme.muted,
+                            color = ReadingGlass.muted,
                         )
                     }
                     Box {

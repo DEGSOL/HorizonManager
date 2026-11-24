@@ -27,7 +27,7 @@ private fun CountField(title: Int, value: String, update: (String) -> Unit, vali
         label = { Text(ui(title)) }, singleLine = true, isError = !valid,
         supportingText = if (hint == null) null else ({ Text(ui(hint)) }),
         trailingIcon = if (help == null) null else ({ SettingHelp(ui(title), help) }),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), colors = horizonFieldColors())
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), colors = horizonFieldColors(), shape = horizonFieldShape())
 }
 
 @Composable

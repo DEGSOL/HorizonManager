@@ -9,7 +9,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -101,7 +100,7 @@ internal fun RouterSettings(
                 models = null
                 checkedKey = null
             }, label = { Text(ui(R.string.ui_api_key, router.title)) },
-            modifier = Modifier.fillMaxWidth(), singleLine = true, colors = horizonFieldColors(), enabled = !loading && !busy,
+            modifier = Modifier.fillMaxWidth(), singleLine = true, colors = horizonFieldColors(), shape = horizonFieldShape(), enabled = !loading && !busy,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { if (input.isNotBlank()) request++ }),
@@ -154,7 +153,7 @@ private fun RouterPicker(models: List<RouterModel>, selectedId: String, close: (
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = query, onValueChange = { query = it }, label = { Text(ui(R.string.ui_search_by_name)) },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true, colors = horizonFieldColors(),
+                    modifier = Modifier.fillMaxWidth(), singleLine = true, colors = horizonFieldColors(), shape = horizonFieldShape(),
                 )
                 if (filtered.isEmpty()) Text(ui(R.string.ui_no_models_found))
                 LazyColumn(Modifier.heightIn(max = 340.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -166,9 +165,10 @@ private fun RouterPicker(models: List<RouterModel>, selectedId: String, close: (
                                 Text(model.id + context)
                             },
                             trailingContent = if (model.id == selectedId) ({ Text(ui(R.string.ui_selected)) }) else null,
-                            modifier = Modifier.settingsItemSurface(highlighted = model.id == selectedId)
-                                .clickable { select(model.id) },
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                            modifier = Modifier.settingsControlGlass().clickable { select(model.id) },
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent,
+                                headlineColor = ReadingGlass.text, supportingColor = ReadingGlass.muted,
+                                trailingIconColor = ReadingGlass.text),
                         )
                     }
                 }

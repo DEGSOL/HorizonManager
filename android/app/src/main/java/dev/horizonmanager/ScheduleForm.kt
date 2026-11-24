@@ -11,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -95,13 +96,16 @@ internal fun ScheduleForm(panel: Panel, model: ManagerModel, dirtyChange: (Boole
     }
     Tile {
         SettingHeading(ui(R.string.schedule_frequency), R.string.setting_help_schedule_modes)
-        Column(Modifier.fillMaxWidth().selectableGroup()) {
+        val radioColors = RadioButtonDefaults.colors(selectedColor = ReadingGlass.text,
+            unselectedColor = ReadingGlass.muted, disabledSelectedColor = ReadingGlass.muted,
+            disabledUnselectedColor = ReadingGlass.muted)
+        Column(Modifier.fillMaxWidth().selectableGroup(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             for ((value, title) in modes) {
-                Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(
+                Row(Modifier.fillMaxWidth().settingsControlGlass(!panel.busy).heightIn(min = 48.dp).selectable(
                     selected = mode == value, enabled = !panel.busy, role = Role.RadioButton, onClick = { mode = value },
-                ), verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = mode == value, onClick = null, enabled = !panel.busy)
-                    Text(ui(title), Modifier.padding(start = 12.dp))
+                ).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = mode == value, onClick = null, enabled = !panel.busy, colors = radioColors)
+                    Text(ui(title), Modifier.padding(start = 12.dp), color = ReadingGlass.text)
                 }
             }
         }
@@ -118,7 +122,7 @@ internal fun ScheduleForm(panel: Panel, model: ManagerModel, dirtyChange: (Boole
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                         keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
                     isError = (parsedHours ?: 0) !in 1..168, singleLine = true, enabled = !panel.busy,
-                    colors = horizonFieldColors())
+                    colors = horizonFieldColors(), shape = horizonFieldShape())
             }
             "calendar" -> {
                 Text(ui(R.string.schedule_days), style = MaterialTheme.typography.titleSmall)
@@ -210,15 +214,18 @@ private fun ScheduleZonePicker(current: String, close: () -> Unit, choose: (Stri
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
             Text(ui(R.string.ui_time_zone), style = MaterialTheme.typography.titleLarge)
             OutlinedTextField(query, { query = it }, label = { Text(ui(R.string.schedule_zone_search)) },
-                modifier = Modifier.fillMaxWidth(), singleLine = true, colors = horizonFieldColors())
+                modifier = Modifier.fillMaxWidth(), singleLine = true, colors = horizonFieldColors(), shape = horizonFieldShape())
             if (device != null) TextButton(onClick = { choose(device) }) { Text(ui(R.string.schedule_device_zone)) }
             if (visible.isEmpty()) Text(ui(R.string.schedule_zone_empty), Modifier.padding(bottom = 16.dp))
-            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 380.dp)) {
+            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 items(visible, key = { it.first }) { (id, name) ->
                     ListItem(
                         headlineContent = { Text(name) }, supportingContent = { Text(id) },
-                        trailingContent = { RadioButton(id == current, onClick = null) },
-                        modifier = Modifier.selectable(id == current, role = Role.RadioButton) { choose(id) },
+                        trailingContent = { RadioButton(id == current, onClick = null, colors = RadioButtonDefaults.colors(
+                            selectedColor = ReadingGlass.text, unselectedColor = ReadingGlass.muted)) },
+                        modifier = Modifier.settingsControlGlass().selectable(id == current, role = Role.RadioButton) { choose(id) },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent,
+                            headlineColor = ReadingGlass.text, supportingColor = ReadingGlass.muted),
                     )
                 }
             }

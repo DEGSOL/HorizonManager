@@ -47,7 +47,7 @@ internal data class Panel(
     val hostConfirmation: HostConfirmation? = null,
     val problem: String = "",
     val userProblem: String = "",
-    val sshVerification: String = "",
+    val editedServer: String = "",
     val maintenanceResult: String = "",
     val status: JSONObject = JSONObject(),
     val config: JSONObject = JSONObject(),
@@ -105,7 +105,8 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     val settingsSaved = saved.asStateFlow()
 
     private fun settingsSaved() { saved.update { it + 1 } }
-    @Volatile private var candidate: Server? = null
+    private data class PendingConnection(val server: Server, val editing: Boolean = false)
+    @Volatile private var candidate: PendingConnection? = null
     private var flagObserver: Job? = null
     private var eventObserver: Job? = null
     private var active: Job? = null
@@ -161,7 +162,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     private fun canPrefetchArtwork(panel: Panel): Boolean =
         panel.ready && panel.status.length() > 0 && panel.connectionPhase == ConnectionPhase.Connected
 
-    private fun record(error: Throwable, server: Server?, announce: Boolean = true) {
+    private fun record(error: Throwable, server: Server?, announce: Boolean = true, affectsConnection: Boolean = true) {
         val code = when (error) {
             is Problem -> error.code
             is HostConfirmation -> "SSH_HOST_CHANGED"
@@ -171,13 +172,13 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         val problem = listOf(code, detail).filter(String::isNotBlank).joinToString(" · ")
         val connectionError = isConnectionFailure(code)
         mutable.update {
-            if (server != null && server.id != it.server?.id && server.id != candidate?.id) it
+            if (server != null && server.id != it.server?.id && server.id != candidate?.server?.id && affectsConnection) it
             else it.copy(problem = problem, userProblem = if (announce) problem else it.userProblem,
-                connectionProblem = if (connectionError) code else it.connectionProblem,
-                connectionPhase = if (connectionError) ConnectionPhase.Idle else it.connectionPhase)
+                connectionProblem = if (connectionError && affectsConnection) code else it.connectionProblem,
+                connectionPhase = if (connectionError && affectsConnection) ConnectionPhase.Idle else it.connectionPhase)
         }
         val now = android.os.SystemClock.elapsedRealtime()
-        if (isTransientConnectionFailure(code)) quietRetryAfter = now + 60_000
+        if (affectsConnection && isTransientConnectionFailure(code)) quietRetryAfter = now + 60_000
         val signature = "${server?.id}:$problem:${error.cause?.javaClass?.simpleName}"
         if (signature == lastError && now - lastErrorTime < 60_000) return
         lastError = signature
@@ -198,7 +199,8 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         }
     }
 
-    private fun operation(quiet: Boolean = false, connectionCheck: Boolean = false, task: suspend () -> Unit) {
+    private fun operation(quiet: Boolean = false, connectionCheck: Boolean = false,
+                          editedProfile: Server? = null, task: suspend () -> Unit) {
         val previous = active?.takeIf { !it.isCompleted }
         if (previous != null && (quiet || !activeIsQuiet)) return
         activeIsQuiet = quiet
@@ -213,10 +215,15 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                 throw error
             } catch (error: HostConfirmation) {
                 if (connectionCheck && candidate != null) {
-                    mutable.update { it.copy(hostConfirmation = error, connectionPhase = ConnectionPhase.Idle) }
+                    mutable.update {
+                        it.copy(hostConfirmation = error, connectionPhase = if (editedProfile == null)
+                            ConnectionPhase.Idle else it.connectionPhase)
+                    }
                 } else record(error, state.value.server, announce = !quiet)
             } catch (error: Exception) {
-                record(error, state.value.server, announce = !quiet)
+                record(error, editedProfile ?: state.value.server, announce = !quiet,
+                    affectsConnection = editedProfile == null)
+                if (editedProfile != null) candidate = null
             } finally {
                 if (!quiet) mutable.update { it.copy(busy = false, connectionCancellable = false) }
             }
@@ -240,10 +247,13 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
 
     fun cancelConnection() {
         if (!state.value.connectionCancellable) return
+        val editing = candidate?.editing == true
         candidate = null
-        reconnectPaused = true
         active?.cancel()
-        mutable.update { it.copy(connectionPhase = ConnectionPhase.Idle, connectionProblem = "") }
+        if (!editing) {
+            reconnectPaused = true
+            mutable.update { it.copy(connectionPhase = ConnectionPhase.Idle, connectionProblem = "") }
+        }
     }
 
     fun networkChanged(available: Boolean) {
@@ -374,44 +384,92 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         }
     }
 
-    fun connect(name: String, hostname: String, portText: String, user: String, key: Boolean,
-                credential: String, passphrase: String, previous: Server?) {
+    fun connect(draft: ServerDraft, previous: Server?) {
         if (active?.isActive == true && !activeIsQuiet) return
         reconnectPaused = false
-        val host = hostname.trim().removeSurrounding("[", "]")
-        val port = portText.trim().toIntOrNull()
-        if (host.isEmpty() || !host.matches(Regex("[A-Za-z0-9:._%\\-]+")) ||
-            port == null || port !in 1..65535 || !user.matches(Regex("[A-Za-z0-9._-]{1,64}")) ||
-            credential.isBlank() || credential.length > 65536) {
+        val server = draft.update(Server("", "", "", 22, "", false, "", "", "", "")) ?: run {
             mutable.update { it.copy(problem = "SERVER_FIELDS", userProblem = "SERVER_FIELDS") }
             return
         }
-        val matching = previous?.takeIf {
-            it.host.equals(host, true) && it.port == port && it.user == user
-        } ?: state.value.servers.find {
-            it.host.equals(host, true) && it.port == port && it.user == user
+        val matching = previous?.takeIf { it.sameSshAddress(server) && it.user == server.user }
+            ?: state.value.servers.find { it.sameSshAddress(server) && it.user == server.user }
+        val profile = if (matching != null) server.copy(id = matching.id, pin = matching.pin, token = matching.token,
+            installed = matching.installed, https = matching.https, background = matching.background)
+        else server.copy(id = UUID.randomUUID().toString(),
+            token = SecureRandom().generateSeed(32).joinToString("") { "%02x".format(it) }, https = "")
+        candidate = PendingConnection(profile)
+        operation(connectionCheck = true) { retryConnection { probe(profile) } }
+    }
+
+    fun editServer(id: String, draft: ServerDraft) {
+        if (active?.isActive == true && !activeIsQuiet) return
+        val profiles = state.value.servers
+        val previous = profiles.firstOrNull { it.id == id } ?: return
+        val updated = draft.update(previous)
+        val problem = when {
+            updated == null -> "SERVER_FIELDS"
+            !AgentApi.validHttps(updated.https) -> "HTTPS_URL"
+            profiles.any { it.id != id && it.sameSshAddress(updated) && it.user == updated.user } -> "SERVER_FIELDS"
+            else -> null
         }
-        val server = Server(
-            matching?.id ?: UUID.randomUUID().toString(), name.trim().ifBlank { host }, host, port,
-            user, key, credential, passphrase, matching?.pin.orEmpty(),
-            matching?.token ?: SecureRandom().generateSeed(32).joinToString("") { "%02x".format(it) },
-            matching?.installed ?: false, matching?.https.orEmpty(), matching?.background ?: false
-        )
-        candidate = server
-        operation(connectionCheck = true) { retryConnection { probe(server, explicit = true) } }
+        if (problem != null || updated == null) {
+            mutable.update { it.copy(problem = problem.orEmpty(), userProblem = problem.orEmpty()) }
+            return
+        }
+        candidate = PendingConnection(updated, editing = true)
+        operation(connectionCheck = true, editedProfile = updated) { verifyServerEdit(updated) }
+    }
+
+    fun clearServerEditResult() {
+        mutable.update { it.copy(editedServer = "", problem = "") }
+    }
+
+    private suspend fun verifyServerEdit(updated: Server) {
+        val panel = state.value
+        val previous = panel.servers.firstOrNull { it.id == updated.id } ?: return
+        val addressChanged = !previous.sameSshAddress(updated)
+        val httpsChanged = previous.https != updated.https
+        val verifySsh = addressChanged || !previous.sameSshCredentials(updated) || httpsChanged && updated.https.isEmpty()
+        val verifyAgentViaSsh = previous.installed && (addressChanged || httpsChanged && updated.https.isEmpty())
+        if (verifySsh) {
+            retryConnection {
+                shell(updated) { session ->
+                    // An edited address for an installed profile must still serve its original agent.
+                    if (verifyAgentViaSsh) AgentApi(updated.copy(https = ""), session).health()
+                }
+            }
+        }
+        if (httpsChanged && updated.https.isNotEmpty()) {
+            retryConnection { useTransport { AgentApi(updated).health() } }
+        }
+        val profiles = panel.servers.map { if (it.id == updated.id) updated else it }
+        vault.save(profiles)
+        mutable.update {
+            it.copy(servers = profiles, server = if (it.server?.id == updated.id) updated else it.server,
+                editedServer = updated.id)
+        }
+        candidate = null
+        settingsSaved()
     }
 
     fun confirmHost(approved: Boolean) {
         val received = state.value.hostConfirmation ?: return
         mutable.update { it.copy(hostConfirmation = null) }
-        val server = candidate ?: return
-        if (approved) operation(connectionCheck = true) {
-            retryConnection { probe(server.copy(pin = received.fingerprint), explicit = true) }
+        val pending = candidate ?: return
+        if (!approved) {
+            candidate = null
+            return
         }
-        else candidate = null
+        val server = pending.server.copy(pin = received.fingerprint)
+        candidate = pending.copy(server = server)
+        if (pending.editing) operation(connectionCheck = true, editedProfile = server) {
+            verifyServerEdit(server)
+        } else operation(connectionCheck = true) {
+            retryConnection { probe(server) }
+        }
     }
 
-    private suspend fun probe(server: Server, explicit: Boolean = false) {
+    private suspend fun probe(server: Server) {
         connectionStage(ConnectionPhase.Connecting)
         val (report, agentError) = useTransport(server) {
             Ssh.withSession(server) { session ->
@@ -443,8 +501,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         }
         if (changedSelection) observe(profile.id)
         mutable.update {
-            it.copy(probe = report, ready = profile.installed,
-                sshVerification = if (explicit) UUID.randomUUID().toString() else it.sshVerification)
+            it.copy(probe = report, ready = profile.installed)
         }
         candidate = null
         if (agentError != null) throw agentError
@@ -481,7 +538,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                 }
             }
             if (!token.matches(Regex("[a-f0-9]{64}"))) throw Problem("AUTH_REQUIRED")
-            probe(server.copy(token = token), explicit = true)
+            probe(server.copy(token = token))
         }
     }
 

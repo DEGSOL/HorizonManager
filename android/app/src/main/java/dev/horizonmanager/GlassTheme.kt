@@ -14,7 +14,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Button as MaterialButton
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilterChip as MaterialFilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.SelectableChipColors
+import androidx.compose.material3.Switch as MaterialSwitch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -49,8 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 internal val LocalHorizonPalette = staticCompositionLocalOf { HorizonPalette }
-private val LocalSettingsGlass = staticCompositionLocalOf { false }
-private val LocalSettingsTile = staticCompositionLocalOf { false }
+internal val LocalSettingsGlass = staticCompositionLocalOf { false }
 internal val LocalLightGlass = staticCompositionLocalOf { false }
 
 @Composable
@@ -108,7 +113,46 @@ internal fun HorizonTheme(content: @Composable () -> Unit) {
 }
 
 @Composable
+internal fun Button(onClick: () -> Unit, enabled: Boolean = true, content: @Composable RowScope.() -> Unit) {
+    if (LocalSettingsGlass.current) SettingsAction(onClick, enabled, content)
+    else MaterialButton(onClick, enabled = enabled, content = content)
+}
+
+internal fun Modifier.settingsControlGlass(enabled: Boolean = true): Modifier =
+    if (enabled) glassSurface(feedGlassShape, lightNavigation = true, outlined = false)
+    else clip(feedGlassShape).background(Color(0xFFA0A0A0))
+
+@Composable
+private fun SettingsAction(onClick: () -> Unit, enabled: Boolean, content: @Composable RowScope.() -> Unit) {
+    MaterialTextButton(
+        onClick, Modifier.settingsControlGlass(enabled), enabled = enabled, shape = feedGlassShape,
+        colors = ButtonDefaults.textButtonColors(contentColor = ReadingGlass.text, disabledContentColor = ReadingGlass.muted),
+        content = content,
+    )
+}
+
+@Composable
+internal fun FilterChip(
+    selected: Boolean, onClick: () -> Unit, label: @Composable () -> Unit,
+    enabled: Boolean = true, colors: SelectableChipColors = FilterChipDefaults.filterChipColors(),
+) {
+    val settings = LocalSettingsGlass.current
+    if (settings) MaterialFilterChip(
+        selected, onClick, label, enabled = enabled, shape = feedGlassShape, border = null,
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = ReadingGlass.base, labelColor = ReadingGlass.text,
+            selectedContainerColor = ReadingGlass.muted, selectedLabelColor = Color.White,
+            disabledContainerColor = Color(0xFFA0A0A0), disabledLabelColor = ReadingGlass.muted,
+        ),
+    ) else MaterialFilterChip(selected, onClick, label, enabled = enabled, colors = colors)
+}
+
+@Composable
 internal fun TextButton(onClick: () -> Unit, enabled: Boolean = true, content: @Composable RowScope.() -> Unit) {
+    if (LocalSettingsGlass.current) {
+        SettingsAction(onClick, enabled, content)
+        return
+    }
     val palette = LocalHorizonPalette.current
     MaterialTextButton(onClick, enabled = enabled,
         colors = ButtonDefaults.textButtonColors(contentColor = palette.text, disabledContentColor = palette.muted.copy(alpha = 0.70f)),
@@ -117,6 +161,10 @@ internal fun TextButton(onClick: () -> Unit, enabled: Boolean = true, content: @
 
 @Composable
 internal fun OutlinedButton(onClick: () -> Unit, enabled: Boolean = true, content: @Composable RowScope.() -> Unit) {
+    if (LocalSettingsGlass.current) {
+        SettingsAction(onClick, enabled, content)
+        return
+    }
     val palette = LocalHorizonPalette.current
     MaterialOutlinedButton(onClick, enabled = enabled,
         colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.text, disabledContentColor = palette.muted.copy(alpha = 0.70f)),
@@ -124,8 +172,22 @@ internal fun OutlinedButton(onClick: () -> Unit, enabled: Boolean = true, conten
 }
 
 @Composable
+internal fun Switch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, enabled: Boolean = true) {
+    val colors = if (LocalSettingsGlass.current) SwitchDefaults.colors(
+        checkedThumbColor = Color.White, checkedTrackColor = ReadingGlass.muted,
+        uncheckedThumbColor = ReadingGlass.muted, uncheckedTrackColor = ReadingGlass.base,
+        uncheckedBorderColor = ReadingGlass.muted,
+    ) else SwitchDefaults.colors()
+    MaterialSwitch(checked, onCheckedChange, enabled = enabled, colors = colors)
+}
+
+@Composable
+internal fun horizonFieldShape() = if (LocalSettingsGlass.current) feedGlassShape else OutlinedTextFieldDefaults.shape
+
+@Composable
 internal fun horizonFieldColors() = LocalHorizonPalette.current.let { palette ->
-    OutlinedTextFieldDefaults.colors(focusedLabelColor = palette.text, focusedBorderColor = palette.link, cursorColor = palette.link)
+    val accent = if (LocalSettingsGlass.current) ReadingGlass.raised else palette.link
+    OutlinedTextFieldDefaults.colors(focusedLabelColor = palette.text, focusedBorderColor = accent, cursorColor = accent)
 }
 
 @Composable
@@ -227,9 +289,8 @@ internal fun Tile(modifier: Modifier = Modifier, accented: Boolean = false,
         Modifier.fillMaxWidth().then(surface)
             .then(modifier).padding(horizontal = 15.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(9.dp),
-    ) {
-        CompositionLocalProvider(LocalSettingsTile provides true) { content() }
-    }
+        content = content,
+    )
 }
 
 @Composable
@@ -243,33 +304,27 @@ internal fun Modifier.settingsItemSurface(highlighted: Boolean = false): Modifie
 internal fun GlassSettingRow(title: String, subtitle: String, enabled: Boolean = true,
                              @StringRes help: Int? = null, open: () -> Unit) {
     val palette = LocalHorizonPalette.current
-    val light = LocalLightGlass.current
+    val settings = LocalSettingsGlass.current
+    val light = settings || LocalLightGlass.current
     val text = if (light) ReadingGlass.text else palette.text
     val muted = if (light) ReadingGlass.muted else palette.muted
-    val settings = LocalSettingsGlass.current
     val rowSurface = when {
-        settings && !LocalSettingsTile.current ->
-            Modifier.glassSurface(if (light) feedGlassShape else MaterialTheme.shapes.large,
-                lightNavigation = light, outlined = false)
-        settings -> Modifier.settingsItemSurface()
+        settings -> Modifier.settingsControlGlass(enabled)
+        light -> Modifier.clip(feedGlassShape).background(Color(0xFFD3D3D3))
         else -> Modifier
     }
-    Column {
-        Row(rowSurface.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Row(Modifier.weight(1f).clickable(enabled = enabled, role = Role.Button, onClick = open)
-                .heightIn(min = 57.dp).padding(horizontal = if (settings) 14.dp else 4.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(title, style = MaterialTheme.typography.titleMedium, color = if (enabled) text else muted)
-                    if (subtitle.isNotBlank()) Text(subtitle, color = muted, style = MaterialTheme.typography.bodySmall)
-                }
-                Text("›", Modifier.padding(start = 10.dp), style = MaterialTheme.typography.titleLarge, color = if (light) muted else palette.link)
+    Row(rowSurface.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.weight(1f).clickable(enabled = enabled, role = Role.Button, onClick = open)
+            .heightIn(min = 57.dp).padding(horizontal = if (light) 14.dp else 4.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, color = if (enabled) text else muted)
+                if (subtitle.isNotBlank()) Text(subtitle, color = muted, style = MaterialTheme.typography.bodySmall)
             }
-            if (help != null) SettingHelp(title, help)
+            Text("›", Modifier.padding(start = 10.dp), style = MaterialTheme.typography.titleLarge,
+                color = if (light) muted else palette.link)
         }
-        if (!settings) androidx.compose.material3.HorizontalDivider(
-            color = text.copy(alpha = .14f), thickness = .5.dp,
-        )
+        if (help != null) SettingHelp(title, help)
     }
 }
 

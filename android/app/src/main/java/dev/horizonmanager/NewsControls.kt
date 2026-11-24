@@ -80,7 +80,8 @@ internal fun orderArticles(articles: List<JSONObject>, order: NewsOrder): List<J
 internal fun GlassIconAction(icon: ImageVector, description: String, enabled: Boolean = true,
                             active: Boolean? = null, onClick: () -> Unit) {
     val palette = LocalHorizonPalette.current
-    val light = LocalLightGlass.current
+    val settings = LocalSettingsGlass.current
+    val light = settings || LocalLightGlass.current
     val text = if (light) ReadingGlass.text else palette.text
     val muted = if (light) ReadingGlass.muted else palette.muted
     val indicator by animateColorAsState(if (active == true) palette.tint.copy(alpha = 0.27f) else Color.Transparent,
@@ -92,7 +93,9 @@ internal fun GlassIconAction(icon: ImageVector, description: String, enabled: Bo
     }, tween(180), label = "icon tint")
     val glyph: @Composable () -> Unit = {
         Icon(icon, description,
-            Modifier.size(36.dp).background(indicator, CircleShape).padding(8.dp),
+            Modifier.size(36.dp).then(
+                if (settings) Modifier.settingsControlGlass(enabled) else Modifier.background(indicator, CircleShape)
+            ).padding(8.dp),
             tint = tint)
     }
     if (active != null) IconToggleButton(active, { onClick() }, Modifier.size(48.dp), enabled, content = glyph)
@@ -168,7 +171,8 @@ internal fun PinnedNewsControls(filters: NewsFilters, articles: List<JSONObject>
             Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
                 .readingNavigationGlass(feedGlassShape)
                 .heightIn(max = maxHeight).verticalScroll(rememberScrollState())
-                .padding(horizontal = 14.dp, vertical = 8.dp)) {
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     scopes.forEach { (mode, title) ->
                         FilterChip(

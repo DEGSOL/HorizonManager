@@ -14,6 +14,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -57,14 +58,16 @@ internal fun IconSettings(selected: LauncherAppearance, change: (LauncherAppeara
     Tile {
         Text(ui(R.string.hovq_icon_detail), color = LocalHorizonPalette.current.muted,
             style = MaterialTheme.typography.bodyMedium)
-        Column(Modifier.selectableGroup()) {
+        Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             LauncherAppearance.entries.forEach { item ->
-                Row(Modifier.fillMaxWidth().selectable(selected == item, role = Role.RadioButton, onClick = { change(item) })
-                    .padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically,
+                Row(Modifier.fillMaxWidth().settingsControlGlass()
+                    .selectable(selected == item, role = Role.RadioButton, onClick = { change(item) })
+                    .padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Image(painterResource(item.preview), null, Modifier.size(44.dp).clip(RoundedCornerShape(11.dp)).background(item.background))
-                    Text(ui(item.title), Modifier.weight(1f))
-                    RadioButton(selected == item, onClick = null)
+                    Text(ui(item.title), Modifier.weight(1f), color = ReadingGlass.text)
+                    RadioButton(selected == item, onClick = null,
+                        colors = RadioButtonDefaults.colors(selectedColor = ReadingGlass.text, unselectedColor = ReadingGlass.muted))
                 }
             }
         }

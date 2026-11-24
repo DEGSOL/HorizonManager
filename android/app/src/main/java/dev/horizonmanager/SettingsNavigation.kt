@@ -28,10 +28,7 @@ internal fun SettingsHome(panel: Panel, open: (String) -> Unit, page: String, se
     fun rowPage(id: String): () -> Unit = { open(id) }
     when (page) {
         "settings" -> {
-            val connected = panel.server != null && panel.ready &&
-                panel.connectionPhase == ConnectionPhase.Connected && panel.connectionProblem.isBlank()
-            Column(Modifier.fillMaxWidth().glassSurface(feedGlassShape)
-                .savedNoticeWash(if (connected) NoticeWash.Connected else NoticeWash.Disconnected)
+            Column(Modifier.fillMaxWidth().connectionStatusGlass(panel)
                 .clickable(role = Role.Button, onClick = rowPage("server_settings"))
                 .padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text(ui(R.string.mr_server), style = MaterialTheme.typography.labelLarge, color = Color.White)
@@ -142,22 +139,29 @@ internal fun ConnectionPhase.label(): Int = when (this) {
 }
 
 @Composable
+private fun Modifier.connectionStatusGlass(panel: Panel): Modifier {
+    val connected = panel.server != null && panel.ready &&
+        panel.connectionPhase == ConnectionPhase.Connected && panel.connectionProblem.isBlank()
+    return glassSurface(feedGlassShape).savedNoticeWash(if (connected) NoticeWash.Connected else NoticeWash.Disconnected)
+}
+
+@Composable
 internal fun ServerConnectionStatus(panel: Panel, model: ManagerModel?) {
-    val theme = LocalHorizonPalette.current
     val problem = panel.connectionProblem
-    val (title, color) = when {
-        panel.server == null -> R.string.editorial_not_configured to theme.muted
+    val title = when {
+        panel.server == null -> R.string.editorial_not_configured
         problem in setOf("SSH_AUTH", "AUTH_REQUIRED", "API_401", "API_403") ->
-            R.string.editorial_auth_error to theme.danger
-        problem.isNotBlank() -> R.string.editorial_unavailable to theme.danger
-        panel.connectionPhase == ConnectionPhase.Connected -> R.string.editorial_connected to theme.success
-        else -> panel.connectionPhase.label() to theme.muted
+            R.string.editorial_auth_error
+        problem.isNotBlank() -> R.string.editorial_unavailable
+        panel.connectionPhase == ConnectionPhase.Connected -> R.string.editorial_connected
+        else -> panel.connectionPhase.label()
     }
-    Tile {
-        Text(panel.server?.name ?: ui(R.string.ui_servers), style = MaterialTheme.typography.titleMedium)
-        Text(ui(title), style = MaterialTheme.typography.labelLarge, color = color)
+    Column(Modifier.fillMaxWidth().connectionStatusGlass(panel).padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Text(panel.server?.name ?: ui(R.string.ui_servers), style = MaterialTheme.typography.titleMedium, color = Color.White)
+        Text(ui(title), style = MaterialTheme.typography.labelLarge, color = Color.White)
         if (panel.lastContact.isNotBlank()) Text(ui(R.string.editorial_last_contact, localTime(panel.lastContact)),
-            style = MaterialTheme.typography.bodySmall, color = theme.muted)
+            style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = .87f))
         if (model != null && problem.isNotBlank()) {
             Text(errorText(problem), style = MaterialTheme.typography.bodyMedium)
             TextButton(onClick = {
@@ -195,7 +199,7 @@ internal fun ConnectionSettings(panel: Panel, model: ManagerModel, dirtyChange: 
             trailingIcon = { SettingHelp(https, R.string.ui_leave_blank_to_use_ssh_https) },
             modifier = Modifier.fillMaxWidth(), singleLine = true, isError = changed && !valid,
             supportingText = if (changed && !valid) ({ Text(errorText("HTTPS_URL")) }) else null,
-            colors = horizonFieldColors())
+            colors = horizonFieldColors(), shape = horizonFieldShape())
         Reveal(changed) {
             Text(ui(R.string.editorial_unsaved), color = LocalHorizonPalette.current.warning)
             Button(onClick = { model.settings(url.trim(), server.background) },

@@ -72,7 +72,7 @@ private data class DotMotion(val phase: Float, val turns: Int, val amplitude: Fl
 
 @Composable
 internal fun DottedProgress(modifier: Modifier = Modifier, dots: Int = 13) {
-    val color = LocalHorizonPalette.current.text
+    val color = if (LocalLightGlass.current) ReadingGlass.text else LocalHorizonPalette.current.text
     val wobble = remember(dots) {
         val random = Random(dots)
         List(dots) { DotMotion(random.nextFloat(), random.nextInt(6, 16), .08f + random.nextFloat() * .20f) }

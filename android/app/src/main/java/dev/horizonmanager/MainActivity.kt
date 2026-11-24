@@ -31,6 +31,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -128,9 +129,14 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var tab by rememberSaveable(currentServer?.id) { mutableIntStateOf(FEED) }
-    var manageServers by remember { mutableStateOf(false) }
-    var editServer by remember { mutableStateOf(false) }
-    var editVerification by remember { mutableStateOf("") }
+    var manageServers by rememberSaveable { mutableStateOf(false) }
+    var editingServerId by rememberSaveable { mutableStateOf("") }
+    LaunchedEffect(panel.editedServer) {
+        if (panel.editedServer.isNotEmpty()) {
+            if (editingServerId == panel.editedServer) editingServerId = ""
+            model.clearServerEditResult()
+        }
+    }
     var route by rememberSaveable(currentServer?.id) { mutableStateOf("") }
     val configPage = route.substringAfterLast('/')
     var previousTab by rememberSaveable { mutableIntStateOf(FEED) }
@@ -189,12 +195,6 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
             if (!filters.explicitOrder) filters.order = defaultOrder
         }
     }
-    LaunchedEffect(editServer, panel.sshVerification) {
-        if (editServer && panel.sshVerification.isNotEmpty() && panel.sshVerification != editVerification) {
-            editServer = false
-            if (!panel.ready) tab = FEED
-        }
-    }
     LaunchedEffect(configPage, openedIssue?.optString("id"), currentServer?.id) {
         if (configPage == "archive" && openedIssue != null) {
             snapshotFlow { panel.busy }.first { !it }
@@ -213,7 +213,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
             archiveIssue = ""
             route = ""
             manageServers = false
-            editServer = false
+            editingServerId = ""
             model.openNotification(notificationServer)
             consumed()
         }
@@ -315,7 +315,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     }
     val running = panel.jobs.firstOrNull()?.optString("state") in setOf("running", "queued")
     val checkingInstall = panel.probe["install"] == "running" || panel.updatingAgent
-    val watchingFeed = panel.ready && tab == FEED && !manageServers && !editServer
+    val watchingFeed = panel.ready && tab == FEED && !manageServers
     val preparing = digestIsPreparing(panel.jobs)
     LaunchedEffect(model, lifecycle) {
         lifecycle.repeatAt(androidx.lifecycle.Lifecycle.State.RESUMED) {
@@ -340,11 +340,10 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         }
     }
     var dirtyPage by remember(configPage, currentServer?.id) { mutableStateOf(false) }
-    val showingSetupSettings = !panel.ready && tab == SETTINGS && !editServer
+    val showingSetupSettings = !panel.ready && tab == SETTINGS
     fun navigateBack() {
         when {
             manageServers -> manageServers = false
-            editServer -> editServer = false
             tab == SETTINGS && configPage == "archive" && archiveIssue.isNotEmpty() -> {
                 archiveIssue = ""
                 model.leaveArchive()
@@ -360,7 +359,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         editorBack.value?.let { it(); return }
         if (dirtyPage) confirm = ui(R.string.editorial_discard_prompt) to ::navigateBack else navigateBack()
     }
-    val canGoBack = manageServers || editServer || configPage.isNotEmpty() || showingSetupSettings
+    val canGoBack = manageServers || configPage.isNotEmpty() || showingSetupSettings
     var backProgress by remember { mutableFloatStateOf(0f) }
     PredictiveBackHandler(enabled = canGoBack || tab != FEED) { events ->
         try {
@@ -370,38 +369,40 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     }
 
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
-    confirm?.let { (description, action) ->
-        HorizonAlertDialog(onDismissRequest = { confirm = null }, title = { Text(ui(R.string.ui_confirm_action)) },
-            text = { Text(description) }, confirmButton = {
-                Button(onClick = {
-                    confirm = null
-                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                    action()
-                }) { Text(ui(R.string.ui_confirm)) }
-            }, dismissButton = { TextButton(onClick = { confirm = null }) { Text(ui(R.string.ui_cancel)) } })
-    }
-    if (backupDialog.isNotEmpty()) {
-        val device = backupDialog.startsWith("device")
-        val restoring = backupDialog.endsWith("import")
-        PasswordDialog(
-            ui(if (restoring) R.string.hovq_import else R.string.hovq_export),
-            ui(when {
-                restoring && device -> R.string.hovq_device_restore_password
-                restoring -> R.string.hovq_vps_restore_password
-                else -> R.string.ui_enter_a_password_of_at_least
-            }),
-            minimum = if (restoring) 1 else 12,
-            maximum = 256,
-            close = { backupDialog = ""; restoreFile = "" },
-        ) { password ->
-            backupDialog = ""
-            val file = restoreFile
-            restoreFile = ""
-            when {
-                restoring && device -> model.restoreDevice(file, password)
-                restoring -> model.restore(file, password)
-                device -> model.exportDevice(password)
-                else -> model.export(password)
+    CompositionLocalProvider(LocalSettingsGlass provides (tab == SETTINGS)) {
+        confirm?.let { (description, action) ->
+            HorizonAlertDialog(onDismissRequest = { confirm = null }, title = { Text(ui(R.string.ui_confirm_action)) },
+                text = { Text(description) }, confirmButton = {
+                    Button(onClick = {
+                        confirm = null
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                        action()
+                    }) { Text(ui(R.string.ui_confirm)) }
+                }, dismissButton = { TextButton(onClick = { confirm = null }) { Text(ui(R.string.ui_cancel)) } })
+        }
+        if (backupDialog.isNotEmpty()) {
+            val device = backupDialog.startsWith("device")
+            val restoring = backupDialog.endsWith("import")
+            PasswordDialog(
+                ui(if (restoring) R.string.hovq_import else R.string.hovq_export),
+                ui(when {
+                    restoring && device -> R.string.hovq_device_restore_password
+                    restoring -> R.string.hovq_vps_restore_password
+                    else -> R.string.ui_enter_a_password_of_at_least
+                }),
+                minimum = if (restoring) 1 else 12,
+                maximum = 256,
+                close = { backupDialog = ""; restoreFile = "" },
+            ) { password ->
+                backupDialog = ""
+                val file = restoreFile
+                restoreFile = ""
+                when {
+                    restoring && device -> model.restoreDevice(file, password)
+                    restoring -> model.restore(file, password)
+                    device -> model.exportDevice(password)
+                    else -> model.export(password)
+                }
             }
         }
     }
@@ -473,7 +474,6 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     }
     val destination = when {
         manageServers -> Screen("servers")
-        editServer -> Screen("ssh")
         configPage == "archive" && openedIssue != null -> Screen("archived", archiveIssue)
         configPage.isNotEmpty() -> Screen(configPage, route)
         showingSetupSettings -> Screen("settings")
@@ -510,7 +510,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                 (screen.page == "settings" && showingSetupSettings)
             val heading = when (screen.page) {
                 "servers" -> ui(R.string.ui_servers)
-                "setup", "ssh" -> ui(R.string.app_name)
+                "setup" -> ui(R.string.app_name)
                 "settings" -> ui(R.string.settings)
                 "journal" -> ui(R.string.journal)
                 "news_settings" -> ui(R.string.mr_news)
@@ -580,6 +580,11 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                                                         manageServers = false
                                                     }
                                                 }
+                                                GlassIconAction(Icons.Default.Edit, "${ui(R.string.editorial_edit)} ${server.name}",
+                                                    enabled = !panel.busy) {
+                                                    model.clearServerEditResult()
+                                                    editingServerId = server.id
+                                                }
                                                 GlassIconAction(Icons.Default.Delete, ui(R.string.server_remove_named, server.name),
                                                     enabled = !panel.busy) {
                                                     confirm = ui(R.string.server_remove_message, server.name) to { model.removeServer(server.id) }
@@ -598,12 +603,12 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                                             }.onFailure { scope.launch { notices.showSnackbar(ui(R.string.hovq_icon_error)) } }
                                         }
                                     }
-                                    "setup", "ssh" -> Setup(panel, model, forceEdit = screen.page == "ssh")
+                                    "setup" -> Setup(panel, model)
                                     "sources" -> Sources(panel, model) { if (configPage == screen.page) dirtyPage = it }
                                     "control" -> Control(panel, model, { description, action -> confirm = description to action }, ::openSettings)
                                     "connection" -> ConnectionSettings(panel, model, { if (configPage == screen.page) dirtyPage = it }) {
-                                        editVerification = panel.sshVerification
-                                        editServer = true
+                                        model.clearServerEditResult()
+                                        editingServerId = currentServer?.id.orEmpty()
                                     }
                                     "alerts" -> NotificationSettings(panel, model, ::requestNotifications,
                                         { openSettings("delivery") })
@@ -630,6 +635,11 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                                     }
                                 }
                                 Spacer(Modifier.height(if (showTabs) LocalNavigationClearance.current else 10.dp))
+                                if (screen == currentDestination && screen.page in setOf("servers", "connection")) {
+                                    panel.servers.find { it.id == editingServerId }?.let { server ->
+                                        SavedServerEditor(server, panel, model) { editingServerId = "" }
+                                    }
+                                }
                             }
                         }
                     }
@@ -657,50 +667,20 @@ internal fun PasswordDialog(title: String, detail: String, minimum: Int = 0, max
 }
 
 @Composable
-internal fun PasswordField(title: String, value: String, change: (String) -> Unit) {
-    OutlinedTextField(value, change, label = { Text(title) }, modifier = Modifier.fillMaxWidth(),
-        singleLine = true, colors = horizonFieldColors(), visualTransformation = PasswordVisualTransformation())
+internal fun PasswordField(title: String, value: String, enabled: Boolean = true, change: (String) -> Unit) {
+    OutlinedTextField(value, change, label = { Text(title) }, modifier = Modifier.fillMaxWidth(), enabled = enabled,
+        singleLine = true, colors = horizonFieldColors(), shape = horizonFieldShape(), visualTransformation = PasswordVisualTransformation())
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Setup(panel: Panel, model: ManagerModel, forceEdit: Boolean) {
-    val ctx = LocalContext.current
-    val scope = rememberCoroutineScope()
+private fun Setup(panel: Panel, model: ManagerModel) {
     val server = panel.server
     val probe = panel.probe
-    var name by remember { mutableStateOf(server?.name.orEmpty()) }
-    var host by remember { mutableStateOf(server?.host.orEmpty()) }
-    var port by remember { mutableStateOf(server?.port?.toString() ?: "22") }
-    var user by remember { mutableStateOf(server?.user ?: "root") }
-    var keyMode by remember { mutableStateOf(server?.keyMode ?: false) }
-    var credential by remember { mutableStateOf(server?.credential.orEmpty()) }
-    var passphrase by remember { mutableStateOf(server?.passphrase.orEmpty()) }
+    var draft by remember(server?.id) { mutableStateOf(server?.let(::ServerDraft) ?: ServerDraft()) }
     var approveInstall by remember { mutableStateOf(false) }
     var approveAttach by remember { mutableStateOf(false) }
-    var keyError by remember { mutableStateOf(false) }
-    val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) scope.launch {
-            credential = withContext(Dispatchers.IO) {
-                runCatching { ctx.contentResolver.openInputStream(uri)?.use { it.readBounded(65536).decodeToString() }.orEmpty() }
-                    .getOrDefault("")
-            }
-            keyError = credential.isEmpty()
-        }
-    }
-    panel.hostConfirmation?.let { key ->
-        HorizonAlertDialog(onDismissRequest = { model.confirmHost(false) },
-            title = { Text(if (key.previous.isBlank()) ui(R.string.ui_verify_the_vps_key) else ui(R.string.ui_the_vps_key_has_changed)) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(ui(R.string.ui_compare_the_fingerprint_with_the_one))
-                    if (key.previous.isNotBlank()) Text(ui(R.string.ui_previous, key.previous))
-                    Text(ui(R.string.ui_received, key.fingerprint), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            },
-            confirmButton = { Button(onClick = { model.confirmHost(true) }) { Text(ui(R.string.ui_fingerprint_matches)) } },
-            dismissButton = { TextButton(onClick = { model.confirmHost(false) }) { Text(ui(R.string.ui_cancel)) } })
-    }
+    ServerHostPrompt(panel.hostConfirmation, model::confirmHost)
     if (approveAttach) {
         PasswordDialog(ui(R.string.ui_connect_an_existing_agent),
             ui(R.string.ui_manager_will_retrieve_the_agent_key),
@@ -719,34 +699,17 @@ private fun Setup(panel: Panel, model: ManagerModel, forceEdit: Boolean) {
                 }, dismissButton = { TextButton(onClick = { approveInstall = false }) { Text(ui(R.string.ui_cancel)) } })
         }
     }
-    if (server == null || forceEdit || probe.isEmpty()) {
+    if (server == null || probe.isEmpty()) {
         Tile {
             Text(ui(R.string.ui_connect_to_your_vps), style = MaterialTheme.typography.titleLarge)
-            ValueField(ui(R.string.ui_server_name), name, { name = it })
-            ValueField(ui(R.string.ui_ip_address_or_domain), host, { host = it })
-            Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                Box(Modifier.weight(1f)) { ValueField(ui(R.string.ui_ssh_port), port, { port = it }, numeric = true) }
-                Box(Modifier.weight(2f)) { ValueField(ui(R.string.ui_ssh_user), user, { user = it }) }
-            }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(!keyMode, { keyMode = false; credential = ""; keyError = false }, { Text(ui(R.string.ui_password)) })
-                FilterChip(keyMode, { keyMode = true; credential = ""; keyError = false }, { Text(ui(R.string.ui_ssh_key)) })
-            }
-            Reveal(keyMode) {
-                OutlinedButton(onClick = { pick.launch(arrayOf("*/*")) }) {
-                    Text(if (credential.isNotEmpty()) ui(R.string.ui_replace_selected_key) else ui(R.string.ui_select_private_key))
-                }
-                if (keyError) Text(ui(R.string.ui_could_not_read_the_key_file), color = MaterialTheme.colorScheme.error)
-                PasswordField(ui(R.string.ui_key_passphrase_if_set), passphrase) { passphrase = it }
-            }
-            Reveal(!keyMode) { PasswordField(ui(R.string.ui_ssh_password), credential) { credential = it } }
+            ServerCredentialFields(draft, enabled = !panel.busy) { draft = it }
             val setupProblem = panel.problem.takeIf { it == "SERVER_FIELDS" || isConnectionFailure(it) }
             val phase = panel.connectionPhase
             if (phase != ConnectionPhase.Idle) Text(ui(phase.label()))
             if (setupProblem != null) Text(errorText(setupProblem), color = MaterialTheme.colorScheme.error)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { model.connect(name, host, port, user, keyMode, credential, passphrase, server) },
-                    enabled = !panel.busy && credential.isNotBlank()) {
+                Button(onClick = { model.connect(draft, server) },
+                    enabled = !panel.busy && draft.credential.isNotBlank()) {
                     Text(ui(if (setupProblem != null) R.string.ui_retry else R.string.ui_connect))
                 }
                 if (panel.connectionCancellable) TextButton(onClick = model::cancelConnection) {

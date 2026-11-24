@@ -10,7 +10,6 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -159,9 +158,9 @@ internal fun Choice(
 
 @Composable
 internal fun ValueField(title: String, text: String, set: (String) -> Unit, numeric: Boolean = false,
-                        multiline: Boolean = false, help: Int? = null) {
+                        multiline: Boolean = false, help: Int? = null, enabled: Boolean = true) {
     OutlinedTextField(value = text, onValueChange = set, label = { Text(title) },
-        modifier = Modifier.fillMaxWidth(), singleLine = !multiline, colors = horizonFieldColors(),
+        modifier = Modifier.fillMaxWidth(), singleLine = !multiline, colors = horizonFieldColors(), shape = horizonFieldShape(), enabled = enabled,
         trailingIcon = if (help != null) ({ SettingHelp(title, help) }) else null,
         minLines = if (multiline) 3 else 1, maxLines = if (multiline) 10 else 1,
         keyboardOptions = KeyboardOptions(keyboardType = if (numeric) KeyboardType.Decimal else KeyboardType.Text))
