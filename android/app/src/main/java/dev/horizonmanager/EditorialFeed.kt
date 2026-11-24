@@ -37,7 +37,6 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.*
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -456,8 +455,7 @@ private fun FloatingFeedHeader(issue: JSONObject?, filters: NewsFilters, loaded:
             Modifier.weight(1f).clickable(interactionSource = null, indication = ripple(color = ReadingGlass.text),
                 role = Role.Button, onClick = toggleBubble)
                 .heightIn(min = 48.dp).wrapContentHeight(Alignment.CenterVertically).padding(vertical = 5.dp),
-            style = if (LocalConfiguration.current.screenWidthDp < 350) MaterialTheme.typography.headlineMedium
-                else MaterialTheme.typography.displaySmall,
+            style = readingBarTitleStyle(),
             maxLines = 1, overflow = TextOverflow.Ellipsis, color = ReadingGlass.text,
         )
         if (!bubble && !full) NewsToolbar(filters, loaded)

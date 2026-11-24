@@ -3,7 +3,6 @@ package dev.horizonmanager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -25,8 +24,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.vectorResource
@@ -54,6 +51,7 @@ internal fun ArticleDialog(
     val context = LocalContext.current
     val theme = LocalHorizonPalette.current
     val bodyColor = Color(0xFF202020)
+    val sourceLink = originalPublicationUrl(article)
     val link = article.optString("url")
     val body = article.optString("body").ifBlank { article.optString("summary") }
     var actions by remember { mutableStateOf(false) }
@@ -87,12 +85,12 @@ internal fun ArticleDialog(
                             onClick = close,
                         )
                         Spacer(Modifier.weight(1f))
-                        if (isWeb(link))
+                        if (sourceLink != null)
                             CoverIconAction(
                                 ImageVector.vectorResource(R.drawable.ic_external_link),
                                 ui(R.string.ui_original_source),
                             ) {
-                                runCatching { uri.openUri(link) }
+                                runCatching { uri.openUri(sourceLink) }
                             }
                         val saved = flag?.saved == true
                         CoverIconAction(
@@ -165,11 +163,9 @@ internal fun ArticleDialog(
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.weight(1f)) {
-                                AdaptiveCoverInk { modifier, ink ->
-                                    PublicationSource(article, modifier, detailed = true, ink = ink)
-                                }
+                                PublicationSource(article, detailed = true)
                             }
-                            PublicationScore(article, overPhoto = cover != null)
+                            PublicationScore(article, detailed = true)
                         }
                     }
                 }
@@ -201,27 +197,6 @@ internal fun ArticleDialog(
 }
 
 @Composable
-private fun CoverViewer(cover: Cover, description: String, close: () -> Unit) {
-    val placement = remember { CoverPlacement() }
-    val surface = remember(cover) { CoverActionSurface(placement, cover, fit = true) }
-    Dialog(onDismissRequest = close, properties = DialogProperties(
-        usePlatformDefaultWidth = false, decorFitsSystemWindows = false,
-    )) {
-        DialogMotion()
-        Box(Modifier.fillMaxSize().background(Color.Black).onPlaced { placement.coordinates = it }) {
-            Image(cover.image, description, Modifier.matchParentSize(), contentScale = ContentScale.Fit)
-            Box(Modifier.align(Alignment.TopStart)
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
-                .padding(12.dp)) {
-                CompositionLocalProvider(LocalCoverActionSurface provides surface) {
-                    CoverIconAction(Icons.AutoMirrored.Filled.ArrowBack, ui(R.string.ui_back), onClick = close)
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun ArticleModal(
     title: String, close: () -> Unit, captureMenu: Boolean, content: @Composable BoxScope.() -> Unit,
 ) {
@@ -233,7 +208,7 @@ private fun ArticleModal(
         SideEffect { window?.setDimAmount(0f) }
         val dismissLabel = ui(R.string.ui_close)
         DialogNoticeSurface(Modifier.semantics { paneTitle = title }, captureMenu) {
-            Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = .34f)).clickable(
+            Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = .45f)).clickable(
                 interactionSource = remember { MutableInteractionSource() }, indication = null,
                 onClickLabel = dismissLabel, onClick = close,
             ))

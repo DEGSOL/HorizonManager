@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
@@ -50,6 +51,12 @@ import androidx.compose.ui.unit.sp
 internal val LocalHorizonPalette = staticCompositionLocalOf { HorizonPalette }
 private val LocalSettingsGlass = staticCompositionLocalOf { false }
 private val LocalSettingsTile = staticCompositionLocalOf { false }
+internal val LocalLightGlass = staticCompositionLocalOf { false }
+
+@Composable
+internal fun readingBarTitleStyle() =
+    if (LocalConfiguration.current.screenWidthDp < 350) MaterialTheme.typography.headlineMedium
+    else MaterialTheme.typography.displaySmall
 
 private fun HorizonPalette.colors() = darkColorScheme(
     primary = tint, onPrimary = Color(0xFF19130E),
@@ -174,7 +181,8 @@ internal fun SettingsPage(
     val scene = remember(layer) { GlassScene(layer) }
     val density = LocalDensity.current
     val statusInset = WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding()
-    var toolbarHeight by remember { mutableStateOf(54.dp) }
+    val barHeight = readingBarHeight()
+    var toolbarHeight by remember { mutableStateOf(barHeight) }
     Box(Modifier.fillMaxSize()) {
         Box(Modifier.matchParentSize().recordScene(scene)) {
             CompositionLocalProvider(LocalSettingsGlass provides true) {
@@ -184,18 +192,20 @@ internal fun SettingsPage(
         CompositionLocalProvider(LocalGlassScene provides scene) {
             Row(Modifier.align(Alignment.TopCenter).fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
-                .padding(horizontal = 16.dp, vertical = 6.dp)
+                .padding(start = 12.dp, end = 12.dp, top = 5.dp, bottom = 4.dp)
                 .onSizeChanged { toolbarHeight = with(density) { it.height.toDp() } }
-                .navigationGlass(feedGlassShape)
+                .readingNavigationGlass(feedGlassShape)
                 .pointerInput(Unit) { detectTapGestures {} }
-                .heightIn(min = 54.dp).padding(start = if (back == null) 18.dp else 4.dp, end = 10.dp),
+                .heightIn(min = barHeight).padding(start = if (back == null) 16.dp else 4.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically) {
-                if (back != null) {
-                    GlassIconAction(Icons.AutoMirrored.Filled.ArrowBack,
-                        ui(R.string.ui_back), onClick = back)
+                CompositionLocalProvider(LocalLightGlass provides true) {
+                    if (back != null) {
+                        GlassIconAction(Icons.AutoMirrored.Filled.ArrowBack, ui(R.string.ui_back), onClick = back)
+                    }
+                    Text(heading, Modifier.weight(1f).padding(vertical = 5.dp), style = readingBarTitleStyle(),
+                        color = ReadingGlass.text)
+                    action?.invoke()
                 }
-                Text(heading, Modifier.weight(1f).padding(vertical = 10.dp), style = MaterialTheme.typography.titleLarge)
-                action?.invoke()
             }
         }
     }
@@ -204,11 +214,15 @@ internal fun SettingsPage(
 @Composable
 internal fun Tile(modifier: Modifier = Modifier, accented: Boolean = false,
                   content: @Composable ColumnScope.() -> Unit) {
-    val shape = MaterialTheme.shapes.large
+    val light = LocalLightGlass.current
+    val shape = if (light) feedGlassShape else MaterialTheme.shapes.large
     val palette = LocalHorizonPalette.current
     val face = if (accented) palette.elevated else palette.card
-    val surface = if (LocalSettingsGlass.current) Modifier.glassSurface(shape, raised = accented)
-        else Modifier.clip(shape).background(face)
+    val surface = when {
+        light -> Modifier.glassSurface(shape, lightNavigation = true)
+        LocalSettingsGlass.current -> Modifier.glassSurface(shape, raised = accented)
+        else -> Modifier.clip(shape).background(face)
+    }
     Column(
         Modifier.fillMaxWidth().then(surface)
             .then(modifier).padding(horizontal = 15.dp, vertical = 12.dp),
@@ -222,6 +236,9 @@ internal fun Tile(modifier: Modifier = Modifier, accented: Boolean = false,
 internal fun GlassSettingRow(title: String, subtitle: String, enabled: Boolean = true,
                              @StringRes help: Int? = null, open: () -> Unit) {
     val palette = LocalHorizonPalette.current
+    val light = LocalLightGlass.current
+    val text = if (light) ReadingGlass.text else palette.text
+    val muted = if (light) ReadingGlass.muted else palette.muted
     val standalone = LocalSettingsGlass.current && !LocalSettingsTile.current
     Column(if (standalone) Modifier.glassSurface(MaterialTheme.shapes.large).padding(horizontal = 10.dp) else Modifier) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -229,15 +246,15 @@ internal fun GlassSettingRow(title: String, subtitle: String, enabled: Boolean =
                 .heightIn(min = 57.dp).padding(horizontal = 4.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(title, style = MaterialTheme.typography.titleMedium, color = if (enabled) palette.text else palette.muted)
-                    if (subtitle.isNotBlank()) Text(subtitle, color = palette.muted, style = MaterialTheme.typography.bodySmall)
+                    Text(title, style = MaterialTheme.typography.titleMedium, color = if (enabled) text else muted)
+                    if (subtitle.isNotBlank()) Text(subtitle, color = muted, style = MaterialTheme.typography.bodySmall)
                 }
-                Text("›", Modifier.padding(start = 10.dp), style = MaterialTheme.typography.titleLarge, color = palette.link)
+                Text("›", Modifier.padding(start = 10.dp), style = MaterialTheme.typography.titleLarge, color = if (light) muted else palette.link)
             }
             if (help != null) SettingHelp(title, help)
         }
         if (!standalone) androidx.compose.material3.HorizontalDivider(
-            color = palette.text.copy(alpha = .10f), thickness = .5.dp,
+            color = text.copy(alpha = .14f), thickness = .5.dp,
         )
     }
 }

@@ -1,6 +1,7 @@
 package dev.horizonmanager
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -103,25 +104,27 @@ internal fun ArticleContext(
                     liveRegion = LiveRegionMode.Polite
                 }, color = theme.muted, style = MaterialTheme.typography.bodySmall)
         }
-        TextButton(enabled = !active && !checking, onClick = {
-            if (state == "ready") {
-                show = !show
-            } else {
-                show = true
-                loading = true
-                scope.launch {
-                    try {
-                        result = load(true)
-                    } finally {
-                        loading = false
+        Box(Modifier.navigationGlass(noticeGlassShape).savedNoticeWash()) {
+            TextButton(enabled = !active && !checking, onClick = {
+                if (state == "ready") {
+                    show = !show
+                } else {
+                    show = true
+                    loading = true
+                    scope.launch {
+                        try {
+                            result = load(true)
+                        } finally {
+                            loading = false
+                        }
                     }
                 }
+            }) {
+                Icon(ImageVector.vectorResource(R.drawable.ic_ai_sparkles), null, Modifier.size(19.dp),
+                    tint = publicationScoreAccent)
+                Spacer(Modifier.width(7.dp))
+                Text(ui(R.string.article_more), color = publicationScoreAccent)
             }
-        }) {
-            Icon(ImageVector.vectorResource(R.drawable.ic_ai_sparkles), null, Modifier.size(19.dp),
-                tint = publicationScoreAccent)
-            Spacer(Modifier.width(7.dp))
-            Text(ui(R.string.article_more), color = publicationScoreAccent)
         }
     }
     if (state == "failed" && !loading) {

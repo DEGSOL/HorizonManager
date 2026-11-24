@@ -20,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import org.json.JSONArray
@@ -147,7 +148,9 @@ internal fun Choice(
         }
         GlassDropdownMenu(expanded = expanded && enabled, onDismissRequest = { expanded = false }) {
             entries.forEach { value ->
-                DropdownMenuItem(text = { Text(labelOf(value)) }, enabled = entryEnabled(value),
+                DropdownMenuItem(text = {
+                    Text(labelOf(value), color = if (LocalLightGlass.current) ReadingGlass.text else Color.Unspecified)
+                }, enabled = entryEnabled(value),
                     onClick = { expanded = false; change(value) })
             }
         }

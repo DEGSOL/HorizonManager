@@ -75,38 +75,37 @@ internal fun BoxScope.GlassNoticeHost(bottomClearance: Dp = defaultNavigationCle
 
 @Composable
 private fun NoticeLabel(message: String, modifier: Modifier = Modifier, wash: Modifier = Modifier) {
-    Text(message, modifier.navigationGlass(RoundedCornerShape(22.dp))
+    Text(message, modifier.navigationGlass(noticeGlassShape)
         .then(wash).padding(horizontal = 20.dp, vertical = 12.dp),
         color = Color.White, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelLarge)
 }
 
+internal val noticeGlassShape = RoundedCornerShape(22.dp)
+
 @Composable
-internal fun Modifier.savedNoticeWash(): Modifier {
+internal fun Modifier.savedNoticeWash(disconnected: Boolean = false): Modifier {
     val phase = rememberInfiniteTransition(label = "Saved notice background").animateFloat(
         0f, 1f, infiniteRepeatable(tween(1800, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "Color movement",
     )
     return drawWithCache {
         val radius = maxOf(size.width * .65f, size.height * 1.5f)
-        val violet = Brush.radialGradient(
-            listOf(Color(0xFF8B65EF).copy(alpha = .44f), Color.Transparent), Offset.Zero, radius,
-        )
-        val teal = Brush.radialGradient(
-            listOf(Color(0xFF32B4C7).copy(alpha = .41f), Color.Transparent), Offset.Zero, radius,
-        )
-        val amber = Brush.radialGradient(
-            listOf(Color(0xFFE2985A).copy(alpha = .30f), Color.Transparent), Offset.Zero, radius,
-        )
+        val first = if (disconnected) Color(0xFFCD3A52) else Color(0xFF8B65EF)
+        val second = if (disconnected) Color(0xFF9B243E) else Color(0xFF32B4C7)
+        val third = if (disconnected) Color(0xFFE36767) else Color(0xFFE2985A)
+        val near = Brush.radialGradient(listOf(first.copy(alpha = .44f), Color.Transparent), Offset.Zero, radius)
+        val far = Brush.radialGradient(listOf(second.copy(alpha = .41f), Color.Transparent), Offset.Zero, radius)
+        val edge = Brush.radialGradient(listOf(third.copy(alpha = .30f), Color.Transparent), Offset.Zero, radius)
         onDrawWithContent {
             val position = phase.value
             translate(size.width * (.10f + position * .55f), size.height * .17f) {
-                drawCircle(violet, radius, Offset.Zero)
+                drawCircle(near, radius, Offset.Zero)
             }
             translate(size.width * (.86f - position * .36f), size.height * .94f) {
-                drawCircle(teal, radius, Offset.Zero)
+                drawCircle(far, radius, Offset.Zero)
             }
             translate(size.width * (1f - position * .80f), size.height * 1.24f) {
-                drawCircle(amber, radius, Offset.Zero)
+                drawCircle(edge, radius, Offset.Zero)
             }
             drawContent()
         }

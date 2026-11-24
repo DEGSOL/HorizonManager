@@ -40,7 +40,8 @@ class DigestNotificationTest {
         assertTrue(agentUpdateAvailable("0.1.10"))
         assertTrue(agentUpdateAvailable("0.1.11"))
         assertTrue(agentUpdateAvailable("0.1.12"))
-        assertFalse(agentUpdateAvailable("0.1.13"))
+        assertTrue(agentUpdateAvailable("0.1.13"))
+        assertFalse(agentUpdateAvailable("0.1.14"))
     }
 }
 

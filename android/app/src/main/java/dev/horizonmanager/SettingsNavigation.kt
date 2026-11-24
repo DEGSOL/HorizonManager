@@ -3,6 +3,8 @@ package dev.horizonmanager
 import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -15,7 +17,7 @@ import org.unifiedpush.android.connector.UnifiedPush
 private fun SettingsSection(@StringRes title: Int, content: @Composable ColumnScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(ui(title), Modifier.padding(start = 4.dp), style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
+            color = if (LocalLightGlass.current) LocalHorizonPalette.current.text else MaterialTheme.colorScheme.onSurfaceVariant)
         Tile(content = content)
     }
 }
@@ -26,20 +28,30 @@ internal fun SettingsHome(panel: Panel, open: (String) -> Unit, page: String, se
     fun rowPage(id: String): () -> Unit = { open(id) }
     when (page) {
         "settings" -> {
-            Tile(Modifier.clickable(role=androidx.compose.ui.semantics.Role.Button,onClick=rowPage("server_settings")),accented=true) {
-                Text(ui(R.string.mr_server),style=MaterialTheme.typography.labelLarge,color=LocalHorizonPalette.current.link)
-                Text(panel.server?.name ?: ui(R.string.editorial_not_configured),style=MaterialTheme.typography.headlineSmall)
-                panel.server?.let { Text(it.host,style=MaterialTheme.typography.bodySmall,color=LocalHorizonPalette.current.muted) }
+            val connected = panel.server != null && panel.ready &&
+                panel.connectionPhase == ConnectionPhase.Connected && panel.connectionProblem.isBlank()
+            Column(Modifier.fillMaxWidth().glassSurface(feedGlassShape)
+                .savedNoticeWash(disconnected = !connected)
+                .clickable(role = Role.Button, onClick = rowPage("server_settings"))
+                .padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text(ui(R.string.mr_server), style = MaterialTheme.typography.labelLarge, color = Color.White)
+                Text(panel.server?.name ?: ui(R.string.editorial_not_configured),
+                    style = MaterialTheme.typography.headlineSmall, color = Color.White)
+                panel.server?.let {
+                    Text(it.host, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = .87f))
+                }
             }
-            if (panel.ready) SettingsSection(R.string.setting_group_content) {
-                GlassSettingRow(ui(R.string.archive_digests), ui(R.string.archive_digests_detail), open = rowPage("archive"))
-                GlassSettingRow(ui(R.string.mr_news), ui(R.string.mr_news_detail), open = rowPage("news_settings"))
-                GlassSettingRow(ui(R.string.editorial_ai_processing), ui(R.string.editorial_ai_settings_detail),
-                    enabled = configured, open = rowPage("ai_settings"))
-            }
-            SettingsSection(R.string.setting_group_application) {
-                GlassSettingRow(ui(R.string.mr_interface), ui(R.string.hovq_icon), open = rowPage("interface"))
-                GlassSettingRow(ui(R.string.ui_maintenance), ui(R.string.settings_journal_detail), open = rowPage("maintenance"))
+            CompositionLocalProvider(LocalLightGlass provides true) {
+                if (panel.ready) SettingsSection(R.string.setting_group_content) {
+                    GlassSettingRow(ui(R.string.archive_digests), ui(R.string.archive_digests_detail), open = rowPage("archive"))
+                    GlassSettingRow(ui(R.string.mr_news), ui(R.string.mr_news_detail), open = rowPage("news_settings"))
+                    GlassSettingRow(ui(R.string.editorial_ai_processing), ui(R.string.editorial_ai_settings_detail),
+                        enabled = configured, open = rowPage("ai_settings"))
+                }
+                SettingsSection(R.string.setting_group_application) {
+                    GlassSettingRow(ui(R.string.mr_interface), ui(R.string.hovq_icon), open = rowPage("interface"))
+                    GlassSettingRow(ui(R.string.ui_maintenance), ui(R.string.settings_journal_detail), open = rowPage("maintenance"))
+                }
             }
         }
         "news_settings" -> {

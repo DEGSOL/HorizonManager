@@ -13,10 +13,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -31,11 +32,10 @@ import androidx.compose.ui.unit.dp
 internal data class CoverInk(val color: Color, val shadow: Shadow) {
     companion object {
         fun at(luminance: Float, radius: Float, offset: Float): CoverInk {
-            val fraction = ((luminance - .04f) / .38f).coerceIn(0f, 1f)
-            val blend = fraction * fraction * (3 - 2 * fraction)
+            val dark = luminance >= .179f
             return CoverInk(
-                if (luminance >= .179f) Color.Black else Color.White,
-                Shadow(lerp(Color.White, Color.Black, blend).copy(alpha = .48f), Offset(0f, offset), radius),
+                if (dark) Color.Black else Color.White,
+                Shadow((if (dark) Color.White else Color.Black).copy(alpha = .60f), Offset(0f, offset), radius),
             )
         }
     }
@@ -72,6 +72,7 @@ internal class CoverPlacement {
 
 internal data class CoverActionSurface(
     val placement: CoverPlacement, val cover: Cover?, val photoHeight: Float? = null, val fit: Boolean = false,
+    val viewport: State<PhotoViewport>? = null,
 )
 internal val LocalCoverActionSurface = staticCompositionLocalOf<CoverActionSurface?> { null }
 
@@ -101,12 +102,36 @@ internal fun AdaptiveCoverInk(content: @Composable (Modifier, CoverInk) -> Unit)
 }
 
 @Composable
+internal fun Modifier.coverMetadataGlass(dimming: Float): Modifier {
+    val surface = LocalCoverActionSurface.current
+    var sample by remember { mutableStateOf<CoverSample?>(null) }
+    return clip(CircleShape).onPlaced { sample = surface.sample(it) }.drawWithContent {
+        val spot = sample
+        val photo = surface?.cover
+        if (photo != null && spot != null) {
+            translate(center.x - spot.center.x, center.y - spot.center.y) {
+                drawCoverImage(photo.soft, spot.frame)
+            }
+        }
+        drawRect(Color.Black.copy(alpha = dimming))
+        drawContent()
+    }
+}
+
+@Composable
 internal fun CoverIconAction(icon: ImageVector, description: String, active: Boolean? = null, onClick: () -> Unit) {
     val surface = LocalCoverActionSurface.current
     val diameter = with(LocalDensity.current) { 24.dp.toPx() }
     var sample by remember { mutableStateOf<CoverSample?>(null) }
-    val black = remember(surface, sample, diameter) {
-        sample?.let { surface?.cover?.luminance?.prefersBlack(it.frame, it.center, diameter, surface.fit) } == true
+    val black by remember(surface, diameter) {
+        derivedStateOf {
+            sample?.let { spot ->
+                val transform = surface?.viewport?.value ?: PhotoViewport()
+                val pivot = Offset(spot.frame.width / 2, spot.frame.height / 2)
+                val original = pivot + (spot.center - pivot - transform.offset) / transform.zoom
+                surface?.cover?.luminance?.prefersBlack(spot.frame, original, diameter / transform.zoom, surface.fit)
+            } == true
+        }
     }
     val touch = if (active == null) {
         Modifier.clickable(interactionSource = null, indication = null, role = Role.Button, onClick = onClick)
@@ -121,8 +146,12 @@ internal fun CoverIconAction(icon: ImageVector, description: String, active: Boo
             val photo = surface?.cover
             val spot = sample
             if (surface != null && photo != null && spot != null) {
-                translate(center.x - spot.center.x, center.y - spot.center.y) {
-                    drawCoverImage(photo.soft, spot.frame, fit = surface.fit)
+                val transform = surface.viewport?.value ?: PhotoViewport()
+                val pivot = Offset(spot.frame.width / 2, spot.frame.height / 2)
+                translate(center.x - spot.center.x + transform.offset.x, center.y - spot.center.y + transform.offset.y) {
+                    scale(transform.zoom, transform.zoom, pivot) {
+                        drawCoverImage(photo.soft, spot.frame, fit = surface.fit)
+                    }
                 }
             }
         }

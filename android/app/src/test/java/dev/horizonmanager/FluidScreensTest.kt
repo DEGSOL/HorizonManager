@@ -144,6 +144,7 @@ class FluidScreensTest {
                         else -> headlines[k] + " · " + (n + 1)
                     })
                     .put("url", if (n < 6) page else "")
+                    .put("telegram_url", if (n < 6) "https://t.me/nasa_fixture/123" else "")
                     .put("time", date)
                     .put("score", 8)
                     .put("profile", "Технологии")
@@ -567,6 +568,16 @@ class FluidScreensTest {
         }
         photo.performClick()
         viewerImage.assertIsDisplayed()
+        val initial = snapshot("22-photo-fit")
+        viewerImage.performTouchInput {
+            pinch(center - Offset(width * .08f, 0f), center - Offset(width * .27f, 0f),
+                center + Offset(width * .08f, 0f), center + Offset(width * .27f, 0f))
+        }
+        val enlarged = snapshot("23-photo-zoom")
+        val y = initial.height / 2
+        assertTrue((initial.width / 4 until initial.width * 3 / 4 step 8).any {
+            initial.getPixel(it, y) != enlarged.getPixel(it, y)
+        })
         compose.onAllNodesWithContentDescription(ui(R.string.ui_back)).onLast().performClick()
         viewerImage.assertDoesNotExist()
         title.assertIsDisplayed()
@@ -780,11 +791,11 @@ class FluidScreensTest {
     }
 
     @Test
-    fun browserBackRestoresTheSameOpenArticle() {
+    fun sourceButtonOpensTelegramPostAndBackRestoresTheArticle() {
         loadIssue()
         compose.onNodeWithText(headlines[0]).performClick()
         compose.onNodeWithContentDescription(ui(R.string.ui_original_source)).performClick()
-        compose.onNodeWithText("https://images.nasa.gov/details/iss040e033340").assertExists()
+        compose.onNodeWithText("https://t.me/nasa_fixture/123").assertExists()
         back()
         compose.onNodeWithText(headlines[0]).assertIsDisplayed()
         compose.onNodeWithContentDescription(ui(R.string.ui_original_source)).assertIsDisplayed()

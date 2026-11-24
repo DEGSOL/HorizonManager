@@ -441,11 +441,12 @@ class AgentTests(unittest.TestCase):
         (directory / "summary-ru.md").write_text("# Перевод недоступен")
         requests_before = len(self.fixture.translation_requests)
         result = self.client.get(f"/v1/digests/{run.hex}/ru").json()
-        self.assertEqual(result["content_version"], 2)
+        self.assertEqual(result["content_version"], 3)
         self.assertEqual(result["items"][0]["title"], raw[0]["title"])
         self.assertEqual(result["items"][0]["body"], raw[0]["content"])
         self.assertEqual(result["items"][0]["telegram_channel"], "mrizonNews")
         self.assertEqual(result["items"][0]["telegram_url"], "https://t.me/mrizonNews/123")
+        self.assertEqual(result["items"][0]["source_url"], "https://t.me/mrizonNews/123")
         self.assertNotIn("Перевод недоступен", result["markdown"])
         self.assertIn(raw[0]["title"], result["markdown"])
         self.assertEqual(len(self.fixture.translation_requests), requests_before)
@@ -463,6 +464,24 @@ class AgentTests(unittest.TestCase):
             download.assert_awaited_once()
         self.assertEqual(self.client.get(cover_path, headers={"Authorization": "Bearer wrong"}).status_code, 401)
         self.assertEqual(self.client.get(f"/v1/covers/{run.hex}/{key_for('not-in-this-digest')}").status_code, 404)
+
+    def test_digest_exposes_discussion_without_changing_external_url(self):
+        self.assertEqual(self.client.put("/v1/config", json=self.config()).status_code, 200)
+        run = uuid4()
+        self.client.post("/v1/jobs", json={"id": str(run)})
+        self.assertEqual(self.wait(run.hex)["state"], "success")
+        localized = self.root / "runs" / run.hex / "localized_items.json"
+        raw = json.loads(localized.read_text())
+        for source, thread in (
+            ("reddit", "https://www.reddit.com/r/android/comments/abc123/thread/"),
+            ("hackernews", "https://news.ycombinator.com/item?id=42"),
+        ):
+            external = "https://example.org/linked-story"
+            raw[0].update(source_type=source, url=external, metadata={"discussion_url": thread})
+            localized.write_text(json.dumps(raw))
+            result = self.client.get(f"/v1/digests/{run.hex}/en").json()
+            self.assertEqual(result["items"][0]["url"], external)
+            self.assertEqual(result["items"][0]["source_url"], thread)
 
     def test_ai_preflight_and_push_registration(self):
         response = self.client.post("/v1/jobs", json={"id": str(uuid4()), "kind": "ai"})

@@ -597,20 +597,37 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         }
     }
 
-    private suspend fun staleDigestOffsets(server: String, run: String, language: String): Set<Int> =
-        cache.digest(server, run, language).mapNotNull { page ->
+    private class DigestUpgrades {
+        val translations = mutableSetOf<Int>()
+        val originalLinks = mutableSetOf<Int>()
+
+        fun pending(version: Int): Set<Int> =
+            (if (version >= 2) translations else emptySet()) + (if (version >= 3) originalLinks else emptySet())
+    }
+
+    private suspend fun staleDigestOffsets(server: String, run: String, language: String): DigestUpgrades {
+        val upgrades = DigestUpgrades()
+        for (page in cache.digest(server, run, language)) {
             val value = JSONObject(page.data)
-            val stale = value.optInt("content_version") < 2 && value.optJSONArray("items")?.objects()?.any {
+            val version = value.optInt("content_version")
+            if (version >= 3) continue
+            val items = value.optJSONArray("items")?.objects().orEmpty()
+            if (version < 2 && items.any {
                 it.optString("title") in setOf("Translation unavailable", "暂时无法翻译", "Перевод недоступен")
-            } == true
-            page.offset.takeIf { stale }
-        }.toSet()
+            }) upgrades.translations.add(page.offset)
+            if (items.any {
+                articleField(it, "source").lowercase(java.util.Locale.ROOT) in setOf("reddit", "hackernews", "telegram") &&
+                    originalPublicationUrl(it) == null
+            }) upgrades.originalLinks.add(page.offset)
+        }
+        return upgrades
+    }
 
     private suspend fun fetchPanel(server: Server, everything: Boolean, checkConnection: Boolean) {
         val cursor = cache.eventCursor(server.id)
         val current = state.value
         val stale = if (current.selectedRun.isNotEmpty())
-            staleDigestOffsets(server.id, current.selectedRun, current.language) else emptySet()
+            staleDigestOffsets(server.id, current.selectedRun, current.language) else DigestUpgrades()
         val checking = checkConnection && (everything || state.value.connectionPhase != ConnectionPhase.Connected)
         val remote = withAgent(server, checkingConnection = checking) { api ->
             if (checking) connectionStage(ConnectionPhase.CheckingAgent)
@@ -643,13 +660,18 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                 digestLanguage(it, status.optString("digest_language", digestLocale()))
             }
             val changed = selected?.getString("id") != panel.selectedRun || lang != panel.language
-            val needsRepair = !changed && status.optBoolean("cover_relay") && stale.isNotEmpty()
+            val repairVersion = when {
+                status.optBoolean("article_source_links") -> 3
+                status.optBoolean("cover_relay") -> 2
+                else -> 1
+            }
+            val needsRepair = !changed && stale.pending(repairVersion).isNotEmpty()
             val digest = if ((everything || changed || needsRepair) && selected != null && lang != null) {
                 api.get("digests/${selected.getString("id")}/$lang") as JSONObject
             } else null
-            val repairs = if (needsRepair && digest?.optInt("content_version") == 2) {
+            val repairs = if (needsRepair && digest != null) {
                 val id = digest.getString("id")
-                stale.filter { it != 0 }.map { offset ->
+                stale.pending(digest.optInt("content_version")).filter { it != 0 }.map { offset ->
                     offset to (api.get("digests/$id/$lang?offset=$offset") as JSONObject)
                 }
             } else emptyList()
@@ -789,12 +811,12 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             val cached = offset == 0 && showCached(server.id, run, language)
             if (offset == 0 && !cached)
                 mutable.update { it.copy(selectedRun = run, language = language, articles = emptyList(), markdown = "", total = 0) }
-            val stale = if (offset == 0) staleDigestOffsets(server.id, run, language) else emptySet()
+            val stale = if (offset == 0) staleDigestOffsets(server.id, run, language) else DigestUpgrades()
             val pages = withAgent(server) { api ->
                 val page = api.get("digests/$run/$language?offset=$offset") as JSONObject
-                val repairs = if (page.optInt("content_version") == 2) stale.filter { it != offset }.map { cursor ->
+                val repairs = stale.pending(page.optInt("content_version")).filter { it != offset }.map { cursor ->
                     cursor to (api.get("digests/$run/$language?offset=$cursor") as JSONObject)
-                } else emptyList()
+                }
                 listOf(offset to page) + repairs
             }
             pages.forEach { (cursor, page) -> saveDigest(server.id, page, cursor) }

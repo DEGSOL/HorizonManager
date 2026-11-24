@@ -28,7 +28,7 @@ from .article_context import find_item, key_for, localized_context, previous_con
 from .configuration import (DIGEST_LANGUAGES, MAX_HEADLINE_CHARACTERS, MAX_HEADLINE_WORDS, MIN_HEADLINE_WORDS,
                             DigestLanguageCode, ai_missing, schema, secret_name_allowed, validate)
 from .localized_digest import LocalizedSummarizer, restore_original_cards
-from .media import relay_cover
+from .media import relay_cover, web_url
 from .scheduler import Schedule, next_run
 from .store import Store, utc
 
@@ -228,7 +228,7 @@ def create_app(root, token):
             return {**health(), "digest_language": language, "digest_language_chosen": chosen,
                     "digest_languages": DIGEST_LANGUAGES, "headline_max_words": store.headline_words(db),
                     "headline_range": headline_range(db), "disk_free": disk.free, "disk_total": disk.total,
-                    "media_search": store.media_search(db), "cover_relay": True, "enrichment_mode": store.enrichment_mode(db),
+                    "media_search": store.media_search(db), "cover_relay": True, "article_source_links": True, "enrichment_mode": store.enrichment_mode(db),
                     "load": os.getloadavg()[0], "cpu": os.cpu_count(), "memory": mem, "next": next_at}
 
     @app.put("/v1/media-search")
@@ -643,10 +643,13 @@ def create_app(root, token):
                 metadata.get("source_name"), metadata.get("feed_name"), metadata.get("subreddit"),
                 metadata.get("repo"), metadata.get("domain"), item.get("author"),
             ) if isinstance(name, str) and name.strip()), "")
+            source = item["source_type"]
+            permalink = web_url(metadata.get("msg_url" if source == "telegram" else "discussion_url"))
             cards.append({
                 "id": item["id"], "title": artifact.get("title") or item["title"], "url": item["url"],
                 **({"media": media.get(item["id"], {})} if media is not None else {}),
-                "source": item["source_type"], "time": item["published_at"],
+                "source": source, "time": item["published_at"],
+                **({"source_url": permalink} if permalink else {}),
                 **({"publisher": publisher} if publisher else {}),
                 "category": metadata.get("category"),
                 **({"telegram_url": metadata["msg_url"]} if metadata.get("msg_url") else {}),
@@ -661,7 +664,7 @@ def create_app(root, token):
                 "blocks": blocks[:30], "citations": artifact.get("sources", [])[:50],
             })
         return {"id": run, "language": language, "markdown": markdown, "items": cards, "total": len(items),
-                "content_version": 2}
+                "content_version": 3}
 
     @app.post("/v1/backup")
     def export(body: Password):

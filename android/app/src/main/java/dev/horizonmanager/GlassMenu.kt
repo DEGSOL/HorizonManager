@@ -13,12 +13,12 @@ import androidx.compose.ui.unit.dp
 internal fun GlassDropdownMenu(
     expanded: Boolean, onDismissRequest: () -> Unit, content: @Composable ColumnScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(22.dp)
+    val shape = if (LocalLightGlass.current) feedGlassShape else RoundedCornerShape(22.dp)
     CompositionLocalProvider(LocalGlassScene provides LocalMenuScene.current) {
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = onDismissRequest,
-            modifier = Modifier.glassSurface(shape, backdrop = true, menu = true),
+            modifier = Modifier.glassSurface(shape, backdrop = true, menu = true, lightNavigation = LocalLightGlass.current),
             shape = shape,
             containerColor = Color.Transparent,
             shadowElevation = 0.dp,

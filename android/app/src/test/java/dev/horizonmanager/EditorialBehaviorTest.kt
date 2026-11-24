@@ -8,15 +8,41 @@ import org.junit.Test
 
 class EditorialBehaviorTest {
     @Test
-    fun coverShadowsAdaptContinuouslyToTheLightUnderTheLabel() {
-        val dark = CoverInk.at(.02f, 4f, 1f)
-        val middle = CoverInk.at(.23f, 4f, 1f)
-        val light = CoverInk.at(.80f, 4f, 1f)
-        org.junit.Assert.assertEquals(1f, dark.shadow.color.red, .001f)
-        org.junit.Assert.assertTrue(middle.shadow.color.red in 0.2f..0.8f)
-        org.junit.Assert.assertEquals(0f, light.shadow.color.red, .001f)
-        org.junit.Assert.assertEquals(androidx.compose.ui.graphics.Color.White, dark.color)
-        org.junit.Assert.assertEquals(androidx.compose.ui.graphics.Color.Black, light.color)
+    fun titleShadowIsAlwaysTheOppositeColorOfItsText() {
+        for (luminance in listOf(.02f, .178f, .179f, .80f)) {
+            val ink = CoverInk.at(luminance, 4f, 1f)
+            assertEquals(1f - ink.color.red, ink.shadow.color.red, .001f)
+        }
+    }
+
+    @Test
+    fun pinchingKeepsTheFocalPointAndDraggingClampsToThePicture() {
+        val frame = androidx.compose.ui.unit.IntSize(400, 800)
+        val image = androidx.compose.ui.unit.IntSize(400, 400)
+        val focus = Offset(270f, 400f)
+        val zoom = PhotoViewport().transform(focus, Offset.Zero, 3f, frame, image)
+        assertEquals(PhotoViewport(3f, Offset(-140f, 0f)), zoom)
+        val drag = zoom.transform(focus, Offset(900f, -900f), 1f, frame, image)
+        assertEquals(PhotoViewport(3f, Offset(400f, -200f)), drag)
+        assertEquals(PhotoViewport(), drag.transform(focus, Offset.Zero, .1f, frame, image))
+    }
+
+    @Test
+    fun identifiesOriginalPostsWithoutFollowingEmbeddedLinks() {
+        val article = JSONObject().put("source", "telegram").put("url", "https://example.org/news")
+        assertNull(originalPublicationUrl(article))
+        article.put("telegram_url", "https://t.me/s/realChannel/42?single")
+        assertEquals("https://t.me/s/realChannel/42?single", originalPublicationUrl(article))
+        article.put("source_url", "https://t.me/c/123/45")
+        assertEquals("https://t.me/c/123/45", originalPublicationUrl(article))
+        article.put("source", "reddit").put("source_url", "https://reddit.com/r/android/comments/abc123/post/")
+        assertEquals("https://reddit.com/r/android/comments/abc123/post/", originalPublicationUrl(article))
+        article.put("source", "hackernews").put("source_url", "https://news.ycombinator.com/item?id=42")
+        assertEquals("https://news.ycombinator.com/item?id=42", originalPublicationUrl(article))
+        article.put("source_url", "https://news.ycombinator.com@bad.invalid/item?id=42")
+        assertNull(originalPublicationUrl(article))
+        article.put("source", "rss").remove("source_url")
+        assertEquals("https://example.org/news", originalPublicationUrl(article))
     }
 
     @Test

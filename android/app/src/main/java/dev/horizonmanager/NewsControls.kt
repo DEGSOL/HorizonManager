@@ -80,12 +80,15 @@ internal fun orderArticles(articles: List<JSONObject>, order: NewsOrder): List<J
 internal fun GlassIconAction(icon: ImageVector, description: String, enabled: Boolean = true,
                             active: Boolean? = null, onClick: () -> Unit) {
     val palette = LocalHorizonPalette.current
+    val light = LocalLightGlass.current
+    val text = if (light) ReadingGlass.text else palette.text
+    val muted = if (light) ReadingGlass.muted else palette.muted
     val indicator by animateColorAsState(if (active == true) palette.tint.copy(alpha = 0.27f) else Color.Transparent,
         tween(180), label = "icon highlight")
     val tint by animateColorAsState(when {
-        !enabled -> palette.muted.copy(alpha = 0.53f)
-        active == true -> palette.link
-        else -> palette.text
+        !enabled -> muted.copy(alpha = 0.53f)
+        active == true && !light -> palette.link
+        else -> text
     }, tween(180), label = "icon tint")
     val glyph: @Composable () -> Unit = {
         Icon(icon, description,
@@ -132,70 +135,71 @@ internal val feedGlassShape = RoundedCornerShape(26.dp)
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun PinnedNewsControls(filters: NewsFilters, articles: List<JSONObject>, maxHeight: Dp) {
-    val palette = LocalHorizonPalette.current
     val scopes = listOf(NewsScope.All to R.string.ui_all, NewsScope.Unread to R.string.ui_unread, NewsScope.Saved to R.string.ui_saved)
     Reveal(filters.searchOpen) {
         TextField(
             value = filters.query,
             onValueChange = { filters.query = it },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp)
-                .navigationGlass(feedGlassShape),
+                .readingNavigationGlass(feedGlassShape),
             label = { Text(ui(R.string.ui_search_downloaded_articles)) },
             singleLine = true,
             shape = feedGlassShape,
             colors = TextFieldDefaults.colors(
-                focusedTextColor = palette.text,
-                unfocusedTextColor = palette.text,
-                focusedLabelColor = palette.text,
-                unfocusedLabelColor = palette.muted,
+                focusedTextColor = ReadingGlass.text,
+                unfocusedTextColor = ReadingGlass.text,
+                focusedLabelColor = ReadingGlass.text,
+                unfocusedLabelColor = ReadingGlass.muted,
                 focusedContainerColor = Color.Transparent,
                 unfocusedContainerColor = Color.Transparent,
                 focusedIndicatorColor = Color.Transparent,
                 unfocusedIndicatorColor = Color.Transparent,
-                cursorColor = palette.text,
+                cursorColor = ReadingGlass.text,
             ),
             trailingIcon = if (filters.query.isEmpty()) null else ({
                 IconButton(onClick = { filters.query = "" }) {
-                    Icon(Icons.Default.Close, ui(R.string.clear_search), tint = palette.text)
+                    Icon(Icons.Default.Close, ui(R.string.clear_search), tint = ReadingGlass.text)
                 }
             }),
         )
     }
     Reveal(filters.optionsOpen) {
-        Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
-            .navigationGlass(feedGlassShape)
-            .heightIn(max = maxHeight).verticalScroll(rememberScrollState())
-            .padding(horizontal = 14.dp, vertical = 8.dp)) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                scopes.forEach { (mode, title) ->
-                    FilterChip(
-                        selected = filters.scope == mode,
-                        onClick = { filters.scope = mode },
-                        label = { Text(ui(title)) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            labelColor = palette.muted,
-                            selectedLabelColor = palette.text,
-                            selectedContainerColor = palette.glassSelection,
-                        ),
-                    )
+        CompositionLocalProvider(LocalLightGlass provides true) {
+            Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
+                .readingNavigationGlass(feedGlassShape)
+                .heightIn(max = maxHeight).verticalScroll(rememberScrollState())
+                .padding(horizontal = 14.dp, vertical = 8.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    scopes.forEach { (mode, title) ->
+                        FilterChip(
+                            selected = filters.scope == mode,
+                            onClick = { filters.scope = mode },
+                            label = { Text(ui(title)) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                labelColor = ReadingGlass.muted,
+                                selectedLabelColor = ReadingGlass.text,
+                                selectedContainerColor = ReadingGlass.base,
+                            ),
+                        )
+                    }
                 }
-            }
-            val hasScore = remember(articles) { articles.any { it.optDouble("score").isFinite() } }
-            val orders = NewsOrder.entries.filter { hasScore || it !in listOf(NewsOrder.Score, NewsOrder.ScoreLow) }
-            val effective = filters.order.takeIf { it in orders } ?: NewsOrder.Newest
-            Choice(ui(R.string.ui_sort), orders.map { it.name }, effective.name, {
-                filters.order = NewsOrder.valueOf(it)
-                filters.explicitOrder = true
-            }, { ui(NewsOrder.valueOf(it).label) }, row = true)
-            for ((field, current, change) in listOf(
-                Triple("category", filters.category, { it: String -> filters.category = it }),
-                Triple("profile", filters.profile, { it: String -> filters.profile = it }),
-            )) {
-                val values = remember(articles, field) {
-                    articles.map { articleField(it, field) }.filter(String::isNotBlank).distinct().sorted()
+                val hasScore = remember(articles) { articles.any { it.optDouble("score").isFinite() } }
+                val orders = NewsOrder.entries.filter { hasScore || it !in listOf(NewsOrder.Score, NewsOrder.ScoreLow) }
+                val effective = filters.order.takeIf { it in orders } ?: NewsOrder.Newest
+                Choice(ui(R.string.ui_sort), orders.map { it.name }, effective.name, {
+                    filters.order = NewsOrder.valueOf(it)
+                    filters.explicitOrder = true
+                }, { ui(NewsOrder.valueOf(it).label) }, row = true)
+                for ((field, current, change) in listOf(
+                    Triple("category", filters.category, { it: String -> filters.category = it }),
+                    Triple("profile", filters.profile, { it: String -> filters.profile = it }),
+                )) {
+                    val values = remember(articles, field) {
+                        articles.map { articleField(it, field) }.filter(String::isNotBlank).distinct().sorted()
+                    }
+                    if (values.isNotEmpty() || current.isNotEmpty()) Choice(label(field), (listOf("") + values + current).distinct(),
+                        current, change, { it.ifBlank { ui(R.string.ui_all) } }, row = true)
                 }
-                if (values.isNotEmpty() || current.isNotEmpty()) Choice(label(field), (listOf("") + values + current).distinct(),
-                    current, change, { it.ifBlank { ui(R.string.ui_all) } }, row = true)
             }
         }
     }
