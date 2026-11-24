@@ -21,6 +21,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -29,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindowProvider
 import kotlin.math.PI
 import kotlin.math.sin
+import kotlin.random.Random
 
 @Composable
 internal fun Reveal(visible: Boolean, content: @Composable ColumnScope.() -> Unit) {
@@ -66,20 +68,28 @@ internal fun HorizonAlertDialog(onDismissRequest: () -> Unit, title: @Composable
     }
 }
 
+private data class DotMotion(val phase: Float, val turns: Int, val amplitude: Float)
+
 @Composable
 internal fun DottedProgress(modifier: Modifier = Modifier, dots: Int = 13) {
     val color = LocalHorizonPalette.current.text
+    val wobble = remember(dots) {
+        val random = Random(dots)
+        List(dots) { DotMotion(random.nextFloat(), random.nextInt(6, 16), .08f + random.nextFloat() * .20f) }
+    }
     val clock = rememberInfiniteTransition(label = "Loading dots").animateFloat(
-        0f, 1f, infiniteRepeatable(tween(1600, easing = LinearEasing)), label = "Dot movement",
+        0f, 1f, infiniteRepeatable(tween(7800, easing = LinearEasing)), label = "Dot movement",
     )
     Canvas(modifier.height(12.dp).progressSemantics()) {
-        for (index in 0 until dots) {
-            val phase = (index.toFloat() / dots + clock.value * (if (dots > 6) 4f else 2f) / dots).mod(1f)
-            val lift = (1f + sin(2 * PI * (phase * 3f - clock.value)).toFloat()) * .5f
-            val edge = minOf(phase * 8f, (1f - phase) * 8f, 1f)
-            drawCircle(color, radius = (.8f + 1.25f * lift).dp.toPx(),
-                center = Offset(phase * size.width, size.height * (.80f - .6f * lift)),
-                alpha = edge * (.25f + .62f * lift))
+        val time = clock.value
+        for (index in wobble.indices) {
+            val dot = wobble[index]
+            val position = (index.toFloat() / dots + time).mod(1f)
+            val lift = sin(2 * PI * (dot.phase + time * dot.turns)).toFloat()
+            val edge = minOf(position * 8f, (1f - position) * 8f, 1f)
+            drawCircle(color, radius = (1.45f + .38f * lift).dp.toPx(),
+                center = Offset(position * size.width, size.height * (.5f + lift * dot.amplitude)),
+                alpha = edge * (.56f + .25f * lift))
         }
     }
 }

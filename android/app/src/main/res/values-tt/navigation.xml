@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="favorites_title">Сайланмалар</string>
-    <string name="favorites_empty">Йолдызчык белән билгеләнгән мәкаләләр монда күренәчәк.</string>
+    <string name="favorites_empty">Кыстыргыч белән билгеләнгән мәкаләләр монда күренәчәк.</string>
     <string name="archive_digests">Дайджестлар архивы</string>
     <string name="archive_digests_detail">Бу сервердагы элекке дайджестларны ачу.</string>
     <string name="archive_issue_actions">Дайджест гамәлләре</string>

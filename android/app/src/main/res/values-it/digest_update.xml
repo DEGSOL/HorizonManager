@@ -14,4 +14,5 @@
     <string name="hovq_update_now">Aggiorna agente</string>
     <string name="hovq_update_sudo">Password di sudo, se necessaria</string>
     <string name="hovq_open_photo">Apri immagine</string>
+    <string name="prepare_digest_now">Prepara la rassegna ora</string>
 </resources>

@@ -27,7 +27,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onPlaced
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.vectorResource
@@ -65,7 +64,6 @@ internal fun ArticleDialog(
 
     val cover = artwork(artworkServer, article, relay)
     var showPhoto by rememberSaveable(article.optString("id")) { mutableStateOf(false) }
-    var titleHeight by remember { mutableFloatStateOf(0f) }
     val shape = MaterialTheme.shapes.extraLarge
     ArticleModal(article.optString("title"), close, captureMenu = actions) {
         Column(
@@ -77,7 +75,7 @@ internal fun ArticleDialog(
                 .pointerInput(Unit) { detectTapGestures {} }
                 .verticalScroll(rememberScrollState())
         ) {
-            PublicationCover(cover, article.optString("id"), textHeight = titleHeight, openPhoto = { showPhoto = true }) {
+            PublicationCover(cover, article.optString("id"), openPhoto = { showPhoto = true }) {
                 Column {
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
@@ -156,16 +154,23 @@ internal fun ArticleDialog(
                     }
                     Spacer(Modifier.height(60.dp))
                     Column(
-                        Modifier.onSizeChanged { titleHeight = it.height.toFloat() }.padding(18.dp),
+                        Modifier.padding(18.dp),
                         verticalArrangement = Arrangement.spacedBy(5.dp),
                     ) {
-                        PublicationSource(article, detailed = true)
-                        Text(
-                            article.optString("title"),
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = Color.White,
-                        )
-                        PublicationScore(article, Modifier.align(Alignment.End))
+                        AdaptiveCoverInk { modifier, ink ->
+                            Text(article.optString("title"), modifier,
+                                style = MaterialTheme.typography.headlineMedium.copy(shadow = ink.shadow),
+                                color = ink.color)
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.weight(1f)) {
+                                AdaptiveCoverInk { modifier, ink ->
+                                    PublicationSource(article, modifier, detailed = true, ink = ink)
+                                }
+                            }
+                            PublicationScore(article, overPhoto = cover != null)
+                        }
                     }
                 }
             }

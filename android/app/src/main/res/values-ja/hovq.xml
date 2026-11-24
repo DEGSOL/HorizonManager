@@ -19,7 +19,7 @@
     <string name="hovq_vps_restore_password">Horizon バックアップのパスワードを入力してください。現在の VPS の設定とスケジュールが置き換わります。</string>
     <string name="hovq_digest_channel">新しいダイジェスト</string>
     <string name="hovq_digest_channel_detail">Horizon が新しいダイジェストを作成すると通知します。</string>
-    <string name="hovq_push_active">プッシュ通知は有効です。念のため、Hovq は時々 VPS を確認します。</string>
+    <string name="hovq_push_active">プッシュ通知は有効です。通知の取りこぼしに備え、Hovq はバックグラウンドでも VPS を確認します。</string>
     <string name="hovq_polling_active">Android が許可する場合に 15 分ごとに確認します。プッシュ通知を有効にすると早く受け取れます。</string>
     <string name="hovq_alerts_blocked">Android の設定で通知が無効になっています。</string>
     <string name="hovq_android_alert_settings">Android の通知設定</string>

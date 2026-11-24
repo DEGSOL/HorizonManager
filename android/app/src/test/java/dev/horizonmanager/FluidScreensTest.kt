@@ -146,6 +146,7 @@ class FluidScreensTest {
                     .put("url", if (n < 6) page else "")
                     .put("time", date)
                     .put("score", 8)
+                    .put("profile", "Технологии")
                     .put("source", if (n < 6) "telegram" else "NASA")
                     .put("telegram_channel", if (n < 6) "nasa_fixture" else "")
                     .put("category", "Космос")
@@ -209,7 +210,12 @@ class FluidScreensTest {
                 state.value = loaded.copy(selectedRun = "", syncedDigest = "", markdown = "", articles = emptyList(),
                     total = 0, archive = emptyList())
             }
-            text(R.string.ui_news_will_appear_here_after_horizon).assertIsDisplayed()
+            text(R.string.schedule_next).assertIsDisplayed()
+            compose.onNodeWithText(localEpoch(loaded.schedule.optDouble("next"))).assertIsDisplayed()
+            val prepare = text(R.string.prepare_digest_now).assertIsDisplayed().assertIsEnabled()
+            val button = prepare.getUnclippedBoundsInRoot()
+            val display = compose.onRoot().getUnclippedBoundsInRoot()
+            assertTrue(kotlin.math.abs((button.left + button.right - display.left - display.right).value) <= 2f)
         }
         compose.runOnIdle {
             state.value = loaded
@@ -269,14 +275,14 @@ class FluidScreensTest {
     }
 
     @Test
-    fun bothNavigationBarsStayLightGreyAcrossThemes() {
+    fun readingBarsKeepTheirDefaultThemeAndThemeSettingsAreGone() {
         val heading = loadIssue(articleCount = 12)
         val title = compose.onNodeWithText(heading).getUnclippedBoundsInRoot()
         val tab = compose.onNodeWithContentDescription(ui(R.string.settings)).getUnclippedBoundsInRoot()
         val graphite = snapshot("17-graphite-navigation")
         compose.runOnUiThread {
             compose.activity.getSharedPreferences("appearance", android.content.Context.MODE_PRIVATE)
-                .edit().putString("preset", ThemePreset.Ocean.id).apply()
+                .edit().putString("preset", "ocean").apply()
         }
         val ocean = snapshot("18-ocean-navigation")
         val density = compose.activity.resources.displayMetrics.density
@@ -290,7 +296,11 @@ class FluidScreensTest {
                     channels.max() - channels.min() <= 4)
             }
         }
-        assertNotEquals("The surrounding screen still follows the theme", graphite.getPixel(8, 8), ocean.getPixel(8, 8))
+        assertEquals("Legacy presets must not change the default palette", graphite.getPixel(8, 8), ocean.getPixel(8, 8))
+        tab(R.string.settings)
+        text(R.string.mr_interface).performClick()
+        text(R.string.hovq_icon).assertIsDisplayed()
+        text(R.string.theme).assertDoesNotExist()
     }
 
     @Test
@@ -534,23 +544,30 @@ class FluidScreensTest {
     }
 
     @Test
-    fun opensOnlyTheClearCoverInAnInAppViewerAndReturnsToTheArticle() {
+    fun allCoverMetadataOpensTheInAppViewerAndBackKeepsTheArticle() {
         loadIssue(articleCount = 4)
         compose.onNodeWithText(headlines[0]).performClick()
-        val photo = compose.onNodeWithContentDescription(ui(R.string.hovq_open_photo))
-        val title = compose.onNodeWithText(headlines[0])
+        val photo = compose.onNodeWithContentDescription(ui(R.string.hovq_open_photo), useUnmergedTree = true)
+        val inArticle = hasAnyAncestor(isDialog())
+        val title = compose.onNode(hasText(headlines[0]) and inArticle, useUnmergedTree = true)
+        val source = compose.onNode(hasText("· nasa_fixture · Технологии") and inArticle, useUnmergedTree = true)
+        val score = compose.onNode(hasText("8/10") and inArticle, useUnmergedTree = true)
         val viewerImage = compose.onNodeWithContentDescription(headlines[0])
-        assertTrue(photo.getUnclippedBoundsInRoot().bottom < title.getUnclippedBoundsInRoot().top)
-        title.performTouchInput { click() }
-        viewerImage.assertDoesNotExist()
-        photo.performTouchInput { click() }
-        viewerImage.assertIsDisplayed()
-        compose.onAllNodesWithContentDescription(ui(R.string.ui_back)).onLast().performClick()
-        viewerImage.assertDoesNotExist()
-        title.assertIsDisplayed()
+        assertTrue(photo.getUnclippedBoundsInRoot().bottom >= score.getUnclippedBoundsInRoot().bottom)
+        assertTrue("The source should be under the title",
+            title.getUnclippedBoundsInRoot().bottom <= source.getUnclippedBoundsInRoot().top)
+        assertTrue(kotlin.math.abs((score.getUnclippedBoundsInRoot().top -
+            source.getUnclippedBoundsInRoot().top).value) <= 4f)
+        for (target in listOf(title, source, score)) {
+            target.performTouchInput { click() }
+            viewerImage.assertIsDisplayed()
+            back()
+            viewerImage.assertDoesNotExist()
+            title.assertIsDisplayed()
+        }
         photo.performClick()
         viewerImage.assertIsDisplayed()
-        back()
+        compose.onAllNodesWithContentDescription(ui(R.string.ui_back)).onLast().performClick()
         viewerImage.assertDoesNotExist()
         title.assertIsDisplayed()
     }

@@ -28,7 +28,7 @@ class ArticleContextTest {
         val serverState = AtomicReference(JSONObject().put("state", "idle"))
         compose.runOnUiThread {
             compose.activity.setContent {
-                HorizonTheme(ThemePreset.Graphite) {
+                HorizonTheme {
                     if (open.value) ArticleContext(article) { submit ->
                         if (submit) {
                             submissions.incrementAndGet()

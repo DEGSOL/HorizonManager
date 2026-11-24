@@ -67,7 +67,7 @@ internal fun BoxScope.GlassNoticeHost(bottomClearance: Dp = defaultNavigationCle
     ) { message ->
         if (message.visuals is SavedNotice) {
             BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                NoticeLabel(message.visuals.message, Modifier.width(navigationBarWidth(maxWidth) * .85f), savedNoticeWash())
+                NoticeLabel(message.visuals.message, Modifier.width(navigationBarWidth(maxWidth) * .85f), Modifier.savedNoticeWash())
             }
         } else NoticeLabel(message.visuals.message)
     }
@@ -81,12 +81,12 @@ private fun NoticeLabel(message: String, modifier: Modifier = Modifier, wash: Mo
 }
 
 @Composable
-private fun savedNoticeWash(): Modifier {
+internal fun Modifier.savedNoticeWash(): Modifier {
     val phase = rememberInfiniteTransition(label = "Saved notice background").animateFloat(
         0f, 1f, infiniteRepeatable(tween(1800, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "Color movement",
     )
-    return Modifier.drawWithCache {
+    return drawWithCache {
         val radius = maxOf(size.width * .65f, size.height * 1.5f)
         val violet = Brush.radialGradient(
             listOf(Color(0xFF8B65EF).copy(alpha = .44f), Color.Transparent), Offset.Zero, radius,

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="favorites_title">Таңдаулылар</string>
-    <string name="favorites_empty">Жұлдызшамен белгіленген мақалалар осы жерде көрсетіледі.</string>
+    <string name="favorites_empty">Бетбелгімен белгіленген мақалалар осы жерде көрсетіледі.</string>
     <string name="archive_digests">Дайджесттер мұрағаты</string>
     <string name="archive_digests_detail">Осы сервердегі бұрынғы дайджесттерді ашу.</string>
     <string name="archive_issue_actions">Дайджест әрекеттері</string>

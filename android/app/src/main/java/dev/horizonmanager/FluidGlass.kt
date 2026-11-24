@@ -73,14 +73,6 @@ private fun Modifier.glassBackdrop(
 
 internal const val navigationSlideMillis = 220
 
-internal val ThemePreset.glassBase: Color
-    get() = if (this == ThemePreset.Graphite) Color(0xFF161616) else surface
-
-internal val ThemePreset.glassRaised: Color
-    get() = if (this == ThemePreset.Graphite) Color(0xFF242424) else card
-
-internal val ThemePreset.glassSelection: Color
-    get() = if (this == ThemePreset.Graphite) Color(0xFF414141) else lerp(elevated, tint, .20f)
 
 internal fun Modifier.navigationGlass(shape: Shape, outlined: Boolean = true): Modifier =
     glassSurface(shape, backdrop = true, outlined = outlined)
@@ -88,7 +80,6 @@ internal fun Modifier.navigationGlass(shape: Shape, outlined: Boolean = true): M
 internal object ReadingGlass {
     val base = Color(0xFFE0E0E0)
     val raised = Color(0xFFF4F4F4)
-    val selection = Color(0xFFB5B5B5)
     val text = Color(0xFF191919)
     val muted = Color(0xFF3C3C3C)
 }
@@ -127,13 +118,11 @@ internal fun Modifier.glassSurface(
 ): Modifier = composed {
     val palette = LocalHorizonPalette.current
     val blur = backdrop && backdropBlurAvailable
-    val graphite = palette == ThemePreset.Graphite
     val base = if (lightNavigation) ReadingGlass.base else palette.glassBase
     val top = if (lightNavigation) ReadingGlass.raised else if (raised) palette.glassSelection else palette.glassRaised
-    val edge = if (lightNavigation || graphite) Color.White else palette.text
-    val surface = if (blur) glassBackdrop(shape, 22.dp, base, monochrome = lightNavigation || graphite, menu = menu) else clip(shape)
+    val surface = if (blur) glassBackdrop(shape, 22.dp, base, monochrome = true, menu = menu) else clip(shape)
     surface.background(Brush.verticalGradient(listOf(
         top.copy(alpha = if (blur) .66f else .94f),
         base.copy(alpha = if (blur) .77f else .92f),
-    ))).then(if (outlined) Modifier.glassRim(shape, edge) else Modifier)
+    ))).then(if (outlined) Modifier.glassRim(shape, Color.White) else Modifier)
 }

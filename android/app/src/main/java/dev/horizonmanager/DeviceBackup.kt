@@ -21,7 +21,6 @@ internal object DeviceBackup {
     class Settings(
         val servers: List<Server>,
         val selected: String,
-        val theme: ThemePreset,
         val order: NewsOrder,
         val icon: LauncherAppearance,
     )
@@ -46,7 +45,7 @@ internal object DeviceBackup {
     fun pack(settings: Settings, password: String): String {
         val payload = JSONObject()
             .put("servers", JSONArray(settings.servers.map(Server::json)))
-            .put("selected", settings.selected).put("theme", settings.theme.id)
+            .put("selected", settings.selected).put("theme", "graphite")
             .put("order", settings.order.name).put("icon", settings.icon.name)
             .toString().toByteArray()
         val salt = ByteArray(SALT).also(random::nextBytes)
@@ -79,7 +78,7 @@ internal object DeviceBackup {
         require(ids.size == servers.size && servers.all(::validServer))
         val selected = payload.getString("selected")
         require(selected.isEmpty() || selected in ids)
-        Settings(servers, selected, ThemePreset.fromId(payload.getString("theme")),
+        Settings(servers, selected,
             NewsOrder.valueOf(payload.getString("order")), LauncherAppearance.valueOf(payload.getString("icon")))
     } catch (_: Exception) {
         throw Problem("BACKUP_INVALID")
@@ -94,7 +93,6 @@ internal object DeviceBackup {
             (!server.installed || server.pin.isNotEmpty()) && AgentApi.validHttps(server.https)
 
     fun read(context: Context, servers: List<Server>, selected: String) = Settings(servers, selected,
-        ThemePreset.fromId(context.getSharedPreferences("appearance", Context.MODE_PRIVATE).getString("preset", null)),
         readingOrder(context), LauncherAppearance.current(context))
 
     fun readingOrder(context: Context): NewsOrder =

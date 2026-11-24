@@ -14,4 +14,5 @@
     <string name="hovq_update_now">Mettre à jour l’agent</string>
     <string name="hovq_update_sudo">Mot de passe sudo, si nécessaire</string>
     <string name="hovq_open_photo">Ouvrir l’image</string>
+    <string name="prepare_digest_now">Préparer le digest maintenant</string>
 </resources>

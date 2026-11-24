@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="favorites_title">Preferiti</string>
-    <string name="favorites_empty">Gli articoli che contrassegni con una stella appariranno qui.</string>
+    <string name="favorites_empty">Gli articoli che contrassegni con un segnalibro appariranno qui.</string>
     <string name="archive_digests">Archivio dei riepiloghi</string>
     <string name="archive_digests_detail">Apri i riepiloghi precedenti su questo server.</string>
     <string name="archive_issue_actions">Azioni del riepilogo</string>

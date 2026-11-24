@@ -21,7 +21,7 @@ private fun SettingsSection(@StringRes title: Int, content: @Composable ColumnSc
 }
 
 @Composable
-internal fun SettingsHome(panel: Panel, preset: ThemePreset, open: (String) -> Unit, page: String, servers: () -> Unit) {
+internal fun SettingsHome(panel: Panel, open: (String) -> Unit, page: String, servers: () -> Unit) {
     val configured = panel.config.has("config") && panel.schema.length() > 0
     fun rowPage(id: String): () -> Unit = { open(id) }
     when (page) {
@@ -38,7 +38,7 @@ internal fun SettingsHome(panel: Panel, preset: ThemePreset, open: (String) -> U
                     enabled = configured, open = rowPage("ai_settings"))
             }
             SettingsSection(R.string.setting_group_application) {
-                GlassSettingRow(ui(R.string.mr_interface), ui(preset.title), open = rowPage("interface"))
+                GlassSettingRow(ui(R.string.mr_interface), ui(R.string.hovq_icon), open = rowPage("interface"))
                 GlassSettingRow(ui(R.string.ui_maintenance), ui(R.string.settings_journal_detail), open = rowPage("maintenance"))
             }
         }
@@ -61,7 +61,6 @@ internal fun SettingsHome(panel: Panel, preset: ThemePreset, open: (String) -> U
         }
         "interface" -> {
             SettingsSection(R.string.setting_group_reading) {
-                GlassSettingRow(ui(R.string.theme), ui(preset.title), open = rowPage("theme"))
                 GlassSettingRow(ui(R.string.hovq_icon), ui(R.string.hovq_icon_detail), open = rowPage("icon"))
                 GlassSettingRow(ui(R.string.editorial_feed_behavior), ui(R.string.editorial_feed_behavior_detail), open = rowPage("reading"))
             }

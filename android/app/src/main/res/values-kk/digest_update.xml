@@ -14,4 +14,5 @@
     <string name="hovq_update_now">Агентті жаңарту</string>
     <string name="hovq_update_sudo">Қажет болса, sudo құпиясөзі</string>
     <string name="hovq_open_photo">Суретті ашу</string>
+    <string name="prepare_digest_now">Дайджесті қазір дайындау</string>
 </resources>

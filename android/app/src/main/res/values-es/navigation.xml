@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="favorites_title">Favoritos</string>
-    <string name="favorites_empty">Los artículos que marques con una estrella aparecerán aquí.</string>
+    <string name="favorites_empty">Aquí aparecerán los artículos que guardes con el marcador.</string>
     <string name="archive_digests">Archivo de resúmenes</string>
     <string name="archive_digests_detail">Abre resúmenes anteriores de este servidor.</string>
     <string name="archive_issue_actions">Acciones del resumen</string>

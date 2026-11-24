@@ -118,9 +118,10 @@ internal fun ArticleContext(
                 }
             }
         }) {
-            Icon(ImageVector.vectorResource(R.drawable.ic_ai_sparkles), null, Modifier.size(19.dp))
+            Icon(ImageVector.vectorResource(R.drawable.ic_ai_sparkles), null, Modifier.size(19.dp),
+                tint = publicationScoreAccent)
             Spacer(Modifier.width(7.dp))
-            Text(ui(R.string.article_more))
+            Text(ui(R.string.article_more), color = publicationScoreAccent)
         }
     }
     if (state == "failed" && !loading) {

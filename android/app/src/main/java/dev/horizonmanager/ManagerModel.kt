@@ -1069,7 +1069,6 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         vault.save(profiles)
         val next = profiles.find { it.id == incoming.selected } ?: state.value.server
         withContext(Dispatchers.Main.immediate) {
-            app.getSharedPreferences("appearance", 0).edit().putString("preset", incoming.theme.id).apply()
             app.getSharedPreferences("reading", 0).edit().putString("default_order", incoming.order.name).apply()
             incoming.icon.apply(app)
             selectLocally(next, profiles)

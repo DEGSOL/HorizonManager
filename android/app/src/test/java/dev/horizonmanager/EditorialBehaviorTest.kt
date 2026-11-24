@@ -8,6 +8,18 @@ import org.junit.Test
 
 class EditorialBehaviorTest {
     @Test
+    fun coverShadowsAdaptContinuouslyToTheLightUnderTheLabel() {
+        val dark = CoverInk.at(.02f, 4f, 1f)
+        val middle = CoverInk.at(.23f, 4f, 1f)
+        val light = CoverInk.at(.80f, 4f, 1f)
+        org.junit.Assert.assertEquals(1f, dark.shadow.color.red, .001f)
+        org.junit.Assert.assertTrue(middle.shadow.color.red in 0.2f..0.8f)
+        org.junit.Assert.assertEquals(0f, light.shadow.color.red, .001f)
+        org.junit.Assert.assertEquals(androidx.compose.ui.graphics.Color.White, dark.color)
+        org.junit.Assert.assertEquals(androidx.compose.ui.graphics.Color.Black, light.color)
+    }
+
+    @Test
     fun coverActionsUseLocalContrastAfterTheCenterCrop() {
         val lightAndDark = IntArray(40 * 20) { index ->
             if (index % 40 < 20) 0xfffafafa.toInt() else 0xff151515.toInt()

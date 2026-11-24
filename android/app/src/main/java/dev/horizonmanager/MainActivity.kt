@@ -79,24 +79,12 @@ class MainActivity : ComponentActivity() {
         notificationServer = notificationTarget(intent)
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
         if (Build.VERSION.SDK_INT >= 29) window.isNavigationBarContrastEnforced = false
-        val preferences = getSharedPreferences("appearance", MODE_PRIVATE)
         setContent {
-            var preset by remember { mutableStateOf(ThemePreset.fromId(preferences.getString("preset", null))) }
-            DisposableEffect(preferences) {
-                val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-                    if (key == "preset") preset = ThemePreset.fromId(preferences.getString("preset", null))
-                }
-                preferences.registerOnSharedPreferenceChangeListener(listener)
-                onDispose { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
-            }
-            HorizonTheme(preset) {
+            HorizonTheme {
                 val notices = remember { NoticeQueue() }
                 CompositionLocalProvider(LocalNoticeQueue provides notices) {
                     HovqLinks {
-                        Manager(viewModel(), notificationServer, { notificationServer = "" }, preset) {
-                            preset = it
-                            preferences.edit().putString("preset", it.id).apply()
-                        }
+                        Manager(viewModel(), notificationServer) { notificationServer = "" }
                     }
                 }
             }
@@ -129,12 +117,11 @@ private data class Screen(val page: String, val issueId: String = "") {
 private fun mainTabs() = listOf(
     HorizonTab(R.string.feed, ImageVector.vectorResource(R.drawable.ic_nav_feed)),
     HorizonTab(R.string.settings, ImageVector.vectorResource(R.drawable.ic_nav_sliders)),
-    HorizonTab(R.string.favorites_title, ImageVector.vectorResource(R.drawable.ic_star_outline)),
+    HorizonTab(R.string.favorites_title, ImageVector.vectorResource(R.drawable.ic_bookmark_outline)),
 )
 
 @Composable
-private fun Manager(model: ManagerModel, notificationServer: String, consumed: () -> Unit,
-                    preset: ThemePreset, selectTheme: (ThemePreset) -> Unit) {
+private fun Manager(model: ManagerModel, notificationServer: String, consumed: () -> Unit) {
     val panel by model.state.collectAsStateWithLifecycle()
     val currentServer = panel.server
     val locale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
@@ -275,6 +262,9 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         }
         lifecycle.lifecycle.addObserver(observer)
         onDispose { lifecycle.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(notificationAllowed) {
+        if (notificationAllowed) DigestWorker.catchUp(ctx)
     }
     LaunchedEffect(enableDigestAfterPermission, notificationAllowed, currentServer, panel.ready, panel.busy) {
         if (enableDigestAfterPermission && notificationAllowed && panel.ready && !panel.busy && currentServer != null) {
@@ -520,7 +510,6 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                 (screen.page == "settings" && showingSetupSettings)
             val heading = when (screen.page) {
                 "servers" -> ui(R.string.ui_servers)
-                "theme" -> ui(R.string.theme)
                 "setup", "ssh" -> ui(R.string.app_name)
                 "settings" -> ui(R.string.settings)
                 "journal" -> ui(R.string.journal)
@@ -601,9 +590,6 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                                             Text(ui(R.string.ui_add_server))
                                         }
                                     }
-                                    "theme" -> ThemeSettings(preset) { choice ->
-                                        if (preset != choice) { selectTheme(choice); localSave++ }
-                                    }
                                     "icon" -> IconSettings(launcherIcon) { choice ->
                                         if (launcherIcon != choice) {
                                             runCatching { choice.apply(ctx) }.onSuccess {
@@ -637,7 +623,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                                     "digest_settings" -> DigestSettings(::openSettings)
                                     "ai_settings" -> AiSettings(panel, model, ::openSettings)
                                     "settings", "news_settings", "server_settings", "interface" ->
-                                        SettingsHome(panel, preset, ::openSettings, screen.page) { manageServers = true }
+                                        SettingsHome(panel, ::openSettings, screen.page) { manageServers = true }
                                     "images" -> ImageSettings(panel, model)
                                     else -> CompositionLocalProvider(LocalEditorBack provides editorBack) {
                                         SettingsForm(panel, model, screen.page) { if (configPage == screen.page) dirtyPage = it }

@@ -19,7 +19,7 @@
     <string name="hovq_vps_restore_password">Horizon сақтық көшірмесінің құпиясөзін енгізіңіз. Импорт белсенді VPS-тегі баптаулар мен кестені ауыстырады.</string>
     <string name="hovq_digest_channel">Жаңа дайджестер</string>
     <string name="hovq_digest_channel_detail">Horizon жаңа шығарылымды дайындағанда хабарлама келеді.</string>
-    <string name="hovq_push_active">Push қосулы. Hovq қосымша сақтық үшін VPS-ті анда-санда тексереді.</string>
+    <string name="hovq_push_active">Push қосулы. Hovq өткізіп алған хабарландыруларды табу үшін VPS-ті фондық режимде де тексереді.</string>
     <string name="hovq_polling_active">Android рұқсат бергенде әр 15 минут сайын тексереді. Хабарламаны тез алу үшін push қосыңыз.</string>
     <string name="hovq_alerts_blocked">Android баптауларында хабарландырулар өшірілген.</string>
     <string name="hovq_android_alert_settings">Android хабарландыру баптаулары</string>

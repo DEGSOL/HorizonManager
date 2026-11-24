@@ -20,6 +20,11 @@
                 <action android:name="org.unifiedpush.android.connector.PUSH_EVENT" />
             </intent-filter>
         </service>
+        <receiver android:name=".DigestScheduleReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
         <activity android:name=".MainActivity" android:exported="false" />
         <activity-alias android:name=".LauncherLight" android:targetActivity=".MainActivity"
             android:exported="true" android:enabled="true" android:icon="@mipmap/hovq_light">

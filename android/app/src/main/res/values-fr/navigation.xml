@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="favorites_title">Favoris</string>
-    <string name="favorites_empty">Les articles marqués d’une étoile apparaîtront ici.</string>
+    <string name="favorites_empty">Les articles ajoutés aux favoris apparaîtront ici.</string>
     <string name="archive_digests">Archives des digests</string>
     <string name="archive_digests_detail">Ouvrir les digests précédents sur ce serveur.</string>
     <string name="archive_issue_actions">Actions du digest</string>

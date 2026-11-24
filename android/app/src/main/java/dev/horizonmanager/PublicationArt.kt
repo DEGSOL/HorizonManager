@@ -432,7 +432,6 @@ internal fun PublicationCover(
     cover: Cover?,
     seed: String,
     modifier: Modifier = Modifier,
-    textHeight: Float = 0f,
     photoHeight: Dp? = null,
     openPhoto: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit,
@@ -440,31 +439,22 @@ internal fun PublicationCover(
     val placement = remember { CoverPlacement() }
     val height = with(LocalDensity.current) { photoHeight?.toPx() }
     val surface = remember(cover, height) { CoverActionSurface(placement, cover, height) }
-    Box(modifier.onPlaced { placement.coordinates = it }) {
-        CoverSurface(cover, seed, Modifier.matchParentSize(), textHeight = textHeight, photoHeight = photoHeight)
-        if (cover != null && openPhoto != null) {
-            val description = ui(R.string.hovq_open_photo)
-            BoxWithConstraints(Modifier.matchParentSize()) {
-                val clearHeight = maxHeight - with(LocalDensity.current) { textHeight.toDp() } - articleCoverFadeLead
-                if (clearHeight > 0.dp) {
-                    Box(Modifier.fillMaxWidth().height(clearHeight)
-                        .clickable(interactionSource = null, indication = null, role = Role.Button, onClick = openPhoto)
-                        .semantics { contentDescription = description })
-                }
-            }
-        }
+    val photoTap = if (cover != null && openPhoto != null) {
+        val label = ui(R.string.hovq_open_photo)
+        Modifier.clickable(interactionSource = null, indication = null, role = Role.Button,
+            onClickLabel = label, onClick = openPhoto).semantics { contentDescription = label }
+    } else Modifier
+    Box(modifier.onPlaced { placement.coordinates = it }.then(photoTap)) {
+        CoverSurface(cover, seed, Modifier.matchParentSize(), photoHeight)
         CompositionLocalProvider(LocalCoverActionSurface provides surface, content = { content() })
     }
 }
-
-private val articleCoverFadeLead = 24.dp
 
 @Composable
 internal fun CoverSurface(
     cover: Cover?,
     seed: String,
     modifier: Modifier,
-    textHeight: Float = 0f,
     photoHeight: Dp? = null,
 ) {
     val palette = LocalHorizonPalette.current
@@ -479,8 +469,7 @@ internal fun CoverSurface(
                 )
                 .get(Math.floorMod(seed.hashCode(), 5))
         val photoBottom = photoHeight?.toPx()?.let { min(it, size.height) }
-        val start = if (photoBottom == null) (size.height - textHeight - articleCoverFadeLead.toPx()).coerceAtLeast(0f)
-            else (photoBottom - 34.dp.toPx()).coerceAtLeast(0f)
+        val start = photoBottom?.let { (it - 34.dp.toPx()).coerceAtLeast(0f) } ?: 0f
         if (cover != null) {
             if (photoBottom == null) drawCoverImage(cover.image) else drawTilePhoto(cover, photoBottom, start)
         } else {
@@ -502,25 +491,7 @@ internal fun CoverSurface(
                 center,
             )
         }
-        if (cover != null && photoBottom == null) {
-            val paint = Paint()
-            drawContext.canvas.saveLayer(
-                androidx.compose.ui.geometry.Rect(0f, start, size.width, size.height),
-                paint,
-            )
-            clipRect(top = start) {
-                drawCoverImage(cover.soft)
-                drawRect(
-                    Brush.verticalGradient(
-                        listOf(Color.Transparent, Color.Black),
-                        startY = start,
-                        endY = start + 26.dp.toPx(),
-                    ),
-                    blendMode = BlendMode.DstIn,
-                )
-            }
-            drawContext.canvas.restore()
-        }
+        if (cover != null && photoBottom == null) return@Canvas
         val brightness = cover?.brightness ?: .4f
         val shadeAt = photoBottom?.let { ((it - start) / (size.height - start)).coerceIn(0f, 1f) } ?: .5f
         val shade = if (photoBottom == null) .35f + brightness * .42f else .48f + brightness * .30f

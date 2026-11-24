@@ -11,7 +11,7 @@ class DeviceBackupTest {
     fun exportsEncryptedSettingsAndRejectsWrongPasswordOrTampering() {
         val server = Server("0259c74e-4545-482e-84a6-cc96d8260903", "Fixture", "example.invalid",
             22, "reader", true, "private-test-value", "", "SHA256:test", "0".repeat(64), installed = true)
-        val input = DeviceBackup.Settings(listOf(server), server.id, ThemePreset.Graphite,
+        val input = DeviceBackup.Settings(listOf(server), server.id,
             NewsOrder.Issue, LauncherAppearance.Dark)
         val password = "test-fixture-password"
         val cipher = DeviceBackup.pack(input, password)
@@ -19,7 +19,6 @@ class DeviceBackupTest {
         val output = DeviceBackup.unpack(cipher, password)
         assertEquals(listOf(server), output.servers)
         assertEquals(input.selected, output.selected)
-        assertEquals(input.theme, output.theme)
         assertEquals(input.order, output.order)
         assertEquals(LauncherAppearance.Dark, output.icon)
         assertThrows(Problem::class.java) { DeviceBackup.unpack(cipher, "another-password") }

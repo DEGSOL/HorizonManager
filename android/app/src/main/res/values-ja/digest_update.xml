@@ -14,4 +14,5 @@
     <string name="hovq_update_now">エージェントを更新</string>
     <string name="hovq_update_sudo">sudoパスワード（必要な場合）</string>
     <string name="hovq_open_photo">画像を開く</string>
+    <string name="prepare_digest_now">今すぐダイジェストを作成</string>
 </resources>

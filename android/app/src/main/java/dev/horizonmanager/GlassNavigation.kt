@@ -150,15 +150,8 @@ internal fun GlassNavigation(
                     translationX = position.value.coerceIn(0f, tabs.lastIndex.toFloat()) * segment.toPx() * direction
                 }
                 .padding(horizontal = 2.dp)
-                .clip(CircleShape)
-                .background(Brush.verticalGradient(listOf(
-                    ReadingGlass.selection.copy(alpha = .94f),
-                    ReadingGlass.selection.copy(alpha = .58f),
-                )))
-                .border(1.dp, Brush.verticalGradient(listOf(
-                    ReadingGlass.text.copy(alpha = .25f),
-                    ReadingGlass.text.copy(alpha = .10f),
-                )), CircleShape))
+                .glassSurface(CircleShape)
+                .savedNoticeWash())
         }
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).selectableGroup()) {
             tabs.forEachIndexed { index, tab ->
@@ -183,7 +176,7 @@ private fun GlassNavigationButton(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val iconScale by animateFloatAsState(if (pressed) .95f else 1f, tween(130), label = "Tab press")
-    val tint by animateColorAsState(if (selected) ReadingGlass.text else ReadingGlass.muted,
+    val tint by animateColorAsState(if (selected) Color.White else ReadingGlass.muted,
         tween(260), label = "Tab color")
     Column(
         modifier.fillMaxHeight().heightIn(min = readingBarHeight() - NavigationStyle.inset * 2)

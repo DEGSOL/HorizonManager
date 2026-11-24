@@ -98,22 +98,7 @@ internal object DigestNotifications {
     }
 
     fun setEndpoint(app: Context, id: String, value: String) = put(app, id, "endpoint", value)
-    fun setRegistered(app: Context, id: String, value: String) {
-        put(app, id, "registered", value)
-        prefs(app).edit().remove("$id:last_reconcile").apply()
-    }
-
-    fun checkDue(app: Context, id: String, endpoint: String, registered: String): Boolean {
-        if (endpoint.isEmpty() || endpoint != registered) return true
-        val now = System.currentTimeMillis()
-        val key = "$id:last_reconcile"
-        val last = prefs(app).getLong(key, 0)
-        return now - last !in 0 until 5 * 60 * 60 * 1000L
-    }
-
-    fun reconciled(app: Context, id: String) {
-        prefs(app).edit().putLong("$id:last_reconcile", System.currentTimeMillis()).apply()
-    }
+    fun setRegistered(app: Context, id: String, value: String) = put(app, id, "registered", value)
 
     fun register(app: Context, distributor: String, server: String) {
         prefs(app).edit().remove("$server:push_disabled")
@@ -124,13 +109,16 @@ internal object DigestNotifications {
 
     fun connectAvailable(app: Context, server: String) {
         val settings = prefs(app)
-        if (endpoint(app, server).isNotEmpty() || settings.getBoolean("$server:push_disabled", false) ||
-            !deliveryAllowed(app)) return
+        if (settings.getBoolean("$server:push_disabled", false) || !deliveryAllowed(app)) return
+        val installed = UnifiedPush.getDistributors(app)
+        val saved = UnifiedPush.getSavedDistributor(app)?.takeIf { it in installed }
+        if (endpoint(app, server).isNotEmpty()) {
+            if (saved != null) return
+            setEndpoint(app, server, "")
+        }
         val last = settings.getLong("$server:push_attempt", 0L)
         if (System.currentTimeMillis() - last in 0 until 3_600_000L) return
-        val installed = UnifiedPush.getDistributors(app)
-        val distributor = UnifiedPush.getSavedDistributor(app)?.takeIf { it in installed }
-            ?: installed.firstOrNull { it == "io.heckel.ntfy" } ?: return
+        val distributor = saved ?: installed.firstOrNull { it == "io.heckel.ntfy" } ?: return
         register(app, distributor, server)
     }
 
@@ -161,9 +149,9 @@ internal object DigestNotifications {
         if (!server.background) return
         val key = server.id + ":digest"
         val previous = prefs(app).getString(key, null)
-        if (id.isNotEmpty() && previous != null && previous != id) publish(app, server, id)
-        if (previous == null || id.isNotEmpty() && (previous == id || deliveryAllowed(app)))
+        if (previous == null || id.isNotEmpty() && previous != id && publish(app, server, id)) {
             prefs(app).edit().putString(key, id).apply()
+        }
     }
 
     @Synchronized
@@ -171,12 +159,16 @@ internal object DigestNotifications {
         publish(app, server, id)
     }
 
-    private fun publish(app: Context, server: Server, id: String) {
+    private fun publish(app: Context, server: Server, id: String): Boolean {
         val seen = runCatching { JSONArray(value(app, server.id, "seen")).strings() }.getOrDefault(emptyList())
-        if (id in seen) return
-        if (notify(app, server.id, server.name, ui(R.string.digest_ready))) {
-            put(app, server.id, "seen", JSONArray((seen + id).takeLast(32)).toString())
+        if (id in seen) return true
+        val posted = try {
+            notify(app, server.id, server.name, ui(R.string.digest_ready))
+        } catch (_: SecurityException) {
+            false
         }
+        if (posted) put(app, server.id, "seen", JSONArray((seen + id).takeLast(32)).toString())
+        return posted
     }
 
     private const val CHANNEL = "horizon"

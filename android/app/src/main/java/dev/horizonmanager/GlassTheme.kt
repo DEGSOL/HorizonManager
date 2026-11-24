@@ -47,11 +47,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-internal val LocalHorizonPalette = staticCompositionLocalOf { ThemePreset.Graphite }
+internal val LocalHorizonPalette = staticCompositionLocalOf { HorizonPalette }
 private val LocalSettingsGlass = staticCompositionLocalOf { false }
 private val LocalSettingsTile = staticCompositionLocalOf { false }
 
-private fun ThemePreset.colors() = darkColorScheme(
+private fun HorizonPalette.colors() = darkColorScheme(
     primary = tint, onPrimary = Color(0xFF19130E),
     primaryContainer = elevated, onPrimaryContainer = text,
     secondary = tint, onSecondary = Color(0xFF19130E), secondaryContainer = elevated, onSecondaryContainer = text,
@@ -89,14 +89,14 @@ private val textStyles = Typography(
 )
 
 @Composable
-internal fun HorizonTheme(preset: ThemePreset, content: @Composable () -> Unit) {
-    val colors = remember(preset) { preset.colors() }
+internal fun HorizonTheme(content: @Composable () -> Unit) {
+    val colors = remember { HorizonPalette.colors() }
     MaterialTheme(colorScheme = colors, typography = textStyles, shapes = Shapes(
         extraSmall = RoundedCornerShape(10.dp), small = RoundedCornerShape(15.dp),
         medium = RoundedCornerShape(21.dp), large = RoundedCornerShape(20.dp),
         extraLarge = RoundedCornerShape(34.dp),
     )) {
-        CompositionLocalProvider(LocalHorizonPalette provides preset, LocalContentColor provides preset.text, content = content)
+        CompositionLocalProvider(LocalContentColor provides HorizonPalette.text, content = content)
     }
 }
 

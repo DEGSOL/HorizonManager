@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="favorites_title">お気に入り</string>
-    <string name="favorites_empty">星を付けた記事がここに表示されます。</string>
+    <string name="favorites_empty">ブックマークを付けた記事がここに表示されます。</string>
     <string name="archive_digests">ダイジェストのアーカイブ</string>
     <string name="archive_digests_detail">このサーバーの過去のダイジェストを開きます。</string>
     <string name="archive_issue_actions">ダイジェストの操作</string>

@@ -39,6 +39,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.semantics.*
@@ -46,6 +47,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineBreak
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.Dp
@@ -248,7 +250,11 @@ internal fun NewsScreen(
                                     DottedProgress(Modifier.fillMaxWidth())
                                 }
                             }
-                        if (!loaded || shown.isEmpty())
+                        if (issue == null && !archived)
+                            item("empty-feed", span = StaggeredGridItemSpan.FullLine) {
+                                EmptyDigestFeed(panel) { model.submit() }
+                            }
+                        else if (!loaded || shown.isEmpty())
                             item("empty", span = StaggeredGridItemSpan.FullLine) {
                                 Tile {
                                     Text(
@@ -261,8 +267,6 @@ internal fun NewsScreen(
                                                     R.string
                                                         .ui_no_downloaded_articles_match_your_filters
                                             )
-                                        else if (issue == null)
-                                            ui(R.string.ui_news_will_appear_here_after_horizon)
                                         else status
                                     )
                                     TextButton(onClick = { bubble = true }) {
@@ -395,6 +399,34 @@ internal fun NewsScreen(
                 },
             ) { openId = "" }
         }
+    }
+}
+
+@Composable
+private fun EmptyDigestFeed(panel: Panel, prepare: () -> Unit) {
+    val mode = panel.schedule.optJSONObject("spec")?.optString("mode")
+    val next = panel.schedule.optDouble("next", panel.status.optDouble("next"))
+    val nextTime = when {
+        mode == "off" -> ui(R.string.schedule_manual)
+        !next.isFinite() || next <= 0 -> ui(R.string.schedule_unavailable)
+        else -> localEpoch(next)
+    }
+    val enabled = panel.ready && !panel.busy && !panel.updatingAgent &&
+        panel.jobs.none { it.optString("state") in setOf("running", "queued") }
+    Column(Modifier.fillMaxWidth().glassSurface(MaterialTheme.shapes.extraLarge, raised = true)
+        .padding(horizontal = 18.dp, vertical = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        Text(ui(if (panel.connectionProblem.isEmpty()) R.string.schedule_next else R.string.schedule_last_known),
+            color = LocalHorizonPalette.current.muted, style = MaterialTheme.typography.labelLarge,
+            textAlign = TextAlign.Center)
+        Text(nextTime, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+        Text(ui(R.string.prepare_digest_now),
+            modifier = Modifier.padding(top = 5.dp).heightIn(min = 48.dp).glassSurface(CircleShape)
+                .then(if (enabled) Modifier.savedNoticeWash() else Modifier)
+                .clickable(enabled = enabled, role = Role.Button, onClick = prepare)
+                .wrapContentHeight().padding(horizontal = 20.dp, vertical = 12.dp),
+            color = if (enabled) Color.White else LocalHorizonPalette.current.muted,
+            style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center)
     }
 }
 

@@ -13,7 +13,7 @@
     <string name="router_upgrade_required">Обновите агент на VPS, чтобы загрузить модели с сохранённым ключом.</string>
     <string name="agent_https_unreachable">Агент VPS не ответил по HTTPS.</string>
     <string name="favorites_title">Избранное</string>
-    <string name="favorites_empty">Здесь будут новости, которые вы отметите звездой.</string>
+    <string name="favorites_empty">Здесь будут новости, которые вы отметите флажком.</string>
     <string name="archive_digests">Архив дайджестов</string>
     <string name="archive_digests_detail">Прошлые выпуски на этом сервере.</string>
     <string name="archive_issue_actions">Действия с выпуском</string>
