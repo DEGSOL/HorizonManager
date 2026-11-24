@@ -3,8 +3,6 @@ package dev.horizonmanager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -99,34 +97,25 @@ internal fun SavedServerEditor(server: Server, panel: Panel, model: ManagerModel
     var draft by remember(server.id) { mutableStateOf(ServerDraft(server)) }
     val enabled = !panel.busy && panel.hostConfirmation == null
     val canSave = draft.update(server)?.let { it != server && AgentApi.validHttps(it.https) } == true
-    HorizonAlertDialog(
-        onDismissRequest = { if (enabled) close() },
-        title = { Text(ui(R.string.editorial_edit)) },
-        text = {
-            Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ServerCredentialFields(draft, enabled) { draft = it }
-                ValueField(ui(R.string.ui_https_domain_optional), draft.https,
-                    { draft = draft.copy(https = it) }, enabled = enabled)
-                if (!AgentApi.validHttps(draft.https.trim())) {
-                    Text(errorText("HTTPS_URL"), color = MaterialTheme.colorScheme.error)
-                }
-                if (panel.busy) DottedProgress(Modifier.fillMaxWidth())
-                panel.problem.takeIf(String::isNotBlank)?.let {
-                    Text(errorText(it), color = MaterialTheme.colorScheme.error)
-                }
-            }
-        },
-        confirmButton = {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        ServerCredentialFields(draft, enabled) { draft = it }
+        ValueField(ui(R.string.ui_https_domain_optional), draft.https,
+            { draft = draft.copy(https = it) }, enabled = enabled)
+        if (!AgentApi.validHttps(draft.https.trim())) {
+            Text(errorText("HTTPS_URL"), color = MaterialTheme.colorScheme.error)
+        }
+        panel.problem.takeIf(String::isNotBlank)?.let {
+            Text(errorText(it), color = MaterialTheme.colorScheme.error)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { model.editServer(server.id, draft) }, enabled = enabled && canSave) {
                 Text(ui(R.string.ui_save_connection))
             }
-        },
-        dismissButton = {
-            TextButton(onClick = { if (panel.connectionCancellable) model.cancelConnection() else close() },
-                enabled = enabled || panel.connectionCancellable) { Text(ui(R.string.ui_cancel)) }
-        },
-    )
+            TextButton(onClick = close, enabled = enabled || panel.connectionCancellable) {
+                Text(ui(R.string.ui_cancel))
+            }
+        }
+    }
     ServerHostPrompt(panel.hostConfirmation, model::confirmHost)
 }
 

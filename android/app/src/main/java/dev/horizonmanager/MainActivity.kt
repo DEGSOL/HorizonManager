@@ -131,6 +131,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     var tab by rememberSaveable(currentServer?.id) { mutableIntStateOf(FEED) }
     var manageServers by rememberSaveable { mutableStateOf(false) }
     var editingServerId by rememberSaveable { mutableStateOf("") }
+    val editedServer = panel.servers.find { it.id == editingServerId }
     LaunchedEffect(panel.editedServer) {
         if (panel.editedServer.isNotEmpty()) {
             if (editingServerId == panel.editedServer) editingServerId = ""
@@ -341,6 +342,13 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     }
     var dirtyPage by remember(configPage, currentServer?.id) { mutableStateOf(false) }
     val showingSetupSettings = !panel.ready && tab == SETTINGS
+    fun closeServerEditor() {
+        if (panel.connectionCancellable) model.cancelConnection()
+        else if (!panel.busy && panel.hostConfirmation == null) {
+            editingServerId = ""
+            model.clearServerEditResult()
+        }
+    }
     fun navigateBack() {
         when {
             manageServers -> manageServers = false
@@ -356,10 +364,14 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
 
     val editorBack = remember(configPage) { mutableStateOf<(() -> Unit)?>(null) }
     fun goBack() {
+        if (editedServer != null) {
+            closeServerEditor()
+            return
+        }
         editorBack.value?.let { it(); return }
         if (dirtyPage) confirm = ui(R.string.editorial_discard_prompt) to ::navigateBack else navigateBack()
     }
-    val canGoBack = manageServers || configPage.isNotEmpty() || showingSetupSettings
+    val canGoBack = editedServer != null || manageServers || configPage.isNotEmpty() || showingSetupSettings
     var backProgress by remember { mutableFloatStateOf(0f) }
     PredictiveBackHandler(enabled = canGoBack || tab != FEED) { events ->
         try {
@@ -473,6 +485,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         }
     }
     val destination = when {
+        editedServer != null -> Screen("server_editor", editedServer.id)
         manageServers -> Screen("servers")
         configPage == "archive" && openedIssue != null -> Screen("archived", archiveIssue)
         configPage.isNotEmpty() -> Screen(configPage, route)
@@ -509,6 +522,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
             val screenBack = screen.page !in setOf("feed", "favorites", "setup", "settings") ||
                 (screen.page == "settings" && showingSetupSettings)
             val heading = when (screen.page) {
+                "server_editor" -> ui(R.string.editorial_edit)
                 "servers" -> ui(R.string.ui_servers)
                 "setup" -> ui(R.string.app_name)
                 "settings" -> ui(R.string.settings)
@@ -566,6 +580,9 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                                 verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Reveal(panel.busy) { DottedProgress(Modifier.fillMaxWidth()) }
                                 when (screen.page) {
+                                    "server_editor" -> panel.servers.find { it.id == screen.issueId }?.let { server ->
+                                        SavedServerEditor(server, panel, model, ::closeServerEditor)
+                                    }
                                     "servers" -> {
                                         panel.servers.forEach { server -> key(server.id) {
                                             val endpoint = "${server.user} @ ${server.host} · ${server.port}"
@@ -635,11 +652,6 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                                     }
                                 }
                                 Spacer(Modifier.height(if (showTabs) LocalNavigationClearance.current else 10.dp))
-                                if (screen == currentDestination && screen.page in setOf("servers", "connection")) {
-                                    panel.servers.find { it.id == editingServerId }?.let { server ->
-                                        SavedServerEditor(server, panel, model) { editingServerId = "" }
-                                    }
-                                }
                             }
                         }
                     }
