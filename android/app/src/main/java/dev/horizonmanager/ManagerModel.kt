@@ -132,6 +132,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     private var journalSync = 0L
     private var pendingNotification = ""
     private var installOperation = ""
+    private var agentUpdateDeadline = 0L
     @Volatile private var archiveRun: String? = null
     private class PageRequest(val run: String, val language: String)
     @Volatile private var pageRequest: PageRequest? = null
@@ -282,18 +283,17 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         }
     }
 
-    private suspend fun retryConnection(task: suspend () -> Unit) {
+    private suspend fun <T> retryConnection(task: suspend () -> T): T {
         val intervals = listOf(750L, 2_000L)
         for (interval in intervals) {
             try {
-                task()
-                return
+                return task()
             } catch (error: Problem) {
                 if (!isTransientConnectionFailure(error.code)) throw error
                 delay(interval)
             }
         }
-        task()
+        return task()
     }
 
     private fun store(server: Server) {
@@ -578,6 +578,8 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     fun updateAgent(password: String) {
         val server = state.value.server ?: return
         operation {
+            // The VPS installer is limited to 35 minutes. Allow time to reconnect and verify it.
+            agentUpdateDeadline = android.os.SystemClock.elapsedRealtime() + 36 * 60_000L
             mutable.update { it.copy(updatingAgent = true) }
             try {
                 val stage = shell(server) { session ->
@@ -608,32 +610,31 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         mutable.update { it.copy(agentVersion = version) }
     }
 
-    private suspend fun checkAgentUpdate(server: Server) {
+    private suspend fun checkAgentUpdate(server: Server): String? {
         val report = shell(server) { Ssh.probe(app, it) }
+        mutable.update { it.copy(probe = report) }
         val fresh = report["operation"] != installOperation
         if (fresh && report["install"] == "failed") {
-            mutable.update { it.copy(probe = report, updatingAgent = false) }
             throw Problem(if (report["code"] == "30") "ACTIVE_JOB" else "AGENT_UPDATE_FAILED",
                 report["code"].orEmpty())
         }
-        val version = if (fresh && report["install"] == "success") {
-            try {
-                withAgent(server) { it.health().optString("agent") }
-            } catch (_: Problem) {
-                ""
-            }
-        } else ""
-        if (isAgentVersion(version)) {
-            rememberAgentVersion(server, version)
-            mutable.update { it.copy(probe = report, updatingAgent = false, schema = JSONObject(), problem = "", userProblem = "") }
-            if (agentUpdateAvailable(version)) throw Problem("AGENT_UPDATE_FAILED")
-            updateNotices.trySend(Unit)
-            DigestDeliveryService.reconcile(app, state.value.servers, restart = server.id)
-            DigestWorker.sync(app, server.id, reschedule = true)
-            synchronize(server, everything = true)
-        } else {
-            mutable.update { it.copy(probe = report) }
+        if (!fresh || report["install"] != "success") {
+            if (android.os.SystemClock.elapsedRealtime() >= agentUpdateDeadline) throw Problem("AGENT_UPDATE_FAILED")
+            return null
         }
+        val version = withAgent(server) { it.health().optString("agent") }
+        if (!isAgentVersion(version)) throw Problem("AGENT_PROTOCOL")
+        if (agentUpdateAvailable(version)) throw Problem("AGENT_UPDATE_FAILED")
+        return version
+    }
+
+    private suspend fun finishAgentUpdate(server: Server, version: String) {
+        rememberAgentVersion(server, version)
+        mutable.update { it.copy(updatingAgent = false, schema = JSONObject(), problem = "", userProblem = "") }
+        updateNotices.trySend(Unit)
+        DigestDeliveryService.reconcile(app, state.value.servers, restart = server.id)
+        DigestWorker.sync(app, server.id, reschedule = true)
+        synchronize(server, everything = true)
     }
 
     fun refreshInstallation(quiet: Boolean = true) {
@@ -867,8 +868,19 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         if (quiet && !panel.updatingAgent && panel.connectionProblem.isNotBlank() &&
             !isTransientConnectionFailure(panel.connectionProblem)) return
         operation(quiet, connectionCheck = !panel.updatingAgent) {
-            if (state.value.updatingAgent) checkAgentUpdate(server)
-            else retryConnection { synchronize(server, everything = !quiet || state.value.selectedRun.isEmpty()) }
+            if (state.value.updatingAgent) {
+                val version = try {
+                    retryConnection { checkAgentUpdate(server) }
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    mutable.update { it.copy(updatingAgent = false) }
+                    throw error
+                }
+                if (version != null) finishAgentUpdate(server, version)
+            } else {
+                retryConnection { synchronize(server, everything = !quiet || state.value.selectedRun.isEmpty()) }
+            }
         }
     }
 

@@ -1,6 +1,7 @@
 package dev.horizonmanager
 
 import android.graphics.Bitmap
+import android.os.Looper
 import android.util.LruCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.toArgb
@@ -15,6 +16,8 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.ViewModelProvider
 import java.io.File
+import java.net.InetAddress
+import java.net.ServerSocket
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,6 +29,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowDialog
@@ -282,6 +286,34 @@ class FluidScreensTest {
         compose.runOnIdle { state.value = state.value.copy(agentVersion = BuildConfig.AGENT_VERSION, problem = "") }
         dismissNotificationOffer()
         compose.onNodeWithText(heading).assertIsDisplayed()
+    }
+
+    @Test
+    fun lostVpsConnectionDuringUpdateReturnsToTheLockedRetryScreen() {
+        val heading = loadIssue(agentVersion = "0.1.19", articleCount = 2)
+        val model = ViewModelProvider(compose.activity)[ManagerModel::class.java]
+        @Suppress("UNCHECKED_CAST")
+        val state = ManagerModel::class.java.getDeclaredField("mutable").apply { isAccessible = true }
+            .get(model) as MutableStateFlow<Panel>
+        val address = InetAddress.getByName("127.0.0.1")
+        val port = ServerSocket(0, 1, address).use { it.localPort }
+        compose.runOnIdle {
+            val panel = state.value
+            val unreachable = checkNotNull(panel.server).copy(host = address.hostAddress.orEmpty(), port = port)
+            state.value = panel.copy(server = unreachable, updatingAgent = true)
+        }
+        text(R.string.hovq_agent_updating_title).assertIsDisplayed()
+        compose.runOnIdle {
+            model.refresh()
+            assertTrue(state.value.busy)
+        }
+        compose.waitUntil(15_000) {
+            shadowOf(Looper.getMainLooper()).idle()
+            !state.value.updatingAgent && !state.value.busy
+        }
+        text(R.string.hovq_update_now).assertIsEnabled()
+        compose.onNodeWithText(heading).assertDoesNotExist()
+        assertTrue(state.value.problem, state.value.problem.startsWith("SSH_REFUSED"))
     }
 
     @Test
