@@ -12,7 +12,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -92,14 +91,13 @@ internal fun RouterSettings(
     }
     if (showKeyField) {
         AiHint(ui(R.string.hovq_ai_catalog_key_hint))
-        OutlinedTextField(
-            value = input, onValueChange = {
+        SettingsTextField(
+            ui(R.string.ui_api_key, router.title), input, {
                 input = it
                 error = ""
                 models = null
                 checkedKey = null
-            }, label = { Text(ui(R.string.ui_api_key, router.title)) },
-            modifier = Modifier.fillMaxWidth(), singleLine = true, colors = horizonFieldColors(), shape = horizonFieldShape(), enabled = !loading && !busy,
+            }, enabled = !loading && !busy,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = {
@@ -164,10 +162,7 @@ internal fun RouterPicker(
         title = { Text(ui(if (selectedId.isBlank()) R.string.ui_choose_a_model else R.string.ui_change_model)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                OutlinedTextField(
-                    value = query, onValueChange = { query = it }, label = { Text(ui(R.string.ui_search_by_name)) },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true, colors = horizonFieldColors(), shape = horizonFieldShape(),
-                )
+                SettingsTextField(ui(R.string.ui_search_by_name), query, { query = it })
                 if (loading) DottedProgress(Modifier.fillMaxWidth())
                 if (error.isNotBlank()) AiHint(error, color = MaterialTheme.colorScheme.error)
                 if (!loading && error.isBlank() && filtered.isEmpty()) AiHint(ui(R.string.ui_no_models_found))

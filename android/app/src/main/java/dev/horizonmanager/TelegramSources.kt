@@ -95,10 +95,8 @@ internal fun TelegramSources(config: JSONObject, saved: JSONObject, root: JSONOb
                 val properties = definition(root, channelSchema).getJSONObject("properties")
                 Column(Modifier.fillMaxWidth().heightIn(max = 360.dp)
                     .verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                    OutlinedTextField(value = name, onValueChange = { name = it; touched = true },
-                        label = { Text(ui(R.string.ui_public_channel)) }, singleLine = true, isError = nameError.isNotBlank(),
-                        supportingText = if (nameError.isBlank()) null else ({ Text(nameError) }),
-                        modifier = Modifier.fillMaxWidth())
+                    SettingsTextField(ui(R.string.ui_public_channel), name, { name = it; touched = true },
+                        isError = nameError.isNotBlank(), hint = nameError.takeIf(String::isNotBlank))
                     TextButton(onClick = { advanced = !advanced }) { Text(ui(R.string.ui_advanced_settings)) }
                     Reveal(advanced) {
                         for (field in listOf("fetch_limit", "category", "profile")) {

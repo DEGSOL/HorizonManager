@@ -187,7 +187,7 @@ internal fun ServerSettings(panel: Panel, model: ManagerModel, servers: () -> Un
 
 @Composable
 internal fun NotificationSettings(panel: Panel, model: ManagerModel, allowed: Boolean,
-                                  permission: () -> Unit) {
+                                  permission: () -> Unit, soundSettings: () -> Unit) {
     val server = panel.server ?: return
     val live by DigestDeliveryService.connected.collectAsStateWithLifecycle()
     Tile {
@@ -211,6 +211,7 @@ internal fun NotificationSettings(panel: Panel, model: ManagerModel, allowed: Bo
             }
         }
     }
+    GlassSettingRow(ui(R.string.hovq_digest_sound_settings), ui(R.string.hovq_digest_sound_settings_detail), open = soundSettings)
 }
 
 @OptIn(ExperimentalLayoutApi::class)

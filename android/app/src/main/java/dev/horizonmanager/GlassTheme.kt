@@ -41,7 +41,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -228,15 +227,16 @@ internal fun Switch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, enable
 internal fun horizonFieldShape() = if (LocalSettingsGlass.current) feedGlassShape else OutlinedTextFieldDefaults.shape
 
 @Composable
-internal fun horizonFieldColors() = if (LocalLightGlass.current) OutlinedTextFieldDefaults.colors(
+internal fun horizonFieldColors() = if (LocalSettingsGlass.current || LocalLightGlass.current) OutlinedTextFieldDefaults.colors(
     focusedTextColor = ReadingGlass.text, unfocusedTextColor = ReadingGlass.text, cursorColor = ReadingGlass.text,
     focusedLabelColor = ReadingGlass.text, unfocusedLabelColor = ReadingGlass.muted,
     focusedBorderColor = ReadingGlass.muted, unfocusedBorderColor = ReadingGlass.muted.copy(alpha = .55f),
-    focusedContainerColor = Color.White.copy(alpha = .35f), unfocusedContainerColor = Color.White.copy(alpha = .23f),
+    focusedContainerColor = ReadingGlass.raised, unfocusedContainerColor = ReadingGlass.base,
+    disabledContainerColor = ReadingGlass.base.copy(alpha = .75f), errorContainerColor = ReadingGlass.raised,
+    disabledTextColor = ReadingGlass.muted, errorTextColor = ReadingGlass.text,
     focusedTrailingIconColor = ReadingGlass.text, unfocusedTrailingIconColor = ReadingGlass.muted,
 ) else LocalHorizonPalette.current.let { palette ->
-    val accent = if (LocalSettingsGlass.current) ReadingGlass.raised else palette.link
-    OutlinedTextFieldDefaults.colors(focusedLabelColor = palette.text, focusedBorderColor = accent, cursorColor = accent)
+    OutlinedTextFieldDefaults.colors(focusedLabelColor = palette.text, focusedBorderColor = palette.link, cursorColor = palette.link)
 }
 
 @Composable
@@ -295,10 +295,10 @@ internal fun SettingsPage(
     val barHeight = readingBarHeight()
     var toolbarHeight by remember { mutableStateOf(barHeight) }
     Box(Modifier.fillMaxSize()) {
-        Box(Modifier.matchParentSize().recordScene(scene).background(settingsBackdrop)) {
+        Box(Modifier.matchParentSize().recordScene(scene)) {
             MaterialTheme(colorScheme = settingsColors) {
                 CompositionLocalProvider(LocalSettingsGlass provides true, LocalLightGlass provides true,
-                    LocalContentColor provides ReadingGlass.text, LocalMenuScene provides scene) {
+                    LocalContentColor provides HorizonPalette.text, LocalMenuScene provides scene) {
                     content(statusInset + toolbarHeight + 16.dp)
                 }
             }
@@ -328,7 +328,6 @@ internal fun SettingsPage(
     }
 }
 
-private val settingsBackdrop = Brush.verticalGradient(listOf(Color(0xFFB0B0B0), Color(0xFF909090)))
 private val settingsColors = lightColorScheme(
     primary = ReadingGlass.muted, onPrimary = Color.White,
     primaryContainer = ReadingGlass.raised, onPrimaryContainer = ReadingGlass.text,
@@ -336,7 +335,7 @@ private val settingsColors = lightColorScheme(
     secondaryContainer = ReadingGlass.base, onSecondaryContainer = ReadingGlass.text,
     tertiary = ReadingGlass.muted, onTertiary = Color.White,
     tertiaryContainer = ReadingGlass.base, onTertiaryContainer = ReadingGlass.text,
-    background = Color(0xFFA0A0A0), onBackground = ReadingGlass.text,
+    background = HorizonPalette.background, onBackground = HorizonPalette.text,
     surface = ReadingGlass.base, onSurface = ReadingGlass.text, surfaceTint = Color.Transparent,
     surfaceVariant = ReadingGlass.base, onSurfaceVariant = ReadingGlass.muted,
     surfaceContainerLow = ReadingGlass.raised, surfaceContainer = ReadingGlass.base,
@@ -361,8 +360,12 @@ internal fun Tile(modifier: Modifier = Modifier, accented: Boolean = false,
         Modifier.fillMaxWidth().then(surface)
             .then(modifier).padding(horizontal = 15.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(9.dp),
-        content = content,
-    )
+    ) {
+        if (light && LocalSettingsGlass.current) {
+            val column = this
+            CompositionLocalProvider(LocalContentColor provides ReadingGlass.text) { column.content() }
+        } else content()
+    }
 }
 
 @Composable

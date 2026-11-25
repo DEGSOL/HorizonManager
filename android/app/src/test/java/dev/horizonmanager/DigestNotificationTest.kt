@@ -1,5 +1,9 @@
 package dev.horizonmanager
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.media.RingtoneManager
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -106,5 +110,35 @@ class BackgroundDigestDeliveryTest {
         DigestNotifications.marker(app, server, second, second)
         assertEquals(second, DigestNotifications.currentMarker(app, server.id))
         assertTrue(notifications.activeNotifications.isEmpty())
+    }
+
+    @Test
+    fun readyDigestsUseTheDefaultSoundAndEachGetsANewIdentityAlongsideTheSilentService() {
+        val manager = app.getSystemService(NotificationManager::class.java)
+        org.robolectric.Shadows.shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        val serviceId = 0x484f5651
+        manager.createNotificationChannel(NotificationChannel("horizon-live", "Monitor", NotificationManager.IMPORTANCE_LOW))
+        manager.notify(serviceId, Notification.Builder(app, "horizon-live").setOngoing(true).build())
+        manager.createNotificationChannel(NotificationChannel("horizon", "Legacy", NotificationManager.IMPORTANCE_LOW)
+            .apply { setSound(null, null) })
+
+        val initial = "a".repeat(32)
+        val first = "b".repeat(32)
+        val next = "c".repeat(32)
+        DigestNotifications.marker(app, server, null, initial)
+        DigestNotifications.marker(app, server, initial, first)
+
+        val ready = manager.activeNotifications.single { it.notification.channelId != "horizon-live" }
+        assertTrue(ready.tag.endsWith(first))
+        val channel = manager.getNotificationChannel(ready.notification.channelId)
+        assertEquals(NotificationManager.IMPORTANCE_DEFAULT, channel.importance)
+        assertEquals(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION), channel.sound)
+        assertEquals(0, ready.notification.flags and (Notification.FLAG_ONGOING_EVENT or Notification.FLAG_ONLY_ALERT_ONCE))
+
+        DigestNotifications.marker(app, server, first, next)
+        val active = manager.activeNotifications
+        assertEquals(2, active.size)
+        assertTrue(active.single { it.id == serviceId }.isOngoing)
+        assertTrue(active.single { it.notification.channelId == channel.id }.tag.endsWith(next))
     }
 }

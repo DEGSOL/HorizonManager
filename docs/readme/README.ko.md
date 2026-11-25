@@ -1,4 +1,4 @@
-# Hovq 0.6.4
+# Hovq 0.6.5
 
 [Русский](../../README.md) · [English](README.en.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Italiano](README.it.md) · [Español](README.es.md) · [日本語](README.ja.md) · **한국어** · [简体中文](README.zh.md) · [Қазақша](README.kk.md) · [Татарча](README.tt.md)
 
@@ -26,7 +26,7 @@ Hovq는 자신의 VPS에 [Horizon](https://github.com/Thysrael/Horizon)을 설�
 
 **설정 → 인터페이스 → 알림**에서 새 다이제스트 알림을 켜고 Android에서 허용합니다. Hovq는 SSH 또는 설정된 HTTPS로 VPS와 직접 연결을 유지합니다. 모니터링 중에는 Android에서 무음 서비스 알림이 표시되고, 다이제스트가 준비되면 별도 알림이 도착합니다. 연결이 끊기면 다시 연결해 새 발행물이 있는지 확인합니다.
 
-동일한 인증서로 서명된 Hovq 0.4.5–0.6.3 위에 APK를 설치할 수 있습니다. 0.4.4 이하에서는 새로 설치해야 합니다. 기존 VPS는 Hovq에서 에이전트를 0.1.21로 업데이트합니다. 요청 시 보강 모드에서도 표현이 다른 기사가 같은 사건을 다루는지 확인합니다. 각 프로필의 주제 중복 제거 설정은 계속 적용됩니다.
+동일한 인증서로 서명된 Hovq 0.4.5–0.6.4 위에 APK를 설치할 수 있습니다. 0.4.4 이하에서는 새로 설치해야 합니다. 기존 VPS는 Hovq에서 에이전트를 0.1.21로 업데이트합니다. 요청 시 보강 모드에서도 표현이 다른 기사가 같은 사건을 다루는지 확인합니다. 각 프로필의 주제 중복 제거 설정은 계속 적용됩니다.
 
 ## 소스에서 빌드
 
@@ -41,4 +41,4 @@ cd android
 
 `HM_RELEASE_KEYSTORE`, `HM_RELEASE_KEY_ALIAS`, `HM_RELEASE_STORE_PASSWORD`, `HM_RELEASE_KEY_PASSWORD`
 
-[이 릴리스의 앱 및 에이전트 소스](https://github.com/DEGSOL/HorizonManager/tree/v0.6.4) · [아키텍처 및 API](https://github.com/DEGSOL/HorizonManager/blob/v0.6.4/docs/ARCHITECTURE.md) · [테스트](https://github.com/DEGSOL/HorizonManager/blob/v0.6.4/docs/TESTING.md)
+[이 릴리스의 앱 및 에이전트 소스](https://github.com/DEGSOL/HorizonManager/tree/v0.6.5) · [아키텍처 및 API](https://github.com/DEGSOL/HorizonManager/blob/v0.6.5/docs/ARCHITECTURE.md) · [테스트](https://github.com/DEGSOL/HorizonManager/blob/v0.6.5/docs/TESTING.md)

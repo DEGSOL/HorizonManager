@@ -281,6 +281,11 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                 .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, ctx.packageName))
         }
     }
+    fun openDigestSoundSettings() {
+        notificationSettings.launch(Intent(android.provider.Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+            .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, ctx.packageName)
+            .putExtra(android.provider.Settings.EXTRA_CHANNEL_ID, DigestNotifications.readyChannel(ctx)))
+    }
     DisposableEffect(lifecycle, ctx) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
@@ -620,7 +625,8 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                                     "server_settings" -> ServerSettings(panel, model, { manageServers = true }, { openSettings("secrets") }) {
                                         description, action -> confirm = description to action
                                     }
-                                    "alerts" -> NotificationSettings(panel, model, notificationAllowed, ::requestNotifications)
+                                    "alerts" -> NotificationSettings(panel, model, notificationAllowed, ::requestNotifications,
+                                        ::openDigestSoundSettings)
                                     "maintenance" -> ServerMaintenance(panel, model, ::openSettings)
                                     "transfer" -> TransferSettings(panel,
                                         { device -> backupDialog = if (device) "device_export" else "vps_export" },
@@ -672,15 +678,14 @@ internal fun PasswordDialog(title: String, detail: String, minimum: Int = 0, max
 @Composable
 internal fun PasswordField(title: String, value: String, enabled: Boolean = true, light: Boolean = false,
                            change: (String) -> Unit) {
-    val colors = if (light) OutlinedTextFieldDefaults.colors(
+    val colors = if (light && !LocalSettingsGlass.current) OutlinedTextFieldDefaults.colors(
         focusedTextColor = ReadingGlass.text, unfocusedTextColor = ReadingGlass.text, cursorColor = ReadingGlass.text,
         focusedLabelColor = ReadingGlass.text, unfocusedLabelColor = ReadingGlass.muted,
         focusedBorderColor = ReadingGlass.muted, unfocusedBorderColor = ReadingGlass.muted.copy(alpha = .55f),
         disabledTextColor = ReadingGlass.muted,
     ) else horizonFieldColors()
-    OutlinedTextField(value, change, label = { Text(title) }, modifier = Modifier.fillMaxWidth(), enabled = enabled,
-        singleLine = true, colors = colors, shape = if (light) feedGlassShape else horizonFieldShape(),
-        visualTransformation = PasswordVisualTransformation())
+    SettingsTextField(title, value, change, enabled = enabled, colors = colors,
+        shape = if (light) feedGlassShape else horizonFieldShape(), visualTransformation = PasswordVisualTransformation())
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -767,7 +772,7 @@ private fun Setup(panel: Panel, model: ManagerModel) {
         val resources = (probe["memory_kb"]?.toLongOrNull() ?: 0) >= 442368 && (probe["disk_kb"]?.toLongOrNull() ?: 0) >= 1572864
         if (!supported) Text(ui(R.string.ui_installation_requires_ubuntu_24_04_or))
         if (!resources) Text(ui(R.string.ui_at_least_432_mib_of_total))
-        if (install == "failed") Text(installError(probe["code"], step), color = MaterialTheme.colorScheme.error)
+        if (install == "failed") Text(installError(probe["code"], step), color = HorizonPalette.danger)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (probe["agent_problem"] == "AUTH_REQUIRED") {
                 OutlinedButton(onClick = { approveAttach = true }, enabled = !panel.busy) { Text(ui(R.string.ui_connect_an_existing_agent)) }

@@ -124,7 +124,7 @@ internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boo
             ) {
                 Text(ui(R.string.mr_set_default))
             }
-        else Text(ui(R.string.mr_default_profile), color = MaterialTheme.colorScheme.primary)
+        else Text(ui(R.string.mr_default_profile), color = HorizonPalette.muted)
         val allRules = settings.optJSONObject("profile_settings") ?: JSONObject()
         val rules = allRules.optJSONObject(editing) ?: JSONObject()
         fun rule(name: String, value: Any) {
@@ -206,15 +206,8 @@ internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boo
                     }
                 }
         }
-        Row {
-            TextButton(onClick = { add(doc, true) }) { Text(ui(R.string.ui_duplicate_and_edit)) }
-            TextButton(
-                enabled = editing != active && profiles.size > 1,
-                onClick = { remove = true },
-            ) {
-                Text(ui(R.string.ui_remove))
-            }
-        }
+        SettingsActionPair(R.string.ui_duplicate_and_edit, R.string.ui_remove, !panel.busy,
+            editing != active && profiles.size > 1 && !panel.busy, { add(doc, true) }, { remove = true })
         if (remove)
             HorizonAlertDialog(
                 onDismissRequest = { remove = false },

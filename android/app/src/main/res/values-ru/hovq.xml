@@ -17,11 +17,13 @@
     <string name="hovq_import">Импорт</string>
     <string name="hovq_device_restore_password">Введи пароль от файла Hovq. Совпадающие подключения обновятся, а остальные сохранённые подключения останутся в списке.</string>
     <string name="hovq_vps_restore_password">Введи пароль от файла Horizon. Импорт заменит настройки и расписание на выбранном VPS.</string>
-    <string name="hovq_digest_channel">Новые дайджесты</string>
+    <string name="hovq_digest_channel">Готовые дайджесты</string>
     <string name="hovq_digest_channel_detail">Уведомления, когда Horizon заканчивает подготовку выпуска.</string>
     <string name="hovq_polling_active">Пока прямое подключение недоступно, Hovq проверяет новые выпуски в фоне.</string>
     <string name="hovq_alerts_blocked">Уведомления выключены в настройках Android.</string>
     <string name="hovq_existing_horizon">Horizon обнаружен по пути %1$s.</string>
     <string name="hovq_agent_update_success">Агент успешно обновлён</string>
     <string name="hovq_listener_connected">Постоянное подключение к VPS активно.</string>
+    <string name="hovq_digest_sound_settings">Звук готовых дайджестов</string>
+    <string name="hovq_digest_sound_settings_detail">Выбор звука в настройках Android</string>
 </resources>

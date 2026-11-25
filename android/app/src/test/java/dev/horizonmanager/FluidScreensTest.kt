@@ -5,6 +5,11 @@ import android.graphics.Color as AndroidColor
 import android.os.Looper
 import android.util.LruCache
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.semantics.SemanticsActions
@@ -473,26 +478,20 @@ class FluidScreensTest {
         loadIssue(articleCount = 4)
         statusInset(44)
         val density = compose.activity.resources.displayMetrics.density
-        fun checkGlass(name: String, lightPage: Boolean = false) {
+        fun checkGlass(name: String) {
             val bitmap = snapshot(name)
             val x = (4 * density).toInt()
             val systemY = (20 * density).toInt()
             val contentY = (52 * density).toInt()
             val content = bitmap.getPixel(x, contentY)
             assertNotEquals("The system status bar still has a glass backing", content, bitmap.getPixel(x, systemY))
-            if (lightPage) {
-                val page = bitmap.getPixel(x, (75 * density).toInt())
-                assertEquals("Status blur stays above the light page",
-                    AndroidColor.red(page).toFloat(), AndroidColor.red(content).toFloat(), 3f)
-            } else {
-                assertEquals("Status blur stays above the app content", HorizonPalette.background.toArgb(), content)
-            }
+            assertEquals("Status blur stays above the app content", HorizonPalette.background.toArgb(), content)
         }
         tab(R.string.settings)
-        checkGlass("24-status-settings", lightPage = true)
+        checkGlass("24-status-settings")
         text(R.string.mr_interface).performClick()
         text(R.string.hovq_icon).assertIsDisplayed()
-        checkGlass("25-status-settings-section", lightPage = true)
+        checkGlass("25-status-settings-section")
         back()
         tab(R.string.favorites_title)
         text(R.string.favorites_empty).assertIsDisplayed()
@@ -708,7 +707,7 @@ class FluidScreensTest {
         text(R.string.mr_news).performClick()
         text(R.string.settings_digest_rules).performClick()
         text(R.string.digest_basic_title).assertIsDisplayed()
-        val maximum = compose.onNode(hasSetTextAction() and hasText(ui(R.string.hovq_headline_max)))
+        val maximum = compose.onNode(hasSetTextAction() and hasContentDescription(ui(R.string.hovq_headline_max)))
         maximum.performScrollTo().performTextReplacement("2")
         text(R.string.hovq_headline_save).performScrollTo().assertIsNotEnabled()
         maximum.performScrollTo().performTextReplacement("8")
@@ -1070,6 +1069,43 @@ class FluidScreensTest {
         feed.performClick()
         feed.assertIsSelected()
         waitForCount(12)
+    }
+
+    @Test
+    @Config(qualifiers = "ru-rRU-w320dp-h720dp-xhdpi")
+    fun settingsFieldLabelsStayAboveTheInputsOnASmallScreenWithLargeText() {
+        val originalScale = org.robolectric.RuntimeEnvironment.getFontScale()
+        try {
+            org.robolectric.RuntimeEnvironment.setFontScale(1.8f)
+            compose.activityRule.scenario.recreate()
+            val key = "Имя переменной окружения, в которой хранится ключ API"
+            val password = ui(R.string.ui_ssh_password)
+            compose.runOnUiThread {
+                compose.activity.setContent {
+                    HorizonTheme {
+                        SettingsPage(ui(R.string.settings), back = null) { top ->
+                            Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = top),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Tile {
+                                    ValueField(key, "", {}, help = R.string.secrets_custom_help)
+                                    PasswordField(password, "secret") {}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            for (title in listOf(key, password)) {
+                val label = compose.onNodeWithText(title).assertIsDisplayed().getUnclippedBoundsInRoot()
+                val field = compose.onNode(hasSetTextAction() and hasContentDescription(title))
+                val bounds = field.assertIsDisplayed().getUnclippedBoundsInRoot()
+                assertTrue(label.bottom < bounds.top)
+                assertTrue(bounds.right <= 320.dp)
+            }
+            snapshot("34-settings-fields-large-type")
+        } finally {
+            org.robolectric.RuntimeEnvironment.setFontScale(originalScale)
+        }
     }
 
     @Test

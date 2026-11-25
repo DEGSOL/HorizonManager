@@ -146,12 +146,11 @@ internal fun ScheduleForm(panel: Panel, model: ManagerModel, dirtyChange: (Boole
                             { Text(ui(R.string.schedule_hours, preset)) }, enabled = !panel.busy, colors = chipColors)
                     }
                 }
-                OutlinedTextField(hours, { value -> hours = value.filter { it in '0'..'9' }.take(3) },
-                    modifier = Modifier.fillMaxWidth(), label = { Text(ui(R.string.ui_interval_from_1_to_168_hours)) },
+                SettingsTextField(ui(R.string.ui_interval_from_1_to_168_hours), hours,
+                    { value -> hours = value.filter { it in '0'..'9' }.take(3) },
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                         keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
-                    isError = (parsedHours ?: 0) !in 1..168, singleLine = true, enabled = !panel.busy,
-                    colors = horizonFieldColors(), shape = horizonFieldShape())
+                    isError = (parsedHours ?: 0) !in 1..168, enabled = !panel.busy)
                 if (supportsIntervalStart) {
                     GlassSettingRow(ui(R.string.schedule_interval_start),
                         if (intervalStart.isBlank()) ui(R.string.schedule_interval_pick_start)
@@ -266,8 +265,7 @@ private fun ScheduleZonePicker(current: String, close: () -> Unit, choose: (Stri
     ) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
             Text(ui(R.string.ui_time_zone), style = MaterialTheme.typography.titleLarge)
-            OutlinedTextField(query, { query = it }, label = { Text(ui(R.string.schedule_zone_search)) },
-                modifier = Modifier.fillMaxWidth(), singleLine = true, colors = horizonFieldColors(), shape = horizonFieldShape())
+            SettingsTextField(ui(R.string.schedule_zone_search), query, { query = it })
             if (device != null) TextButton(onClick = { choose(device) }) { Text(ui(R.string.schedule_device_zone)) }
             if (visible.isEmpty()) Text(ui(R.string.schedule_zone_empty), Modifier.padding(bottom = 16.dp))
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {

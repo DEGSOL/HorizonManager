@@ -23,11 +23,8 @@ internal fun SettingsExpandable(title: Int, description: Int, content: @Composab
 @Composable
 private fun CountField(title: Int, value: String, update: (String) -> Unit, valid: Boolean,
                        hint: Int? = null, help: Int? = null) {
-    OutlinedTextField(value, { update(it.filter(Char::isDigit).take(9)) }, modifier = Modifier.fillMaxWidth(),
-        label = { Text(ui(title)) }, singleLine = true, isError = !valid,
-        supportingText = if (hint == null) null else ({ Text(ui(hint)) }),
-        trailingIcon = if (help == null) null else ({ SettingHelp(ui(title), help) }),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), colors = horizonFieldColors(), shape = horizonFieldShape())
+    SettingsTextField(ui(title), value, { update(it.filter(Char::isDigit).take(9)) },
+        isError = !valid, help = help, hint = hint?.let { ui(it) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
 }
 
 @Composable

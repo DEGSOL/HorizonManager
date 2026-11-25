@@ -6,13 +6,16 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextFieldColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -22,7 +25,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import org.json.JSONArray
 import org.json.JSONObject
@@ -168,11 +175,47 @@ internal fun Choice(
 @Composable
 internal fun ValueField(title: String, text: String, set: (String) -> Unit, numeric: Boolean = false,
                         multiline: Boolean = false, help: Int? = null, enabled: Boolean = true) {
-    OutlinedTextField(value = text, onValueChange = set, label = { Text(title) },
-        modifier = Modifier.fillMaxWidth(), singleLine = !multiline, colors = horizonFieldColors(), shape = horizonFieldShape(), enabled = enabled,
-        trailingIcon = if (help != null) ({ SettingHelp(title, help) }) else null,
-        minLines = if (multiline) 3 else 1, maxLines = if (multiline) 10 else 1,
+    SettingsTextField(title, text, set, enabled = enabled, multiline = multiline, help = help,
         keyboardOptions = KeyboardOptions(keyboardType = if (numeric) KeyboardType.Decimal else KeyboardType.Text))
+}
+
+@Composable
+internal fun SettingsTextField(
+    title: String, value: String, onChange: (String) -> Unit, enabled: Boolean = true, multiline: Boolean = false,
+    isError: Boolean = false, help: Int? = null, hint: String? = null, keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default, visualTransformation: VisualTransformation = VisualTransformation.None,
+    colors: TextFieldColors = horizonFieldColors(), shape: Shape = horizonFieldShape(),
+) {
+    val externalLabel = LocalSettingsGlass.current
+    val input: @Composable () -> Unit = {
+        OutlinedTextField(value, onChange,
+            modifier = Modifier.fillMaxWidth().then(if (externalLabel) Modifier.semantics { contentDescription = title } else Modifier),
+            label = if (externalLabel) null else ({ Text(title) }), enabled = enabled, isError = isError,
+            singleLine = !multiline, minLines = if (multiline) 3 else 1, maxLines = if (multiline) 10 else 1,
+            trailingIcon = if (!externalLabel && help != null) ({ SettingHelp(title, help) }) else null,
+            supportingText = if (!externalLabel && hint != null) ({ Text(hint) }) else null,
+            keyboardOptions = keyboardOptions, keyboardActions = keyboardActions,
+            visualTransformation = visualTransformation, colors = colors, shape = shape)
+    }
+    if (externalLabel) {
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.fillMaxWidth().padding(start = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(title, Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
+                if (help != null) SettingHelp(title, help)
+            }
+            input()
+            if (hint != null) {
+                val onBackdrop = LocalContentColor.current == HorizonPalette.text
+                val color = when {
+                    isError && onBackdrop -> HorizonPalette.danger
+                    isError -> MaterialTheme.colorScheme.error
+                    onBackdrop -> HorizonPalette.muted
+                    else -> ReadingGlass.muted
+                }
+                SettingNote(hint, color)
+            }
+        }
+    } else input()
 }
 
 @Composable
@@ -293,13 +336,11 @@ internal fun EditValue(
                                         { new -> onChange(JSONArray(array.toString()).put(index, new)) }, options,
                                         (item as? JSONObject)?.optString("name")?.ifBlank { null }
                                             ?: (item as? JSONObject)?.optString("channel")?.ifBlank { null } ?: "${index + 1}. $title")
-                                    Row {
-                                        TextButton(enabled = field != "profile" || array.length() > 1,
-                                            onClick = { onChange(JSONArray(array.toString()).apply { remove(index) }) }) { Text(ui(R.string.ui_remove)) }
-                                        TextButton(enabled = index > 0, onClick = {
+                                    SettingsActionPair(R.string.ui_remove, R.string.ui_move_up,
+                                        field != "profile" || array.length() > 1, index > 0,
+                                        { onChange(JSONArray(array.toString()).apply { remove(index) }) }, {
                                             onChange(JSONArray(array.toString()).put(index, array.get(index - 1)).put(index - 1, array.get(index)))
-                                        }) { Text(ui(R.string.ui_move_up)) }
-                                    }
+                                        })
                                 }
                             }
                             val nextProfile = profileIds.firstOrNull { it !in selectedProfiles }

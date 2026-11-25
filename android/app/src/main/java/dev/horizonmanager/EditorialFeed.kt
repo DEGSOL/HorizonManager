@@ -783,7 +783,7 @@ internal fun ArchiveScreen(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         item("summary") {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Tile {
                 SettingNote(ui(R.string.hovq_archive_visibility, panel.collectionHours))
                 if (panel.connectionProblem.isNotBlank()) {
                     Text(

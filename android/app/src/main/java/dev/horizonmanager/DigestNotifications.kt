@@ -7,6 +7,8 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
+import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
@@ -64,7 +66,7 @@ internal object DigestNotifications {
         val seen = runCatching { JSONArray(value(app, server.id, "seen")).strings() }.getOrDefault(emptyList())
         if (id in seen) return true
         val posted = try {
-            notify(app, server.id, server.name, ui(R.string.digest_ready))
+            notify(app, server.id, id, server.name, ui(R.string.digest_ready))
         } catch (_: SecurityException) {
             false
         }
@@ -72,32 +74,56 @@ internal object DigestNotifications {
         return posted
     }
 
-    private const val CHANNEL = "horizon"
+    private const val LEGACY_CHANNEL = "horizon"
+    private const val READY_CHANNEL = "horizon-digest-ready"
+    private const val READY_NOTICE = 0x484451
 
     fun deliveryAllowed(context: Context): Boolean {
         if (Build.VERSION.SDK_INT >= 33 &&
             context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return false
         val manager = context.getSystemService(NotificationManager::class.java)
-        return manager.areNotificationsEnabled() &&
-            manager.getNotificationChannel(CHANNEL)?.importance != NotificationManager.IMPORTANCE_NONE
+        val channel = manager.getNotificationChannel(READY_CHANNEL) ?: manager.getNotificationChannel(LEGACY_CHANNEL)
+        return manager.areNotificationsEnabled() && channel?.importance != NotificationManager.IMPORTANCE_NONE
     }
 
-    private fun notify(context: Context, server: String, title: String, text: String): Boolean {
+    fun readyChannel(context: Context): String {
+        val manager = context.getSystemService(NotificationManager::class.java)
+        if (manager.getNotificationChannel(READY_CHANNEL) != null) return READY_CHANNEL
+        val legacy = manager.getNotificationChannel(LEGACY_CHANNEL)
+        val keepImportance = legacy != null && (legacy.importance == NotificationManager.IMPORTANCE_NONE ||
+            if (Build.VERSION.SDK_INT >= 29) legacy.hasUserSetImportance() else true)
+        val keepSound = legacy != null && (Build.VERSION.SDK_INT < 30 || legacy.hasUserSetSound())
+        val importance = if (keepImportance) requireNotNull(legacy).importance else NotificationManager.IMPORTANCE_DEFAULT
+        val sound = if (keepSound) legacy?.sound else RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+        val audio = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
+        manager.createNotificationChannel(NotificationChannel(READY_CHANNEL, ui(R.string.hovq_digest_channel), importance).apply {
+            description = ui(R.string.hovq_digest_channel_detail)
+            setSound(sound, if (keepSound) legacy?.audioAttributes ?: audio else audio)
+        })
+        return READY_CHANNEL
+    }
+
+    private fun notify(context: Context, server: String, digest: String, title: String, text: String): Boolean {
         if (!deliveryAllowed(context)) return false
         val manager = context.getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(NotificationChannel(CHANNEL,
-            ui(R.string.hovq_digest_channel), NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = ui(R.string.hovq_digest_channel_detail)
-            })
+        val channel = readyChannel(context)
+        val prefix = "digest-ready:$server:"
+        val tag = prefix + digest
+        val older = manager.activeNotifications.filter {
+            (it.notification.channelId == channel && it.id == READY_NOTICE && it.tag?.startsWith(prefix) == true && it.tag != tag) ||
+                (it.notification.channelId == LEGACY_CHANNEL && it.id == server.hashCode() && it.tag == null)
+        }
         val target = Intent(context, MainActivity::class.java)
             .setData(Uri.parse("horizon-manager://server/$server"))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         val intent = PendingIntent.getActivity(context, 0, target, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        manager.notify(server.hashCode(), NotificationCompat.Builder(context, CHANNEL)
+        manager.notify(tag, READY_NOTICE, NotificationCompat.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_hovq_notification).setContentTitle(title).setContentText(text)
-            .setCategory(NotificationCompat.CATEGORY_STATUS).setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setCategory(NotificationCompat.CATEGORY_EVENT).setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setContentIntent(intent).setAutoCancel(true).build())
+        older.forEach { manager.cancel(it.tag, it.id) }
         return true
     }
 

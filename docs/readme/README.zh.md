@@ -1,4 +1,4 @@
-# Hovq 0.6.4
+# Hovq 0.6.5
 
 [Русский](../../README.md) · [English](README.en.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Italiano](README.it.md) · [Español](README.es.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · **简体中文** · [Қазақша](README.kk.md) · [Татарча](README.tt.md)
 
@@ -26,7 +26,7 @@ Hovq 是一款 Android 应用，用于在自己的 VPS 上安装和管理 [Horiz
 
 在 **设置 → 界面 → 通知** 中开启新摘要通知，并在 Android 中授权。Hovq 通过 SSH 或已配置的 HTTPS 与 VPS 保持直接连接。监控期间 Android 会显示静默的服务通知，摘要完成时另行通知。连接断开后，Hovq 会重新连接并检查是否有新一期摘要。
 
-APK 可覆盖安装证书相同的 Hovq 0.4.5–0.6.3。0.4.4 及更早版本需要全新安装。已连接的 VPS 可在 Hovq 中将代理更新到 0.1.21。即使采用按需补充模式，应用也会识别措辞不同却报道同一事件的文章。各配置的主题去重设置仍然生效。
+APK 可覆盖安装证书相同的 Hovq 0.4.5–0.6.4。0.4.4 及更早版本需要全新安装。已连接的 VPS 可在 Hovq 中将代理更新到 0.1.21。即使采用按需补充模式，应用也会识别措辞不同却报道同一事件的文章。各配置的主题去重设置仍然生效。
 
 ## 从源码构建
 
@@ -41,4 +41,4 @@ cd android
 
 `HM_RELEASE_KEYSTORE`, `HM_RELEASE_KEY_ALIAS`, `HM_RELEASE_STORE_PASSWORD`, `HM_RELEASE_KEY_PASSWORD`
 
-[此版本的应用与代理源码](https://github.com/DEGSOL/HorizonManager/tree/v0.6.4) · [架构和 API](https://github.com/DEGSOL/HorizonManager/blob/v0.6.4/docs/ARCHITECTURE.md) · [测试](https://github.com/DEGSOL/HorizonManager/blob/v0.6.4/docs/TESTING.md)
+[此版本的应用与代理源码](https://github.com/DEGSOL/HorizonManager/tree/v0.6.5) · [架构和 API](https://github.com/DEGSOL/HorizonManager/blob/v0.6.5/docs/ARCHITECTURE.md) · [测试](https://github.com/DEGSOL/HorizonManager/blob/v0.6.5/docs/TESTING.md)

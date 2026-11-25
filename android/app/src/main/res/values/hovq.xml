@@ -17,11 +17,13 @@
     <string name="hovq_import">Import</string>
     <string name="hovq_device_restore_password">Enter the password for this Hovq backup. Existing connections with matching IDs are updated, and other saved connections are kept.</string>
     <string name="hovq_vps_restore_password">Enter the password for the Horizon backup. Import replaces the settings and schedule on the active VPS.</string>
-    <string name="hovq_digest_channel">New digests</string>
+    <string name="hovq_digest_channel">Ready digests</string>
     <string name="hovq_digest_channel_detail">Alerts when Horizon finishes preparing a new issue.</string>
     <string name="hovq_polling_active">Checking for new digests in the background while the direct connection is unavailable.</string>
     <string name="hovq_alerts_blocked">Notifications are off in Android settings.</string>
     <string name="hovq_existing_horizon">Horizon detected at %1$s.</string>
     <string name="hovq_agent_update_success">Agent updated successfully</string>
     <string name="hovq_listener_connected">Live connection to your VPS is active.</string>
+    <string name="hovq_digest_sound_settings">Sound for ready digests</string>
+    <string name="hovq_digest_sound_settings_detail">Open Android notification sound settings</string>
 </resources>
