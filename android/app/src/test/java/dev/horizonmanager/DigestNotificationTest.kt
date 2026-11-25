@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.Instant
 import java.util.Locale
 
 class DigestNotificationTest {
@@ -14,6 +15,18 @@ class DigestNotificationTest {
         assertTrue(validDigestMarker("run-20261125T011200Z-aabbccdd"))
         assertFalse(validDigestMarker("a".repeat(32) + "&wait=0"))
         assertFalse(validDigestMarker("a".repeat(31)))
+    }
+
+    @Test
+    fun checksNearTheScheduleAndBacksOffDuringLongPreparation() {
+        val now = Instant.parse("2026-11-25T03:00:00Z")
+        val next = now.plusSeconds(3600)
+        assertEquals(null, nextDigestCheck(now, null, null))
+        assertEquals(next.plusSeconds(12), nextDigestCheck(now, next, null))
+        assertEquals(now.plusSeconds(15), nextDigestCheck(now, now.minusSeconds(90), null))
+        assertEquals(now.plusSeconds(25), nextDigestCheck(now, next, now.minusSeconds(60)))
+        assertEquals(now.plusSeconds(55), nextDigestCheck(now, next, now.minusSeconds(240)))
+        assertEquals(now.plusSeconds(110), nextDigestCheck(now, next, now.minusSeconds(900)))
     }
 
     @Test
@@ -39,6 +52,7 @@ class DigestNotificationTest {
         assertTrue(agentUpdateAvailable("0.1.13"))
         assertTrue(agentUpdateAvailable("0.1.14"))
         assertTrue(agentUpdateAvailable("0.1.15"))
+        assertTrue(agentUpdateAvailable("0.1.16"))
         assertFalse(agentUpdateAvailable(BuildConfig.AGENT_VERSION))
     }
 }

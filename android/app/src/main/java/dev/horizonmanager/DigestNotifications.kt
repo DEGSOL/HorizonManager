@@ -17,6 +17,9 @@ import org.json.JSONObject
 import java.time.Instant
 import java.util.UUID
 
+private val digestId = Regex("(?:[a-f0-9]{32}|run-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{8})")
+internal fun validDigestMarker(value: String): Boolean = value.isEmpty() || digestId.matches(value)
+
 internal object DigestNotifications {
     private fun prefs(app: Context) = app.getSharedPreferences("background_events", Context.MODE_PRIVATE)
     private fun value(app: Context, id: String, field: String) = prefs(app).getString("$id:$field", "").orEmpty()
@@ -79,7 +82,11 @@ internal object DigestNotifications {
             manager.getNotificationChannel(CHANNEL)?.importance != NotificationManager.IMPORTANCE_NONE
     }
 
-    fun notify(context: Context, server: String, title: String, text: String): Boolean {
+    fun removeLegacyWaitingNotice(context: Context) {
+        context.getSystemService(NotificationManager::class.java).cancel(0x484f5651)
+    }
+
+    private fun notify(context: Context, server: String, title: String, text: String): Boolean {
         if (!deliveryAllowed(context)) return false
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(NotificationChannel(CHANNEL,

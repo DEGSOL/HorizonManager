@@ -6,7 +6,7 @@
     <string name="hovq_headline_save">Сохранить длину заголовка</string>
     <string name="hovq_headline_upgrade">Обновите агент на VPS, чтобы менять длину заголовков.</string>
     <string name="hovq_digest_notifications">Уведомления о новых дайджестах</string>
-    <string name="hovq_push_delivery_help">Hovq ждёт новые выпуски на вашем VPS. При прямой доставке Android показывает тихое служебное уведомление.</string>
+    <string name="hovq_push_delivery_help">Hovq проверяет VPS в фоне. Около запуска и во время подготовки дайджеста проверки выполняются чаще. Android может их отложить.</string>
     <string name="hovq_notification_offer">Разрешите уведомления Android, чтобы узнавать о новых дайджестах, когда Hovq закрыт.</string>
     <string name="hovq_allow_notifications">Разрешить уведомления</string>
     <string name="hovq_later">Позже</string>
@@ -15,7 +15,4 @@
     <string name="hovq_update_sudo">Пароль sudo, если требуется</string>
     <string name="hovq_open_photo">Открыть изображение</string>
     <string name="prepare_digest_now">Подготовить дайджест сейчас</string>
-    <string name="hovq_listener_title">Доставка дайджестов</string>
-    <string name="hovq_listener_detail">Hovq ждёт новые выпуски на вашем VPS.</string>
-    <string name="hovq_live_needs_update">Для прямой доставки обновите агент на VPS.</string>
 </resources>

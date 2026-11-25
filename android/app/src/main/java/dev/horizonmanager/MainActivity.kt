@@ -261,15 +261,15 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 notificationAllowed = DigestNotifications.deliveryAllowed(ctx)
-                scope.launch { DigestDeliveryService.restore(ctx.applicationContext) }
+                if (notificationAllowed) model.checkDigestNotifications()
             }
         }
         lifecycle.lifecycle.addObserver(observer)
         onDispose { lifecycle.lifecycle.removeObserver(observer) }
     }
     LaunchedEffect(notificationAllowed) {
-        DigestDeliveryService.restore(ctx.applicationContext)
-        if (notificationAllowed) DigestWorker.catchUp(ctx)
+        DigestNotifications.removeLegacyWaitingNotice(ctx)
+        if (notificationAllowed) model.checkDigestNotifications()
     }
     LaunchedEffect(enableDigestAfterPermission, notificationAllowed, currentServer, panel.ready, panel.busy) {
         if (enableDigestAfterPermission && notificationAllowed && panel.ready && !panel.busy && currentServer != null) {

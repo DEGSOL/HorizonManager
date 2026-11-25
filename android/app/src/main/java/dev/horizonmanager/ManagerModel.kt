@@ -292,7 +292,8 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         mutable.update { it.copy(servers = profiles, server = server, ready = server.installed) }
         if (server != previous && (server.background || previous?.background == true)) {
             DigestWorker.schedule(app, profiles)
-            DigestDeliveryService.reconcile(app, profiles)
+            if (server.installed && server.background) DigestWorker.sync(app, server.id, reschedule = true)
+            else if (previous?.background == true) DigestWorker.cancelChecks(app, server.id)
         }
     }
 
@@ -368,7 +369,6 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         // The connection is removed locally. The remote service and its data are untouched.
         runCatching { DigestNotifications.forget(app, id) }
         runCatching { DigestWorker.remove(app, id, remaining) }
-        DigestDeliveryService.reconcile(app, remaining)
         if (panel.server?.id == id) {
             val next = remaining.firstOrNull()
             withContext(Dispatchers.Main.immediate) { selectLocally(next, remaining) }
@@ -456,7 +456,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                 editedServer = updated.id)
         }
         candidate = null
-        if (updated.background) DigestDeliveryService.reconcile(app, profiles)
+        if (updated.background) DigestWorker.sync(app, updated.id, reschedule = true)
         settingsSaved()
     }
 
@@ -505,9 +505,6 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             background = server.background || authenticated && !wasInstalled && DigestNotifications.deliveryAllowed(app))
         val changedSelection = state.value.server?.id != profile.id
         if (state.value.server != profile || state.value.servers.none { it == profile }) store(profile)
-        if (authenticated && !wasInstalled) {
-            DigestNotifications.notify(app, profile.id, profile.name, ui(R.string.ui_horizon_manager_installed))
-        }
         if (changedSelection) observe(profile.id)
         mutable.update {
             it.copy(probe = report, ready = profile.installed)
@@ -577,8 +574,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         if (version == BuildConfig.AGENT_VERSION && (fresh && report["install"] == "success" || !fresh && report["install"] != "running")) {
             mutable.update { it.copy(probe = report, updatingAgent = false, schema = JSONObject()) }
             synchronize(server, everything = true)
-            DigestWorker.sync(app, server.id)
-            DigestDeliveryService.reconcile(app, state.value.servers, restart = server.id)
+            DigestWorker.sync(app, server.id, reschedule = true)
         } else {
             mutable.update { it.copy(probe = report) }
         }
@@ -990,7 +986,13 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         mutate { api ->
             api.post("jobs", JSONObject().put("id", UUID.randomUUID().toString()).put("kind", kind)
                 .apply { source?.let { put("source", it) }; bucket?.let { put("bucket", it) }; index?.let { put("index", it) } })
+            if (kind == "run") state.value.server?.takeIf { it.background }?.let { DigestWorker.sync(app, it.id) }
         }
+
+    fun checkDigestNotifications() {
+        if (state.value.servers.any { it.installed && it.background } && DigestNotifications.deliveryAllowed(app))
+            DigestWorker.catchUp(app)
+    }
 
     fun translateDigest(run: String) = mutate { api ->
         api.post("jobs", JSONObject().put("id", UUID.randomUUID().toString())
@@ -1127,6 +1129,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         operation {
             val saved = withAgent(server) { it.put("schedule", spec) as JSONObject }
             settingsSaved()
+            if (server.background) DigestWorker.sync(app, server.id, reschedule = true)
             mutable.update {
                 if (it.server?.id != server.id) it
                 else it.copy(schedule = saved, status = it.status.copyObject().put("next", saved.opt("next")))
@@ -1165,10 +1168,12 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         DigestWorker.schedule(app, profiles)
         val previouslyEnabled = previous.filter { it.background }.map(Server::id).toSet()
         for (profile in profiles.filter { it.installed }) {
-            if (!profile.background && profile.id in previouslyEnabled) DigestNotifications.resetMarker(app, profile.id)
-            if (profile.background) DigestWorker.sync(app, profile.id)
+            if (!profile.background && profile.id in previouslyEnabled) {
+                DigestNotifications.resetMarker(app, profile.id)
+                DigestWorker.cancelChecks(app, profile.id)
+            }
+            if (profile.background) DigestWorker.sync(app, profile.id, reschedule = true)
         }
-        DigestDeliveryService.reconcile(app, profiles)
         settingsSaved()
         if (next != null) loadSelected(next)
     }
@@ -1197,7 +1202,6 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             store(updated)
             if (updated.https != server.https) connected(updated)
             settingsSaved()
-            if (background || server.background) DigestWorker.sync(app, server.id)
         }
     }
 

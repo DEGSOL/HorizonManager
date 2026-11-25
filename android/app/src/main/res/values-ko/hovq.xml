@@ -19,8 +19,7 @@
     <string name="hovq_vps_restore_password">Horizon 백업 비밀번호를 입력하세요. 가져오면 활성 VPS의 설정과 일정이 교체됩니다.</string>
     <string name="hovq_digest_channel">새 다이제스트</string>
     <string name="hovq_digest_channel_detail">Horizon이 새 다이제스트를 완성하면 알림을 보냅니다.</string>
-    <string name="hovq_push_active">VPS에서 바로 알림을 받고 있습니다.</string>
-    <string name="hovq_polling_active">직접 연결이 불가능한 동안 Hovq가 백그라운드에서 새 다이제스트를 확인합니다.</string>
+    <string name="hovq_polling_active">백그라운드 확인이 켜져 있습니다.</string>
     <string name="hovq_alerts_blocked">Android 설정에서 알림이 꺼져 있습니다.</string>
     <string name="hovq_existing_horizon">%1$s에서 Horizon을 찾았습니다.</string>
 </resources>

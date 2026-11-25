@@ -509,12 +509,24 @@ def create_app(root, token):
             fail(404, "DIGEST_UNKNOWN")
         return info
 
+    def latest_digest_id(db):
+        row = db.execute("""SELECT id FROM jobs WHERE kind='run'
+            AND json_array_length(result, '$.languages') > 0 ORDER BY rowid DESC LIMIT 1""").fetchone()
+        return row["id"] if row else ""
+
     @app.get("/v1/digest-marker")
     def digest_marker():
         with store.db() as db:
-            row = db.execute("""SELECT id FROM jobs WHERE kind='run'
-                AND json_array_length(result, '$.languages') > 0 ORDER BY rowid DESC LIMIT 1""").fetchone()
-        return {"id": row["id"] if row else ""}
+            return {"id": latest_digest_id(db)}
+
+    @app.get("/v1/digest-notification-plan")
+    def digest_notification_plan():
+        with store.db() as db:
+            upcoming = db.execute("SELECT next FROM schedule WHERE id=1").fetchone()[0]
+            since = db.execute(f"""SELECT min(created) FROM jobs
+                WHERE kind='run' AND {jobs.ACTIVE} AND result IS NULL""").fetchone()[0]
+            content = {"id": latest_digest_id(db), "next": upcoming, "preparing_since": since}
+        return JSONResponse(content, headers={"Cache-Control": "no-store"})
 
     @app.get("/v1/digest-notifications")
     async def digest_notifications(

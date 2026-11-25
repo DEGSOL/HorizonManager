@@ -6,7 +6,7 @@
     <string name="hovq_headline_save">保存标题长度</string>
     <string name="hovq_headline_upgrade">更新 VPS 上的代理后即可更改标题长度。</string>
     <string name="hovq_digest_notifications">新摘要通知</string>
-    <string name="hovq_push_delivery_help">Hovq 等待 VPS 上的新摘要。直连期间，Android 会显示静音服务通知。</string>
+    <string name="hovq_push_delivery_help">Hovq 在后台检查 VPS，并在接近计划运行时间和摘要生成期间提高检查频率。Android 可能推迟后台检查。</string>
     <string name="hovq_notification_offer">允许 Android 通知，以便在关闭 Hovq 后仍可收到新摘要提醒。</string>
     <string name="hovq_allow_notifications">允许通知</string>
     <string name="hovq_later">稍后</string>
@@ -15,7 +15,4 @@
     <string name="hovq_update_sudo">sudo 密码（如有需要）</string>
     <string name="hovq_open_photo">打开图片</string>
     <string name="prepare_digest_now">立即生成摘要</string>
-    <string name="hovq_listener_title">摘要直连推送</string>
-    <string name="hovq_listener_detail">Hovq 正在等待 VPS 上的新摘要。</string>
-    <string name="hovq_live_needs_update">更新 VPS 代理以启用直连推送。</string>
 </resources>

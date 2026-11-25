@@ -159,6 +159,21 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(self.client.post("/v1/jobs", content=b"x",
                                          headers={"Content-Length": "12000000"}).status_code, 413)
 
+    def test_notification_plan_tracks_schedule_and_unfinished_digest_jobs(self):
+        path = "/v1/digest-notification-plan"
+        self.assertEqual(self.client.get(path).json(), {"id": "", "next": None, "preparing_since": None})
+        scheduled = self.client.put("/v1/schedule", json={"mode": "interval", "hours": 6}).json()["next"]
+        run = uuid4().hex
+        with Store(self.root).db() as db:
+            Store.queue(db, run, "run", {})
+            db.execute("UPDATE jobs SET state='running' WHERE id=?", (run,))
+            started = db.execute("SELECT created FROM jobs WHERE id=?", (run,)).fetchone()[0]
+        self.assertEqual(self.client.get(path).json(), {"id": "", "next": scheduled, "preparing_since": started})
+        with Store(self.root).db() as db:
+            db.execute("UPDATE jobs SET result=? WHERE id=?", (json.dumps({"languages": ["ru"]}), run))
+        self.assertEqual(self.client.get(path).json(), {"id": run, "next": scheduled, "preparing_since": None})
+        self.assertEqual(self.client.get(path, headers={"Authorization": ""}).status_code, 401)
+
     def test_live_digest_wakes_without_a_push_registration(self):
         path = "/v1/digest-notifications"
         self.assertTrue(self.client.get("/v1/health").json()["digest_notifications"])

@@ -6,7 +6,7 @@
     <string name="hovq_headline_save">Salva la lunghezza dei titoli</string>
     <string name="hovq_headline_upgrade">Aggiorna l’agente sul VPS per modificare la lunghezza dei titoli.</string>
     <string name="hovq_digest_notifications">Notifiche per le nuove rassegne</string>
-    <string name="hovq_push_delivery_help">Hovq attende nuovi riepiloghi sul VPS. Android mostra una notifica silenziosa del servizio quando la connessione diretta è attiva.</string>
+    <string name="hovq_push_delivery_help">Hovq controlla il VPS in background, con verifiche più frequenti vicino agli avvii pianificati e durante la preparazione del riepilogo. Android può ritardare le verifiche.</string>
     <string name="hovq_notification_offer">Consenti le notifiche Android per ricevere avvisi sulle nuove rassegne anche quando Hovq è chiuso.</string>
     <string name="hovq_allow_notifications">Consenti notifiche</string>
     <string name="hovq_later">Più tardi</string>
@@ -15,7 +15,4 @@
     <string name="hovq_update_sudo">Password di sudo, se necessaria</string>
     <string name="hovq_open_photo">Apri immagine</string>
     <string name="prepare_digest_now">Prepara la rassegna ora</string>
-    <string name="hovq_listener_title">Consegna diretta dei riepiloghi</string>
-    <string name="hovq_listener_detail">Hovq attende nuovi riepiloghi sul VPS.</string>
-    <string name="hovq_live_needs_update">Aggiorna l’agente VPS per attivare la consegna diretta.</string>
 </resources>

@@ -19,8 +19,7 @@
     <string name="hovq_vps_restore_password">输入 Horizon 备份密码。导入会替换当前 VPS 上的设置与计划。</string>
     <string name="hovq_digest_channel">新摘要</string>
     <string name="hovq_digest_channel_detail">Horizon 完成新一期摘要后发送通知。</string>
-    <string name="hovq_push_active">已启用 VPS 直连推送。</string>
-    <string name="hovq_polling_active">直连暂不可用时，Hovq 会在后台检查新摘要。</string>
+    <string name="hovq_polling_active">已启用后台检查。</string>
     <string name="hovq_alerts_blocked">通知已在 Android 设置中关闭。</string>
     <string name="hovq_existing_horizon">已在 %1$s 发现 Horizon。</string>
 </resources>

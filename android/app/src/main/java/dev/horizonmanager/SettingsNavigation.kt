@@ -187,7 +187,6 @@ internal fun ServerSettings(panel: Panel, model: ManagerModel, servers: () -> Un
 internal fun NotificationSettings(panel: Panel, model: ManagerModel, allowed: Boolean,
                                   permission: () -> Unit, delivery: () -> Unit) {
     val server = panel.server ?: return
-    val connected by DigestDeliveryService.connected.collectAsState()
     Tile {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -199,19 +198,12 @@ internal fun NotificationSettings(panel: Panel, model: ManagerModel, allowed: Bo
             })
         }
         Reveal(server.background) {
-            when {
-                !allowed -> {
-                    Text(ui(R.string.hovq_alerts_blocked), color = LocalHorizonPalette.current.warning)
-                    TextButton(onClick = permission) { Text(ui(R.string.hovq_allow_notifications)) }
-                }
-                server.id in connected -> Text(ui(R.string.hovq_push_active),
-                    style = MaterialTheme.typography.bodyMedium, color = LocalHorizonPalette.current.muted)
-                else -> Text(ui(R.string.hovq_polling_active),
-                    style = MaterialTheme.typography.bodyMedium, color = LocalHorizonPalette.current.muted)
-            }
-            if (allowed && agentUpdateAvailable(panel.status.optString("agent"))) {
-                Text(ui(R.string.hovq_live_needs_update), style = MaterialTheme.typography.bodySmall,
+            if (allowed) {
+                Text(ui(R.string.hovq_polling_active), style = MaterialTheme.typography.bodyMedium,
                     color = LocalHorizonPalette.current.muted)
+            } else {
+                Text(ui(R.string.hovq_alerts_blocked), color = LocalHorizonPalette.current.warning)
+                TextButton(onClick = permission) { Text(ui(R.string.hovq_allow_notifications)) }
             }
         }
     }
