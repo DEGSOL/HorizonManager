@@ -6,66 +6,16 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import org.unifiedpush.android.connector.FailedReason
-import org.unifiedpush.android.connector.PushService
-import org.unifiedpush.android.connector.UnifiedPush
-import org.unifiedpush.android.connector.data.PushEndpoint
-import org.unifiedpush.android.connector.data.PushMessage
-import java.security.MessageDigest
-import java.security.SecureRandom
 import java.time.Instant
 import java.util.UUID
-import javax.crypto.Mac
-import javax.crypto.spec.SecretKeySpec
-
-internal class DigestPushService : PushService() {
-    override fun onNewEndpoint(endpoint: PushEndpoint, instance: String) {
-        if (endpoint.temporary) return
-        DigestNotifications.setEndpoint(this, instance, endpoint.url)
-        DigestWorker.sync(this, instance)
-    }
-
-    override fun onMessage(message: PushMessage, instance: String) {
-        if (message.content.size !in 99..120) return
-        val server = runCatching { Vault(this).load().find { it.id == instance && it.background } }.getOrNull() ?: return
-        val secret = runCatching { DigestNotifications.existingSecret(this, instance) }.getOrNull() ?: return
-        val packet = message.content.toString(Charsets.US_ASCII)
-        val id = verifiedDigest(packet, secret, Instant.now().epochSecond) ?: return
-        DigestNotifications.push(this, server, id)
-    }
-
-    override fun onRegistrationFailed(reason: FailedReason, instance: String) = onUnregistered(instance)
-
-    override fun onUnregistered(instance: String) {
-        DigestNotifications.setEndpoint(this, instance, "")
-        DigestWorker.sync(this, instance)
-    }
-}
-
-internal fun verifiedDigest(message: String, secret: String, now: Long): String? {
-    val parts = message.split('.')
-    if (parts.size != 3 || !parts[0].matches(Regex("[a-f0-9]{32}")) ||
-        !parts[2].matches(Regex("[a-f0-9]{64}"))) return null
-    val sent = parts[1].toLongOrNull() ?: return null
-    if (sent !in (now - 86_400)..(now + 300)) return null
-    val key = secret.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-    val mac = Mac.getInstance("HmacSHA256")
-    mac.init(SecretKeySpec(key, "HmacSHA256"))
-    val expected = mac.doFinal(message.substringBeforeLast('.').toByteArray(Charsets.US_ASCII))
-    val actual = parts[2].chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-    return parts[0].takeIf { MessageDigest.isEqual(expected, actual) }
-}
 
 internal object DigestNotifications {
     private fun prefs(app: Context) = app.getSharedPreferences("background_events", Context.MODE_PRIVATE)
@@ -73,90 +23,38 @@ internal object DigestNotifications {
     private fun put(app: Context, id: String, field: String, value: String) =
         prefs(app).edit().putString("$id:$field", value).apply()
 
-    @Synchronized
-    fun device(app: Context): String = value(app, "", "device").ifEmpty {
-        UUID.randomUUID().toString().also { put(app, "", "device", it) }
+    fun legacyDevice(app: Context, id: String): String? {
+        if (value(app, id, "registered").isEmpty() && value(app, id, "endpoint").isEmpty()) return null
+        return runCatching { UUID.fromString(value(app, "", "device")).toString() }.getOrNull()
+    }
+
+    fun clearLegacyRegistration(app: Context, id: String) {
+        Vault(app).removePushSecret(id)
+        prefs(app).edit().remove("$id:endpoint").remove("$id:registered")
+            .remove("$id:push_disabled").remove("$id:push_attempt").apply()
     }
 
     @Synchronized
-    fun secret(app: Context, id: String): String = existingSecret(app, id) ?: ByteArray(32).also {
-        SecureRandom().nextBytes(it)
-    }.joinToString("") { "%02x".format(it) }.also { Vault(app).savePushSecret(id, it) }
-
-    fun existingSecret(app: Context, id: String) = Vault(app).pushSecret(id)
-    fun endpoint(app: Context, id: String) = value(app, id, "endpoint")
-    fun registration(app: Context, id: String) = value(app, id, "registered")
-    fun hasPush(app: Context, id: String) = endpoint(app, id).let { it.isNotEmpty() && it == registration(app, id) }
-    fun observeRegistration(app: Context, id: String) = callbackFlow {
-        val storage = prefs(app)
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key == "$id:registered" || key == "$id:endpoint") trySend(hasPush(app, id))
-        }
-        storage.registerOnSharedPreferenceChangeListener(listener)
-        trySend(hasPush(app, id))
-        awaitClose { storage.unregisterOnSharedPreferenceChangeListener(listener) }
-    }
-
-    fun setEndpoint(app: Context, id: String, value: String) = put(app, id, "endpoint", value)
-    fun setRegistered(app: Context, id: String, value: String) = put(app, id, "registered", value)
-
-    fun register(app: Context, distributor: String, server: String) {
-        prefs(app).edit().remove("$server:push_disabled")
-            .putLong("$server:push_attempt", System.currentTimeMillis()).apply()
-        UnifiedPush.saveDistributor(app, distributor)
-        UnifiedPush.register(app, instance = server)
-    }
-
-    fun connectAvailable(app: Context, server: String) {
-        val settings = prefs(app)
-        if (settings.getBoolean("$server:push_disabled", false) || !deliveryAllowed(app)) return
-        val installed = UnifiedPush.getDistributors(app)
-        val saved = UnifiedPush.getSavedDistributor(app)?.takeIf { it in installed }
-        if (endpoint(app, server).isNotEmpty()) {
-            if (saved != null) return
-            setEndpoint(app, server, "")
-        }
-        val last = settings.getLong("$server:push_attempt", 0L)
-        if (System.currentTimeMillis() - last in 0 until 3_600_000L) return
-        val distributor = saved ?: installed.firstOrNull { it == "io.heckel.ntfy" } ?: return
-        register(app, distributor, server)
-    }
-
-    fun disconnectPush(app: Context, server: String) {
-        prefs(app).edit().putBoolean("$server:push_disabled", true).apply()
-        unregister(app, server)
-    }
-
-    fun unregister(app: Context, server: String) {
-        UnifiedPush.unregister(app, instance = server)
-        setEndpoint(app, server, "")
-    }
-
     fun forget(app: Context, server: String) {
-        try {
-            unregister(app, server)
-        } finally {
-            val store = prefs(app)
-            val edit = store.edit()
-            store.all.keys.filter { it.startsWith("$server:") }.forEach(edit::remove)
-            edit.apply()
-            Vault(app).removePushSecret(server)
-        }
+        val store = prefs(app)
+        val edit = store.edit()
+        store.all.keys.filter { it.startsWith("$server:") }.forEach(edit::remove)
+        edit.apply()
+        Vault(app).removePushSecret(server)
+    }
+
+    fun currentMarker(app: Context, id: String): String? = prefs(app).getString("$id:digest", null)
+
+    @Synchronized
+    fun resetMarker(app: Context, id: String) {
+        prefs(app).edit().remove("$id:digest").apply()
     }
 
     @Synchronized
-    fun marker(app: Context, server: Server, id: String) {
-        if (!server.background) return
-        val key = server.id + ":digest"
-        val previous = prefs(app).getString(key, null)
-        if (previous == null || id.isNotEmpty() && previous != id && publish(app, server, id)) {
-            prefs(app).edit().putString(key, id).apply()
-        }
-    }
-
-    @Synchronized
-    fun push(app: Context, server: Server, id: String) {
-        publish(app, server, id)
+    fun marker(app: Context, server: Server, previous: String?, id: String) {
+        if (!server.background || previous != currentMarker(app, server.id)) return
+        if (previous == null || id.isNotEmpty() && previous != id && publish(app, server, id))
+            put(app, server.id, "digest", id)
     }
 
     private fun publish(app: Context, server: Server, id: String): Boolean {

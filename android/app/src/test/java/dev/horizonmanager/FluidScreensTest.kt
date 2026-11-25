@@ -243,6 +243,27 @@ class FluidScreensTest {
     }
 
     @Test
+    fun notificationSettingsShowBothStatesOfTheDirectDeliverySwitch() {
+        loadIssue(articleCount = 2)
+        val model = ViewModelProvider(compose.activity)[ManagerModel::class.java]
+        val field = ManagerModel::class.java.getDeclaredField("mutable").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST") val state = field.get(model) as MutableStateFlow<Panel>
+        tab(R.string.settings)
+        text(R.string.mr_interface).performClick()
+        text(R.string.settings_notifications).performClick()
+        val toggle = compose.onNode(isToggleable())
+        toggle.assertIsOff()
+        snapshot("32-notifications-off")
+        compose.runOnIdle {
+            val panel = state.value
+            state.value = panel.copy(server = checkNotNull(panel.server).copy(background = true))
+        }
+        toggle.assertIsOn()
+        text(R.string.hovq_allow_notifications).assertExists()
+        snapshot("33-notifications-on")
+    }
+
+    @Test
     fun firstDigestHidesAndRestoresBothBarsWithoutChangingTabs() {
         val heading = loadIssue(articleCount = 30, showEmptyFeedFirst = true)
         val header = compose.onNodeWithText(heading)

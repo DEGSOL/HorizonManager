@@ -189,12 +189,19 @@ internal fun OutlinedButton(onClick: () -> Unit, enabled: Boolean = true, conten
 }
 
 @Composable
-internal fun Switch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, enabled: Boolean = true) {
-    val colors = if (LocalSettingsGlass.current) SwitchDefaults.colors(
+internal fun Switch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, enabled: Boolean = true,
+                    inverted: Boolean = false) {
+    val colors = if (!LocalSettingsGlass.current) SwitchDefaults.colors()
+    else if (inverted) SwitchDefaults.colors(
+        checkedThumbColor = ReadingGlass.muted, checkedTrackColor = ReadingGlass.base,
+        checkedBorderColor = ReadingGlass.muted,
+        uncheckedThumbColor = Color.White, uncheckedTrackColor = ReadingGlass.muted,
+        uncheckedBorderColor = Color.Transparent,
+    ) else SwitchDefaults.colors(
         checkedThumbColor = Color.White, checkedTrackColor = ReadingGlass.muted,
         uncheckedThumbColor = ReadingGlass.muted, uncheckedTrackColor = ReadingGlass.base,
         uncheckedBorderColor = ReadingGlass.muted,
-    ) else SwitchDefaults.colors()
+    )
     MaterialSwitch(checked, onCheckedChange, enabled = enabled, colors = colors)
 }
 

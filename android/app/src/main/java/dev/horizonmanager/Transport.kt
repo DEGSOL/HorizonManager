@@ -404,11 +404,19 @@ internal class AgentApi(private val server: Server, private val session: Session
     }
 
     fun get(path: String) = request("GET", path)
+    fun digestNotificationMarker(after: String? = null): String {
+        val cursor = after?.takeIf { validDigestMarker(it) }
+        val path = if (cursor == null) "digest-notifications" else "digest-notifications?after=$cursor"
+        val result = request("GET", path, waitForDigest = cursor != null)
+        return (result as? JSONObject)?.opt("id")?.let { it as? String }?.takeIf(::validDigestMarker)
+            ?: throw Problem("AGENT_PROTOCOL")
+    }
+
     fun post(path: String, body: JSONObject = JSONObject()) = request("POST", path, body)
     fun put(path: String, body: JSONObject) = request("PUT", path, body)
     fun delete(path: String) = request("DELETE", path)
 
-    private fun request(method: String, path: String, value: JSONObject? = null): Any {
+    private fun request(method: String, path: String, value: JSONObject? = null, waitForDigest: Boolean = false): Any {
         check(Regex("[a-zA-Z0-9/_=&?.-]+").matches(path) && ".." !in path)
         val body = value?.toString()?.toByteArray() ?: ByteArray(0)
         val (status, data) = if (server.https.isNotEmpty()) {
@@ -418,7 +426,7 @@ internal class AgentApi(private val server: Server, private val session: Session
                 .method(method, if (value != null) body.toRequestBody("application/json".toMediaType()) else null)
                 .build()
             try {
-                val call = httpClient.newCall(request)
+                val call = (if (waitForDigest) digestClient else httpClient).newCall(request)
                 transportCancellation.get()?.track(call::cancel)
                 call.execute().use { response ->
                     response.code to (response.body?.byteStream()?.readBounded(MAX_RESPONSE)?.decodeToString().orEmpty())
@@ -447,6 +455,8 @@ internal class AgentApi(private val server: Server, private val session: Session
     companion object {
         private val httpClient = OkHttpClient.Builder().callTimeout(35, TimeUnit.SECONDS)
             .followRedirects(false).followSslRedirects(false).build()
+
+        private val digestClient = httpClient.newBuilder().readTimeout(26, TimeUnit.SECONDS).build()
 
         fun validHttps(value: String): Boolean {
             if (value.isBlank()) return true

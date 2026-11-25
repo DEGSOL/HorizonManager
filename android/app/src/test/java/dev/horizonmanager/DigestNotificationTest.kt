@@ -2,22 +2,18 @@ package dev.horizonmanager
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Locale
 
 class DigestNotificationTest {
     @Test
-    fun verifiesVpsMarkerAndRejectsAnExpiredOrAlteredPacket() {
-        val run = "a".repeat(32)
-        val timestamp = 1700000000L
-        val secret = "2".repeat(64)
-        val packet = "$run.$timestamp.ca999f48e9c0bf0987f0de510c159599bca466905b6a08f28b29c1bb6443c704"
-        assertEquals(run, verifiedDigest(packet, secret, timestamp + 2))
-        assertNull(verifiedDigest(packet, secret, timestamp + 86_401))
-        assertNull(verifiedDigest("b" + packet.drop(1), secret, timestamp))
-        assertNull(verifiedDigest(packet, "3".repeat(64), timestamp))
+    fun acceptsOnlyValidDigestMarkers() {
+        assertTrue(validDigestMarker(""))
+        assertTrue(validDigestMarker("a".repeat(32)))
+        assertTrue(validDigestMarker("run-20261125T011200Z-aabbccdd"))
+        assertFalse(validDigestMarker("a".repeat(32) + "&wait=0"))
+        assertFalse(validDigestMarker("a".repeat(31)))
     }
 
     @Test
@@ -42,6 +38,7 @@ class DigestNotificationTest {
         assertTrue(agentUpdateAvailable("0.1.12"))
         assertTrue(agentUpdateAvailable("0.1.13"))
         assertTrue(agentUpdateAvailable("0.1.14"))
+        assertTrue(agentUpdateAvailable("0.1.15"))
         assertFalse(agentUpdateAvailable(BuildConfig.AGENT_VERSION))
     }
 }
@@ -54,10 +51,9 @@ class BackgroundDigestDeliveryTest {
         "", "", "", "", background = true, installed = true)
 
     @Test
-    fun aSavedPushRegistrationDoesNotSlowTheFallbackWorker() {
-        DigestNotifications.setEndpoint(app, server.id, "https://ntfy.sh/up-test")
-        DigestNotifications.setRegistered(app, server.id, "https://ntfy.sh/up-test")
-        assertTrue(DigestNotifications.hasPush(app, server.id))
+    fun theDirectListenerHasAnIndependentBackgroundFallback() {
+        assertEquals(listOf(server), deliveryProfiles(listOf(server, server.copy(installed = false),
+            server.copy(background = false))))
         if (!androidx.work.WorkManager.isInitialized()) {
             androidx.work.WorkManager.initialize(app, androidx.work.Configuration.Builder().build())
         }
@@ -69,26 +65,31 @@ class BackgroundDigestDeliveryTest {
     }
 
     @Test
-    fun aMissedPushIsDeliveredByTheNextMarkerAndDuplicatePushIsIgnored() {
+    fun theLiveListenerAndFallbackWorkerDeliverEachDigestOnce() {
         val notifications = app.getSystemService(android.app.NotificationManager::class.java)
         val permission = android.Manifest.permission.POST_NOTIFICATIONS
         val shadowApp = org.robolectric.Shadows.shadowOf(app)
+        val first = "a".repeat(32)
+        val second = "b".repeat(32)
+        val third = "c".repeat(32)
         shadowApp.grantPermissions(permission)
-        DigestNotifications.marker(app, server, "first")
+        DigestNotifications.marker(app, server, null, first)
         assertTrue(notifications.activeNotifications.isEmpty())
 
         shadowApp.denyPermissions(permission)
-        DigestNotifications.marker(app, server, "second")
+        DigestNotifications.marker(app, server, first, second)
         assertTrue(notifications.activeNotifications.isEmpty())
+        assertEquals(first, DigestNotifications.currentMarker(app, server.id))
 
         shadowApp.grantPermissions(permission)
-        DigestNotifications.marker(app, server, "second")
+        DigestNotifications.marker(app, server, first, second)
         val posted = notifications.activeNotifications.single()
         assertEquals(server.name, posted.notification.extras.getCharSequence(android.app.Notification.EXTRA_TITLE))
         notifications.cancelAll()
 
-        DigestNotifications.push(app, server, "second")
-        DigestNotifications.marker(app, server, "second")
+        DigestNotifications.marker(app, server, first, third)
+        DigestNotifications.marker(app, server, second, second)
+        assertEquals(second, DigestNotifications.currentMarker(app, server.id))
         assertTrue(notifications.activeNotifications.isEmpty())
     }
 }

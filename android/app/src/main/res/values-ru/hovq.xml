@@ -19,9 +19,8 @@
     <string name="hovq_vps_restore_password">Введи пароль от файла Horizon. Импорт заменит настройки и расписание на выбранном VPS.</string>
     <string name="hovq_digest_channel">Новые дайджесты</string>
     <string name="hovq_digest_channel_detail">Уведомления, когда Horizon заканчивает подготовку выпуска.</string>
-    <string name="hovq_push_active">Push подключён. Hovq также проверяет VPS в фоне на случай пропущенных уведомлений.</string>
-    <string name="hovq_polling_active">Проверка каждые 15 минут, когда Android позволяет её выполнить. Подключи push, чтобы получать уведомления быстрее.</string>
+    <string name="hovq_push_active">Дайджесты приходят напрямую с VPS.</string>
+    <string name="hovq_polling_active">Пока прямое подключение недоступно, Hovq проверяет новые выпуски в фоне.</string>
     <string name="hovq_alerts_blocked">Уведомления выключены в настройках Android.</string>
-    <string name="hovq_android_alert_settings">Настройки уведомлений Android</string>
     <string name="hovq_existing_horizon">Horizon обнаружен по пути %1$s.</string>
 </resources>

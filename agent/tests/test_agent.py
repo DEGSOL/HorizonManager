@@ -159,6 +159,27 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(self.client.post("/v1/jobs", content=b"x",
                                          headers={"Content-Length": "12000000"}).status_code, 413)
 
+    def test_live_digest_wakes_without_a_push_registration(self):
+        path = "/v1/digest-notifications"
+        self.assertTrue(self.client.get("/v1/health").json()["digest_notifications"])
+        first = self.client.get(path)
+        self.assertEqual(first.json(), {"id": ""})
+        self.assertEqual(first.headers["Cache-Control"], "no-store")
+        self.assertEqual(self.client.get(path, params={"after": "bad"}).status_code, 422)
+        self.assertEqual(self.client.get(path, headers={"Authorization": ""}).status_code, 401)
+        self.assertEqual(self.client.put("/v1/config", json=self.config()).status_code, 200)
+        run = uuid4()
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            waiting = pool.submit(self.client.get, path, params={"after": "", "wait": 18})
+            time.sleep(.15)
+            self.assertFalse(waiting.done())
+            self.assertLess(self.client.post("/v1/jobs", json={"id": str(run)}).status_code, 300)
+            self.assertEqual(waiting.result(15).json(), {"id": run.hex})
+        self.assertEqual(self.client.get(path, params={"after": "", "wait": 0}).json(), {"id": run.hex})
+        self.assertEqual(self.client.get(path, params={"after": run.hex, "wait": 1}).json(), {"id": run.hex})
+        with Store(self.root).db() as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM push_devices").fetchone()[0], 0)
+
     def test_invalid_classifier_response_retries_only_the_profile_selection(self):
         config = self.config(model="classify-with-retry")
         config["config"]["sources"]["rss"][0]["profile"] = ["tech-news", "tech-blog"]

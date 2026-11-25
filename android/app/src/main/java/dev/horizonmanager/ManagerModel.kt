@@ -284,10 +284,16 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     private fun store(server: Server) {
         val profiles = state.value.servers.toMutableList()
         val index = profiles.indexOfFirst { it.id == server.id }
+        val previous = profiles.getOrNull(index)
         if (index < 0) profiles.add(server) else profiles[index] = server
         vault.save(profiles)
+        if (previous?.background == true && !server.background) DigestNotifications.resetMarker(app, server.id)
         selection.edit().putString("id", server.id).apply()
         mutable.update { it.copy(servers = profiles, server = server, ready = server.installed) }
+        if (server != previous && (server.background || previous?.background == true)) {
+            DigestWorker.schedule(app, profiles)
+            DigestDeliveryService.reconcile(app, profiles)
+        }
     }
 
     private fun observe(server: String) {
@@ -362,6 +368,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         // The connection is removed locally. The remote service and its data are untouched.
         runCatching { DigestNotifications.forget(app, id) }
         runCatching { DigestWorker.remove(app, id, remaining) }
+        DigestDeliveryService.reconcile(app, remaining)
         if (panel.server?.id == id) {
             val next = remaining.firstOrNull()
             withContext(Dispatchers.Main.immediate) { selectLocally(next, remaining) }
@@ -449,6 +456,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                 editedServer = updated.id)
         }
         candidate = null
+        if (updated.background) DigestDeliveryService.reconcile(app, profiles)
         settingsSaved()
     }
 
@@ -493,7 +501,8 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         }
         val authenticated = report["authenticated"] == "yes"
         val wasInstalled = server.installed
-        val profile = server.copy(installed = wasInstalled || authenticated)
+        val profile = server.copy(installed = wasInstalled || authenticated,
+            background = server.background || authenticated && !wasInstalled && DigestNotifications.deliveryAllowed(app))
         val changedSelection = state.value.server?.id != profile.id
         if (state.value.server != profile || state.value.servers.none { it == profile }) store(profile)
         if (authenticated && !wasInstalled) {
@@ -568,7 +577,8 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         if (version == BuildConfig.AGENT_VERSION && (fresh && report["install"] == "success" || !fresh && report["install"] != "running")) {
             mutable.update { it.copy(probe = report, updatingAgent = false, schema = JSONObject()) }
             synchronize(server, everything = true)
-            if (server.background) DigestWorker.sync(app, server.id)
+            DigestWorker.sync(app, server.id)
+            DigestDeliveryService.reconcile(app, state.value.servers, restart = server.id)
         } else {
             mutable.update { it.copy(probe = report) }
         }
@@ -1155,11 +1165,10 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         DigestWorker.schedule(app, profiles)
         val previouslyEnabled = previous.filter { it.background }.map(Server::id).toSet()
         for (profile in profiles.filter { it.installed }) {
-            if (!profile.background && profile.id in previouslyEnabled) {
-                DigestNotifications.unregister(app, profile.id)
-            }
-            if (profile.background || profile.id in previouslyEnabled) DigestWorker.sync(app, profile.id)
+            if (!profile.background && profile.id in previouslyEnabled) DigestNotifications.resetMarker(app, profile.id)
+            if (profile.background) DigestWorker.sync(app, profile.id)
         }
+        DigestDeliveryService.reconcile(app, profiles)
         settingsSaved()
         if (next != null) loadSelected(next)
     }
@@ -1188,8 +1197,6 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             store(updated)
             if (updated.https != server.https) connected(updated)
             settingsSaved()
-            if (!background && server.background) DigestNotifications.unregister(app, server.id)
-            DigestWorker.schedule(app, state.value.servers)
             if (background || server.background) DigestWorker.sync(app, server.id)
         }
     }

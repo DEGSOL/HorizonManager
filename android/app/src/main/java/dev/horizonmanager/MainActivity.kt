@@ -259,12 +259,16 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     }
     DisposableEffect(lifecycle, ctx) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) notificationAllowed = DigestNotifications.deliveryAllowed(ctx)
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                notificationAllowed = DigestNotifications.deliveryAllowed(ctx)
+                scope.launch { DigestDeliveryService.restore(ctx.applicationContext) }
+            }
         }
         lifecycle.lifecycle.addObserver(observer)
         onDispose { lifecycle.lifecycle.removeObserver(observer) }
     }
     LaunchedEffect(notificationAllowed) {
+        DigestDeliveryService.restore(ctx.applicationContext)
         if (notificationAllowed) DigestWorker.catchUp(ctx)
     }
     LaunchedEffect(enableDigestAfterPermission, notificationAllowed, currentServer, panel.ready, panel.busy) {
@@ -613,7 +617,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                                     "server_settings" -> ServerSettings(panel, model, { manageServers = true }) {
                                         description, action -> confirm = description to action
                                     }
-                                    "alerts" -> NotificationSettings(panel, model, ::requestNotifications,
+                                    "alerts" -> NotificationSettings(panel, model, notificationAllowed, ::requestNotifications,
                                         { openSettings("delivery") })
                                     "maintenance" -> ServerMaintenance(panel, model, ::openSettings)
                                     "transfer" -> TransferSettings(panel,

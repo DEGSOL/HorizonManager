@@ -6,7 +6,7 @@
     <string name="hovq_headline_save">제목 길이 저장</string>
     <string name="hovq_headline_upgrade">제목 길이를 변경하려면 VPS 에이전트를 업데이트하세요.</string>
     <string name="hovq_digest_notifications">새 다이제스트 알림</string>
-    <string name="hovq_push_delivery_help">ntfy 또는 설정된 UnifiedPush 서비스가 있으면 새 다이제스트가 Android 푸시 알림으로 도착합니다. 푸시를 사용할 수 없으면 백그라운드에서 새 다이제스트를 확인합니다.</string>
+    <string name="hovq_push_delivery_help">Hovq가 VPS에서 새 다이제스트를 기다립니다. 직접 연결된 동안 Android에 무음 서비스 알림이 표시됩니다.</string>
     <string name="hovq_notification_offer">Hovq를 닫은 상태에서도 새 다이제스트 알림을 받으려면 Android 알림을 허용하세요.</string>
     <string name="hovq_allow_notifications">알림 허용</string>
     <string name="hovq_later">나중에</string>
@@ -15,4 +15,7 @@
     <string name="hovq_update_sudo">sudo 비밀번호(필요한 경우)</string>
     <string name="hovq_open_photo">이미지 열기</string>
     <string name="prepare_digest_now">지금 다이제스트 만들기</string>
+    <string name="hovq_listener_title">다이제스트 바로 받기</string>
+    <string name="hovq_listener_detail">Hovq가 VPS에서 새 다이제스트를 기다립니다.</string>
+    <string name="hovq_live_needs_update">바로 받기를 켜려면 VPS 에이전트를 업데이트하세요.</string>
 </resources>

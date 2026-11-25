@@ -231,8 +231,6 @@
     <string name="ui_copy">"Копировать"</string>
     <string name="ui_update_vps_agent">"Обновить агент на VPS"</string>
     <string name="ui_settings_and_the_archive_will_stay">"Настройки и архив сохранятся. Если sudo требует отдельный пароль, введите его."</string>
-    <string name="ui_push_notification_service">"Служба push-уведомлений"</string>
-    <string name="ui_install_ntfy_and_enable_unifiedpush_in">"Установите ntfy и включите UnifiedPush в его настройках."</string>
     <string name="ui_model_api_address_and_request_limits">"Модель, адрес API и ограничения запросов"</string>
     <string name="ui_prompts_scoring_criteria_and_output_blocks">"Промпты, критерии оценки и блоки результата"</string>
     <string name="ui_email_and_webhook">"Почта и Webhook"</string>
@@ -246,9 +244,7 @@
     <string name="ui_https_domain_optional">"HTTPS-домен (необязательно)"</string>
     <string name="ui_leave_blank_to_use_ssh_https">"Пустое поле включает SSH. Для HTTPS нужен уже настроенный reverse proxy с действительным TLS-сертификатом."</string>
     <string name="ui_background_news_checks">"Фоновая проверка новостей"</string>
-    <string name="ui_connect_push_notifications">"Подключить push-уведомления"</string>
     <string name="ui_push_notifications_connected">"Push-уведомления подключены"</string>
-    <string name="ui_disconnect_push_notifications">"Отключить push-уведомления"</string>
     <string name="ui_save_connection">"Сохранить соединение"</string>
     <string name="ui_ssh_settings">"Параметры SSH"</string>
     <string name="ui_journal">"Журнал"</string>

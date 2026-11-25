@@ -15,9 +15,9 @@ android {
         applicationId = "dev.horizonmanager.mobile"
         minSdk = 26
         targetSdk = 36
-        versionCode = 33
-        versionName = "0.5.3"
-        buildConfigField("String", "AGENT_VERSION", "\"0.1.15\"")
+        versionCode = 34
+        versionName = "0.5.4"
+        buildConfigField("String", "AGENT_VERSION", "\"0.1.16\"")
     }
     testOptions {
         unitTests.isIncludeAndroidResources = true
@@ -83,7 +83,6 @@ dependencies {
     implementation("androidx.room:room-ktx:2.8.4")
     ksp("androidx.room:room-compiler:2.8.4")
     implementation("androidx.work:work-runtime-ktx:2.11.0")
-    implementation("org.unifiedpush.android:connector:3.3.6")
     implementation("com.github.mwiede:jsch:2.27.7")
     implementation("org.bouncycastle:bcprov-jdk18on:1.87")
     implementation("org.jsoup:jsoup:1.18.3")

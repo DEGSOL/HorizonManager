@@ -19,9 +19,8 @@
     <string name="hovq_vps_restore_password">Horizon күчермәсенең серсүзен кертегез. Импорт актив VPS-тагы көйләүләрне һәм җәдвәлне алыштыра.</string>
     <string name="hovq_digest_channel">Яңа дайджестлар</string>
     <string name="hovq_digest_channel_detail">Horizon яңа чыгарылышны әзерләп бетергәч, белдерү килә.</string>
-    <string name="hovq_push_active">Push кушылган. Хәбәр килми калса, Hovq VPS-ны фонда да тикшерә.</string>
-    <string name="hovq_polling_active">Android рөхсәт иткәндә 15 минут саен тикшерелә. Белдерүне тизрәк алу өчен push кушыгыз.</string>
+    <string name="hovq_push_active">VPS аша туры китерү эшли.</string>
+    <string name="hovq_polling_active">Туры тоташу булмаганда Hovq яңа чыгарылышларны фон режимында тикшерә.</string>
     <string name="hovq_alerts_blocked">Android көйләүләрендә белдерүләр сүндерелгән.</string>
-    <string name="hovq_android_alert_settings">Android белдерү көйләүләре</string>
     <string name="hovq_existing_horizon">Horizon %1$s юлында табылды.</string>
 </resources>

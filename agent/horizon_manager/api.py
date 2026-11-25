@@ -138,6 +138,11 @@ def create_app(root, token):
     installer_lock = threading.Lock()
     installer_stamp = None
     cover_slots = asyncio.Semaphore(4)
+    digest_changed = asyncio.Condition()
+
+    async def digest_ready():
+        async with digest_changed:
+            digest_changed.notify_all()
 
     def sync_installer_events():
         nonlocal installer_stamp
@@ -153,7 +158,7 @@ def create_app(root, token):
     async def lifespan(app):
         sync_installer_events()
         jobs.recovery(store)
-        tasks = [asyncio.create_task(jobs.loop(store)), asyncio.create_task(jobs.loop(store, article=True)),
+        tasks = [asyncio.create_task(jobs.loop(store, on_digest=digest_ready)), asyncio.create_task(jobs.loop(store, article=True)),
                  asyncio.create_task(push.loop(store))]
         try:
             yield
@@ -191,7 +196,7 @@ def create_app(root, token):
     @app.get("/v1/health")
     def health():
         return {"api": 1, "agent": VERSION, "horizon": REVISION,
-                "runtime": "systemd/venv", "openbb": importlib.util.find_spec("openbb") is not None}
+                "runtime": "systemd/venv", "digest_notifications": True, "openbb": importlib.util.find_spec("openbb") is not None}
 
     @app.get("/v1/upstream")
     def upstream():
@@ -510,6 +515,21 @@ def create_app(root, token):
             row = db.execute("""SELECT id FROM jobs WHERE kind='run'
                 AND json_array_length(result, '$.languages') > 0 ORDER BY rowid DESC LIMIT 1""").fetchone()
         return {"id": row["id"] if row else ""}
+
+    @app.get("/v1/digest-notifications")
+    async def digest_notifications(
+        after: str | None = Query(default=None, max_length=46, pattern=r"^(?:[a-f0-9]{32}|run-\d{8}T\d{6}Z-[a-f0-9]{8})?$"),
+        wait: int = Query(default=20, ge=0, le=20),
+    ):
+        async with digest_changed:
+            marker = digest_marker()
+            if after is not None and marker["id"] == after:
+                with suppress(TimeoutError):
+                    async with asyncio.timeout(wait):
+                        while marker["id"] == after:
+                            await digest_changed.wait()
+                            marker = digest_marker()
+            return JSONResponse(marker, headers={"Cache-Control": "no-store"})
 
     @app.put("/v1/push/{device}")
     def put_push(device: UUID, body: PushDevice):

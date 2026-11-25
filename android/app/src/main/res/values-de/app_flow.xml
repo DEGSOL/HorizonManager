@@ -216,8 +216,6 @@
     <string name="ui_events_for_this_operation">Ereignisse für diesen Vorgang</string>
     <string name="ui_copy">Kopieren</string>
     <string name="ui_update_vps_agent">VPS-Agent aktualisieren</string>
-    <string name="ui_push_notification_service">Push-Dienst</string>
-    <string name="ui_install_ntfy_and_enable_unifiedpush_in">Installiere ntfy und aktiviere UnifiedPush in den Einstellungen.</string>
     <string name="ui_model_api_address_and_request_limits">Modell, API-Adresse und Anfragelimits</string>
     <string name="ui_prompts_scoring_criteria_and_output_blocks">Prompts, Bewertungskriterien und Ausgabeabschnitte</string>
     <string name="ui_email_and_webhook">E-Mail und Webhook</string>
@@ -231,8 +229,6 @@
     <string name="ui_https_domain_optional">HTTPS-Domain (optional)</string>
     <string name="ui_leave_blank_to_use_ssh_https">Für SSH leer lassen. HTTPS benötigt einen Reverse-Proxy mit gültigem TLS-Zertifikat.</string>
     <string name="ui_background_news_checks">Nachrichten im Hintergrund prüfen</string>
-    <string name="ui_connect_push_notifications">Push-Benachrichtigungen verbinden</string>
-    <string name="ui_disconnect_push_notifications">Push-Benachrichtigungen trennen</string>
     <string name="ui_save_connection">Verbindung speichern</string>
     <string name="ui_save_secret">Zugangsschlüssel speichern</string>
     <string name="ui_remove">Entfernen</string>

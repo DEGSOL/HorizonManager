@@ -72,6 +72,31 @@ class SshIntegrationTest {
     }
 
     @Test
+    fun theLiveDigestWaitDoesNotBlockAnotherSshOperation() = runBlocking {
+        val pin = assertThrows(HostConfirmation::class.java) { Ssh.withSession(server) {} }.fingerprint
+        val pinned = server.copy(pin = pin)
+        val waiting = CompletableDeferred<Unit>()
+        val listener = launch {
+            useTransport {
+                Ssh.withSession(pinned) { session ->
+                    val api = AgentApi(pinned, session)
+                    assertEquals("", api.digestNotificationMarker())
+                    waiting.complete(Unit)
+                    api.digestNotificationMarker("")
+                }
+            }
+        }
+        try {
+            withTimeout(8_000) { waiting.await() }
+            withTimeout(5_000) {
+                useTransport(pinned) { Ssh.withSession(pinned) { assertEquals(1, AgentApi(pinned, it).health().getInt("api")) } }
+            }
+        } finally {
+            withTimeout(5_000) { listener.cancelAndJoin() }
+        }
+    }
+
+    @Test
     fun encryptedPrivateKey() {
         val path = System.getenv("HM_TEST_SSH_KEY")
         assumeTrue(path != null)

@@ -11,7 +11,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import org.unifiedpush.android.connector.UnifiedPush
 
 @Composable
 private fun SettingsSection(@StringRes title: Int, content: @Composable ColumnScope.() -> Unit) {
@@ -184,72 +183,35 @@ internal fun ServerSettings(panel: Panel, model: ManagerModel, servers: () -> Un
     if (panel.ready) HorizonOnVps(panel, model, confirm)
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun NotificationSettings(panel: Panel, model: ManagerModel, permission: () -> Unit, delivery: () -> Unit) {
+internal fun NotificationSettings(panel: Panel, model: ManagerModel, allowed: Boolean,
+                                  permission: () -> Unit, delivery: () -> Unit) {
     val server = panel.server ?: return
-    val context = LocalContext.current
-    val pushReady by remember(context, server.id) { DigestNotifications.observeRegistration(context, server.id) }
-        .collectAsState(initial = DigestNotifications.hasPush(context, server.id))
-    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    var allowed by remember { mutableStateOf(DigestNotifications.deliveryAllowed(context)) }
-    DisposableEffect(lifecycle, context) {
-        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                allowed = DigestNotifications.deliveryAllowed(context)
-            }
-        }
-        lifecycle.lifecycle.addObserver(observer)
-        onDispose { lifecycle.lifecycle.removeObserver(observer) }
-    }
-    var chooseDistributor by remember { mutableStateOf(false) }
-    if (chooseDistributor) {
-        val distributors = UnifiedPush.getDistributors(context)
-        HorizonAlertDialog(onDismissRequest = { chooseDistributor = false },
-            title = { Text(ui(R.string.ui_push_notification_service)) },
-            text = {
-                Column {
-                    if (distributors.isEmpty()) Text(ui(R.string.ui_install_ntfy_and_enable_unifiedpush_in))
-                    distributors.forEach { distributor ->
-                        val name = runCatching {
-                            context.packageManager.getApplicationLabel(context.packageManager.getApplicationInfo(distributor, 0)).toString()
-                        }.getOrDefault(distributor)
-                        TextButton(onClick = {
-                            chooseDistributor = false
-                            permission()
-                            DigestNotifications.register(context, distributor, server.id)
-                        }) { Text(name) }
-                    }
-                }
-            }, confirmButton = { TextButton(onClick = { chooseDistributor = false }) { Text(ui(R.string.ui_close)) } })
-    }
+    val connected by DigestDeliveryService.connected.collectAsState()
     Tile {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(ui(R.string.hovq_digest_notifications), Modifier.weight(1f))
             SettingHelp(ui(R.string.hovq_digest_notifications), R.string.hovq_push_delivery_help)
-            Switch(server.background, enabled = !panel.busy, onCheckedChange = { checked ->
-                if (checked) permission()
+            Switch(server.background, enabled = !panel.busy, inverted = true, onCheckedChange = { checked ->
                 model.settings(server.https, checked)
+                if (checked && !allowed) permission()
             })
         }
         Reveal(server.background) {
-            Text(ui(if (pushReady) R.string.hovq_push_active else R.string.hovq_polling_active),
-                style = MaterialTheme.typography.bodyMedium, color = LocalHorizonPalette.current.muted)
-            if (!allowed) Text(ui(R.string.hovq_alerts_blocked), color = LocalHorizonPalette.current.warning)
-            TextButton(onClick = {
-                val intent = android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                    .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
-                context.startActivity(intent)
-            }) { Text(ui(R.string.hovq_android_alert_settings)) }
-            FlowRow {
-                TextButton(onClick = { chooseDistributor = true }) { Text(ui(R.string.ui_connect_push_notifications)) }
-                if (pushReady || DigestNotifications.endpoint(context, server.id).isNotEmpty()) {
-                    TextButton(onClick = {
-                        DigestNotifications.disconnectPush(context, server.id)
-                        DigestWorker.sync(context, server.id)
-                    }) { Text(ui(R.string.ui_disconnect_push_notifications)) }
+            when {
+                !allowed -> {
+                    Text(ui(R.string.hovq_alerts_blocked), color = LocalHorizonPalette.current.warning)
+                    TextButton(onClick = permission) { Text(ui(R.string.hovq_allow_notifications)) }
                 }
+                server.id in connected -> Text(ui(R.string.hovq_push_active),
+                    style = MaterialTheme.typography.bodyMedium, color = LocalHorizonPalette.current.muted)
+                else -> Text(ui(R.string.hovq_polling_active),
+                    style = MaterialTheme.typography.bodyMedium, color = LocalHorizonPalette.current.muted)
+            }
+            if (allowed && agentUpdateAvailable(panel.status.optString("agent"))) {
+                Text(ui(R.string.hovq_live_needs_update), style = MaterialTheme.typography.bodySmall,
+                    color = LocalHorizonPalette.current.muted)
             }
         }
     }
