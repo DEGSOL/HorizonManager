@@ -6,6 +6,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -17,6 +18,22 @@ import java.util.concurrent.atomic.AtomicInteger
 @Config(sdk = [35], qualifiers = "ru-rRU-w412dp-h860dp-xhdpi")
 class AiModelSelectionTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+
+    @Test
+    fun providerSwitchFindsOnlyPersistedModelsAndPreservesTheirOwnAuthSettings() {
+        val openRouter = JSONObject().put("provider", "openai").put("model", "saved/router")
+            .put("base_url", AiRouter.OpenRouter.baseUrl).put("api_key_env", "HM_SECRET_OPENROUTER_KEY")
+        val chatgpt = JSONObject().put("provider", "openai-chatgpt").put("model", "saved-chatgpt")
+        val settings = JSONObject().put("ai_providers", JSONObject().put("openai-chatgpt", chatgpt)
+            .put("unorouter", JSONObject().put("model", ""))
+            .put("anthropic", JSONObject().put("model", JSONObject.NULL)))
+
+        assertEquals(chatgpt, rememberedAiModel(settings, openRouter, "openai-chatgpt"))
+        assertEquals(openRouter, rememberedAiModel(settings, openRouter, "openrouter"))
+        assertNull(rememberedAiModel(settings, openRouter, "openai"))
+        assertNull(rememberedAiModel(settings, openRouter, "unorouter"))
+        assertNull(rememberedAiModel(settings, openRouter, "anthropic"))
+    }
 
     @Test
     fun aDifferentProviderWithTheSameModelIdCannotTestTheOldConfiguration() {

@@ -209,7 +209,13 @@ internal fun Switch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, enable
 internal fun horizonFieldShape() = if (LocalSettingsGlass.current) feedGlassShape else OutlinedTextFieldDefaults.shape
 
 @Composable
-internal fun horizonFieldColors() = LocalHorizonPalette.current.let { palette ->
+internal fun horizonFieldColors() = if (LocalLightGlass.current) OutlinedTextFieldDefaults.colors(
+    focusedTextColor = ReadingGlass.text, unfocusedTextColor = ReadingGlass.text, cursorColor = ReadingGlass.text,
+    focusedLabelColor = ReadingGlass.text, unfocusedLabelColor = ReadingGlass.muted,
+    focusedBorderColor = ReadingGlass.muted, unfocusedBorderColor = ReadingGlass.muted.copy(alpha = .55f),
+    focusedContainerColor = Color.White.copy(alpha = .35f), unfocusedContainerColor = Color.White.copy(alpha = .23f),
+    focusedTrailingIconColor = ReadingGlass.text, unfocusedTrailingIconColor = ReadingGlass.muted,
+) else LocalHorizonPalette.current.let { palette ->
     val accent = if (LocalSettingsGlass.current) ReadingGlass.raised else palette.link
     OutlinedTextFieldDefaults.colors(focusedLabelColor = palette.text, focusedBorderColor = accent, cursorColor = accent)
 }
@@ -361,6 +367,7 @@ internal fun SettingHelp(title: String, @StringRes description: Int) {
         title = { Text(title) },
         text = { Text(ui(description)) },
         confirmButton = { TextButton(onClick = { explaining = false }) { Text(ui(R.string.ui_close)) } },
+        light = LocalLightGlass.current,
     )
 }
 

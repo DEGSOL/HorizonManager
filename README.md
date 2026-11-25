@@ -1,4 +1,4 @@
-# Hovq 0.6.2
+# Hovq 0.6.3
 
 **Русский** · [English](docs/readme/README.en.md) · [Deutsch](docs/readme/README.de.md) · [Français](docs/readme/README.fr.md) · [Italiano](docs/readme/README.it.md) · [Español](docs/readme/README.es.md) · [日本語](docs/readme/README.ja.md) · [한국어](docs/readme/README.ko.md) · [简体中文](docs/readme/README.zh.md) · [Қазақша](docs/readme/README.kk.md) · [Татарча](docs/readme/README.tt.md)
 
@@ -45,4 +45,4 @@ cd android
 
 `HM_RELEASE_KEYSTORE`, `HM_RELEASE_KEY_ALIAS`, `HM_RELEASE_STORE_PASSWORD`, `HM_RELEASE_KEY_PASSWORD`
 
-[Код приложения и агента для этой версии](https://github.com/DEGSOL/HorizonManager/tree/v0.6.2) · [Архитектура и API](https://github.com/DEGSOL/HorizonManager/blob/v0.6.2/docs/ARCHITECTURE.md) · [Тестирование](https://github.com/DEGSOL/HorizonManager/blob/v0.6.2/docs/TESTING.md)
+[Код приложения и агента для этой версии](https://github.com/DEGSOL/HorizonManager/tree/v0.6.3) · [Архитектура и API](https://github.com/DEGSOL/HorizonManager/blob/v0.6.3/docs/ARCHITECTURE.md) · [Тестирование](https://github.com/DEGSOL/HorizonManager/blob/v0.6.3/docs/TESTING.md)

@@ -18,6 +18,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.progressSemantics
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
@@ -55,13 +56,18 @@ internal fun DialogMotion() {
 @Composable
 internal fun HorizonAlertDialog(onDismissRequest: () -> Unit, title: @Composable () -> Unit,
                                 text: @Composable () -> Unit, confirmButton: @Composable () -> Unit,
-                                dismissButton: (@Composable () -> Unit)? = null) {
-    val shape = RoundedCornerShape(28.dp)
+                                dismissButton: (@Composable () -> Unit)? = null, light: Boolean = false) {
+    val shape = if (light) feedGlassShape else RoundedCornerShape(28.dp)
+    val surface = if (light) Modifier.readingNavigationGlass(shape, menu = true)
+        else Modifier.glassSurface(shape, backdrop = true, menu = true)
+    val colors = MaterialTheme.colorScheme
     CompositionLocalProvider(LocalGlassScene provides LocalMenuScene.current) {
         AlertDialog(
             onDismissRequest = onDismissRequest,
-            modifier = Modifier.glassSurface(shape, backdrop = true, menu = true),
+            modifier = surface,
             shape = shape, containerColor = Color.Transparent, tonalElevation = 0.dp,
+            titleContentColor = if (light) ReadingGlass.text else colors.onSurface,
+            textContentColor = if (light) ReadingGlass.muted else colors.onSurfaceVariant,
             title = { DialogMotion(); title() }, text = text,
             confirmButton = confirmButton, dismissButton = dismissButton,
         )

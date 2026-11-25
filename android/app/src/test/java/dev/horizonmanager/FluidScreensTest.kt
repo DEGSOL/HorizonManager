@@ -1,8 +1,10 @@
 package dev.horizonmanager
 
 import android.graphics.Bitmap
+import android.graphics.Color as AndroidColor
 import android.os.Looper
 import android.util.LruCache
+import androidx.activity.compose.setContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.semantics.SemanticsActions
@@ -263,6 +265,30 @@ class FluidScreensTest {
         text(R.string.ui_ssh_settings).assertIsDisplayed()
         text(R.string.hovq_welcome_start).assertDoesNotExist()
         snapshot("30-vps-setup")
+    }
+
+    @Test
+    fun welcomeBackgroundMovesLightAndDarkAcrossTheScreen() {
+        compose.mainClock.autoAdvance = false
+        try {
+            compose.runOnUiThread {
+                compose.activity.setContent { HorizonTheme { WelcomeScreen {} } }
+            }
+            compose.mainClock.advanceTimeBy(160)
+            val first = snapshot("30-welcome-wash-start")
+            compose.mainClock.advanceTimeBy(4100)
+            val second = snapshot("30-welcome-wash-halfway")
+            fun grayAt(frame: Bitmap, x: Float): Int {
+                val pixel = frame.getPixel((frame.width * x).toInt(), frame.height / 2)
+                assertEquals(AndroidColor.red(pixel), AndroidColor.green(pixel))
+                assertEquals(AndroidColor.red(pixel), AndroidColor.blue(pixel))
+                return AndroidColor.red(pixel)
+            }
+            assertTrue(grayAt(first, .035f) - grayAt(first, .965f) >= 48)
+            assertTrue(grayAt(second, .965f) - grayAt(second, .035f) >= 48)
+        } finally {
+            compose.mainClock.autoAdvance = true
+        }
     }
 
     @Test

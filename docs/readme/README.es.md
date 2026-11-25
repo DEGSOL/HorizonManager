@@ -1,4 +1,4 @@
-# Hovq 0.6.2
+# Hovq 0.6.3
 
 [Русский](../../README.md) · [English](README.en.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Italiano](README.it.md) · **Español** · [日本語](README.ja.md) · [한국어](README.ko.md) · [简体中文](README.zh.md) · [Қазақша](README.kk.md) · [Татарча](README.tt.md)
 
@@ -41,4 +41,4 @@ Para generar un APK firmado, configura
 
 `HM_RELEASE_KEYSTORE`, `HM_RELEASE_KEY_ALIAS`, `HM_RELEASE_STORE_PASSWORD`, `HM_RELEASE_KEY_PASSWORD`
 
-[Código de la aplicación y del agente de esta versión](https://github.com/DEGSOL/HorizonManager/tree/v0.6.2) · [Arquitectura y API](https://github.com/DEGSOL/HorizonManager/blob/v0.6.2/docs/ARCHITECTURE.md) · [Pruebas](https://github.com/DEGSOL/HorizonManager/blob/v0.6.2/docs/TESTING.md)
+[Código de la aplicación y del agente de esta versión](https://github.com/DEGSOL/HorizonManager/tree/v0.6.3) · [Arquitectura y API](https://github.com/DEGSOL/HorizonManager/blob/v0.6.3/docs/ARCHITECTURE.md) · [Pruebas](https://github.com/DEGSOL/HorizonManager/blob/v0.6.3/docs/TESTING.md)

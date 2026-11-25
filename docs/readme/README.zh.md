@@ -1,4 +1,4 @@
-# Hovq 0.6.2
+# Hovq 0.6.3
 
 [Русский](../../README.md) · [English](README.en.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Italiano](README.it.md) · [Español](README.es.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · **简体中文** · [Қазақша](README.kk.md) · [Татарча](README.tt.md)
 
@@ -41,4 +41,4 @@ cd android
 
 `HM_RELEASE_KEYSTORE`, `HM_RELEASE_KEY_ALIAS`, `HM_RELEASE_STORE_PASSWORD`, `HM_RELEASE_KEY_PASSWORD`
 
-[此版本的应用与代理源码](https://github.com/DEGSOL/HorizonManager/tree/v0.6.2) · [架构和 API](https://github.com/DEGSOL/HorizonManager/blob/v0.6.2/docs/ARCHITECTURE.md) · [测试](https://github.com/DEGSOL/HorizonManager/blob/v0.6.2/docs/TESTING.md)
+[此版本的应用与代理源码](https://github.com/DEGSOL/HorizonManager/tree/v0.6.3) · [架构和 API](https://github.com/DEGSOL/HorizonManager/blob/v0.6.3/docs/ARCHITECTURE.md) · [测试](https://github.com/DEGSOL/HorizonManager/blob/v0.6.3/docs/TESTING.md)

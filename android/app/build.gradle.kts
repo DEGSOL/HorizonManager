@@ -15,8 +15,8 @@ android {
         applicationId = "dev.horizonmanager.mobile"
         minSdk = 26
         targetSdk = 36
-        versionCode = 42
-        versionName = "0.6.2"
+        versionCode = 43
+        versionName = "0.6.3"
         buildConfigField("String", "AGENT_VERSION", "\"0.1.21\"")
     }
     testOptions {

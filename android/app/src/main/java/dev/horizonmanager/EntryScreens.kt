@@ -19,11 +19,15 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
@@ -33,7 +37,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -92,8 +95,7 @@ private fun EntryScene(grayWash: Boolean = false, content: @Composable BoxScope.
     }
     Box(Modifier.fillMaxSize()) {
         if (grayWash) {
-            Box(Modifier.matchParentSize().recordScene(scene)
-                .background(Color(0xFFCCCCCC)).savedNoticeWash(NoticeWash.Monochrome))
+            Box(Modifier.matchParentSize().recordScene(scene).entryGrayWash())
         } else {
             Canvas(Modifier.matchParentSize().recordScene(scene).background(palette.background)) {
                 val glow = Offset(size.width * .48f, size.height * .42f)
@@ -106,6 +108,35 @@ private fun EntryScene(grayWash: Boolean = false, content: @Composable BoxScope.
         CompositionLocalProvider(LocalGlassScene provides scene) {
             Box(Modifier.fillMaxSize().safeDrawingPadding().imePadding().padding(horizontal = 20.dp, vertical = 12.dp),
                 contentAlignment = Alignment.Center, content = content)
+        }
+    }
+}
+
+@Composable
+private fun Modifier.entryGrayWash(): Modifier {
+    val phase = rememberInfiniteTransition(label = "Silver background").animateFloat(
+        0f, 1f, infiniteRepeatable(tween(8200, easing = LinearEasing)), label = "Light and shadow",
+    )
+    return drawWithCache {
+        val shadow = Brush.radialGradient(
+            0f to Color(0xFF808080), .40f to Color(0xFF9D9D9D), 1f to Color.Transparent, radius = 1f, center = Offset.Zero,
+        )
+        val reflection = Brush.radialGradient(
+            0f to Color(0xFFFAFAFA), .42f to Color(0xDBECECEC), 1f to Color.Transparent, radius = 1f, center = Offset.Zero,
+        )
+        fun DrawScope.wash(brush: Brush, x: Float, y: Float, width: Float, height: Float) {
+            translate(size.width * x, size.height * y) {
+                scale(size.width * width, size.height * height, pivot = Offset.Zero) {
+                    drawCircle(brush, radius = 1f, center = Offset.Zero)
+                }
+            }
+        }
+        onDrawBehind {
+            val angle = phase.value * (2 * kotlin.math.PI).toFloat()
+            drawRect(Color(0xFFC4C4C4))
+            wash(shadow, .50f + .46f * cos(angle), .50f + .43f * sin(angle), .90f, .65f)
+            wash(reflection, .50f - .46f * cos(angle), .50f - .43f * sin(angle), .82f, .61f)
+            wash(reflection, .50f + .53f * cos(angle - 1.7f), .50f + .60f * sin(angle - 1.7f), .48f, .31f)
         }
     }
 }
@@ -130,17 +161,17 @@ internal fun WelcomeScreen(begin: () -> Unit) {
             Column(
                 Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
                     .padding(start = 6.dp, end = 6.dp, top = 18.dp, bottom = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(13.dp),
             ) {
                 Text(ui(R.string.hovq_welcome_title), Modifier.fillMaxWidth().semantics { heading() },
-                    color = Color.Black, style = MaterialTheme.typography.displaySmall)
-                Text(ui(R.string.hovq_welcome_intro), color = Color.Black,
-                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp, lineHeight = 25.sp))
+                    color = Color.Black, style = MaterialTheme.typography.displaySmall, textAlign = TextAlign.Center)
+                Text(ui(R.string.hovq_welcome_intro), Modifier.fillMaxWidth(), color = Color.Black,
+                    style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
                 WelcomeStep(ui(R.string.hovq_welcome_server), R.string.mr_server, R.string.ui_servers)
                 WelcomeStep(ui(R.string.hovq_welcome_sources), R.string.mr_news, R.string.sources)
                 WelcomeStep(
-                    ui(R.string.hovq_welcome_ai, ui(R.string.settings_ai_model), ui(R.string.ui_secrets)),
-                    R.string.editorial_ai_processing,
+                    ui(R.string.hovq_welcome_ai), R.string.editorial_ai_processing, R.string.settings_ai_model,
                 )
                 WelcomeStep(ui(R.string.hovq_welcome_schedule), R.string.mr_news, R.string.ui_schedule)
                 WelcomeStep(ui(R.string.hovq_welcome_alerts), R.string.mr_interface, R.string.settings_notifications)
@@ -159,9 +190,11 @@ internal fun WelcomeScreen(begin: () -> Unit) {
 @Composable
 private fun WelcomeStep(detail: String, vararg destination: Int) {
     val path = (listOf(ui(R.string.settings)) + destination.map { ui(it) }).joinToString(" → ")
-    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text(path, color = Color.Black, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
-        Text(detail, color = Color.Black, style = MaterialTheme.typography.bodyLarge)
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(path, Modifier.fillMaxWidth().semantics { heading() }, color = Color.Black,
+            style = MaterialTheme.typography.titleSmall, textAlign = TextAlign.Center)
+        Text(detail, Modifier.fillMaxWidth(), color = Color.Black,
+            style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
     }
 }
 

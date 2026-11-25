@@ -1,4 +1,4 @@
-# Hovq 0.6.2
+# Hovq 0.6.3
 
 [Русский](../../README.md) · [English](README.en.md) · **Deutsch** · [Français](README.fr.md) · [Italiano](README.it.md) · [Español](README.es.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [简体中文](README.zh.md) · [Қазақша](README.kk.md) · [Татарча](README.tt.md)
 
@@ -41,4 +41,4 @@ Für einen signierten Build setzen Sie die Variablen
 
 `HM_RELEASE_KEYSTORE`, `HM_RELEASE_KEY_ALIAS`, `HM_RELEASE_STORE_PASSWORD`, `HM_RELEASE_KEY_PASSWORD`
 
-[Quellcode der App und des Agenten für diese Version](https://github.com/DEGSOL/HorizonManager/tree/v0.6.2) · [Architektur und API](https://github.com/DEGSOL/HorizonManager/blob/v0.6.2/docs/ARCHITECTURE.md) · [Tests](https://github.com/DEGSOL/HorizonManager/blob/v0.6.2/docs/TESTING.md)
+[Quellcode der App und des Agenten für diese Version](https://github.com/DEGSOL/HorizonManager/tree/v0.6.3) · [Architektur und API](https://github.com/DEGSOL/HorizonManager/blob/v0.6.3/docs/ARCHITECTURE.md) · [Tests](https://github.com/DEGSOL/HorizonManager/blob/v0.6.3/docs/TESTING.md)

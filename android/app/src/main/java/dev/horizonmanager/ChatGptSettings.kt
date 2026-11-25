@@ -51,18 +51,17 @@ internal fun ChatGptSettings(
         }
     }
 
-    Text(ui(R.string.hovq_chatgpt_plan_help))
-    if (connected) {
-        Text(if (email.isBlank()) ui(R.string.hovq_chatgpt_connected)
-            else ui(R.string.hovq_chatgpt_account, email), style = MaterialTheme.typography.titleMedium)
-    }
+    if (!connected) AiHint(ui(R.string.hovq_chatgpt_plan_help))
     if (login?.waiting == true) {
         DottedProgress(Modifier.fillMaxWidth())
         Text(ui(R.string.hovq_chatgpt_waiting),
             Modifier.semantics { liveRegion = LiveRegionMode.Polite })
         TextButton(onClick = { model.cancelChatGptLogin(serverId) }) { Text(ui(R.string.ui_cancel)) }
     } else {
-        TextButton(onClick = {
+        val account = if (!connected) "" else if (email.isBlank()) ui(R.string.hovq_chatgpt_connected)
+            else ui(R.string.hovq_chatgpt_account, email)
+        GlassSettingRow(ui(if (connected) R.string.hovq_chatgpt_reconnect else R.string.hovq_chatgpt_sign_in),
+            account, enabled = !busy && !loading) {
             model.signInChatGpt(serverId) { url ->
                 try {
                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE))
@@ -70,19 +69,14 @@ internal fun ChatGptSettings(
                     throw Problem("CHATGPT_BROWSER_UNAVAILABLE")
                 }
             }
-        }, enabled = !busy && !loading) {
-            Text(ui(if (connected) R.string.hovq_chatgpt_reconnect else R.string.hovq_chatgpt_sign_in))
         }
     }
     if (loading && !choosing && login?.waiting != true) DottedProgress(Modifier.fillMaxWidth())
     val failure = login?.error?.takeIf(String::isNotBlank) ?: error
-    if (!choosing && failure.isNotBlank()) Text(errorText(failure), color = MaterialTheme.colorScheme.error)
+    if (!choosing && failure.isNotBlank()) AiHint(errorText(failure), color = MaterialTheme.colorScheme.error)
     if (connected && login?.waiting != true) {
         val selected = models.firstOrNull { it.id == currentModel }
-        if (currentModel.isNotBlank()) Text(selected?.name ?: currentModel, style = MaterialTheme.typography.titleMedium)
-        OutlinedButton(onClick = { choosing = true }, enabled = !busy && !loading) {
-            Text(ui(if (currentModel.isBlank()) R.string.ui_select_model else R.string.ui_change_model))
-        }
+        AiModelRow(selected?.name ?: currentModel, enabled = !busy && !loading) { choosing = true }
         if (choosing) RouterPicker(models, currentModel, loading, failure.takeIf(String::isNotBlank)?.let(::errorText).orEmpty(),
             refresh = { refresh++ }, close = { choosing = false }) {
             choosing = false
@@ -103,7 +97,7 @@ internal fun SavedModelTest(
         Text(ui(R.string.ui_test_saved_model))
     }
     if (busy && !applied && selectedModel.isNotBlank()) {
-        Text(ui(R.string.ui_saving), style = MaterialTheme.typography.bodySmall)
+        AiHint(ui(R.string.ui_saving))
     }
     if (result != null) {
         if (result.pending) DottedProgress(Modifier.fillMaxWidth())
@@ -116,9 +110,11 @@ internal fun SavedModelTest(
             }
             else -> ui(R.string.hovq_ai_test_success, result.model)
         }
-        Text(message, Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-            color = if (result.error.isNotEmpty()) MaterialTheme.colorScheme.error else LocalHorizonPalette.current.text)
+        Text(message, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.bodySmall,
+            color = if (result.error.isNotEmpty()) MaterialTheme.colorScheme.error else ReadingGlass.text)
     } else if (!applied && !busy) {
-        Text(ui(R.string.hovq_ai_test_save_first), style = MaterialTheme.typography.bodySmall)
+        AiHint(ui(R.string.hovq_ai_test_save_first))
+    } else if (applied && !busy) {
+        AiHint(ui(R.string.hovq_ai_test_hint))
     }
 }

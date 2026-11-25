@@ -22,7 +22,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.text.style.TextAlign
@@ -86,7 +85,6 @@ internal val noticeGlassShape = RoundedCornerShape(22.dp)
 
 internal enum class NoticeWash(val first: Color, val second: Color, val third: Color) {
     Saved(Color(0xFF8B65EF), Color(0xFF32B4C7), Color(0xFFE2985A)),
-    Monochrome(Color(0xFF686868), Color(0xFFFAFAFA), Color(0xFF838383)),
     Connected(Color(0xFF3BAD61), Color(0xFF21834B), Color(0xFF81CA73)),
     Disconnected(Color(0xFFCD3A52), Color(0xFF9B243E), Color(0xFFE36767)),
 }
@@ -106,12 +104,9 @@ internal fun Modifier.savedNoticeWash(
     val near = Brush.radialGradient(listOf(palette.first.copy(alpha = .44f), Color.Transparent), Offset.Zero, radius)
     val far = Brush.radialGradient(listOf(palette.second.copy(alpha = .41f), Color.Transparent), Offset.Zero, radius)
     val edge = Brush.radialGradient(listOf(palette.third.copy(alpha = .30f), Color.Transparent), Offset.Zero, radius)
-    val spread = if (palette == NoticeWash.Monochrome && size.height > size.width) size.width / size.height else 1f
     fun DrawScope.glow(brush: Brush, x: Float, y: Float) {
         translate(size.width * x, size.height * y) {
-            scale(spread, 1f, pivot = Offset.Zero) {
-                drawCircle(brush, radius, Offset.Zero)
-            }
+            drawCircle(brush, radius, Offset.Zero)
         }
     }
     onDrawWithContent {

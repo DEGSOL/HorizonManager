@@ -20,4 +20,11 @@
     <string name="hovq_ai_test_failed">Модель %1$s не прошла проверку. %2$s</string>
     <string name="hovq_ai_test_save_first">Выбери модель, чтобы применить настройки и запустить проверку.</string>
     <string name="hovq_ai_test_no_reply">Провайдер не вернул пригодный ответ.</string>
+    <string name="hovq_ai_autosave">При выборе модели настройки сохраняются автоматически. Если у провайдера уже есть сохранённая модель, достаточно выбрать самого провайдера.</string>
+    <string name="hovq_ai_account_model">Доступ и модель</string>
+    <string name="hovq_ai_connection_title">Проверка подключения</string>
+    <string name="hovq_ai_advanced_hint">Адрес API и параметры запросов</string>
+    <string name="hovq_ai_catalog_key_hint">Введи API-ключ, чтобы открыть список моделей.</string>
+    <string name="hovq_ai_manual_model_hint">Найди идентификатор модели в кабинете провайдера и вставь его сюда.</string>
+    <string name="hovq_ai_test_hint">Hovq отправит короткий запрос через VPS и покажет ответ проверки.</string>
 </resources>

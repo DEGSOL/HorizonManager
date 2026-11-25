@@ -86,12 +86,12 @@ internal fun RouterSettings(
         }
     }
 
-    Text(ui(R.string.ui_select_a_model_from_the_catalog))
-    if (hasSavedKey && !showKeyField) {
-        Text(ui(R.string.ui_key_saved_on_the_vps), style = MaterialTheme.typography.bodyMedium)
-        TextButton(enabled = !busy && !loading, onClick = { showKeyField = true }) { Text(ui(R.string.ui_replace_api_key)) }
+    if (hasSavedKey) {
+        GlassSettingRow(ui(R.string.ui_replace_api_key), ui(R.string.ui_key_saved_on_the_vps),
+            enabled = !busy && !loading) { showKeyField = !showKeyField }
     }
     if (showKeyField) {
+        AiHint(ui(R.string.hovq_ai_catalog_key_hint))
         OutlinedTextField(
             value = input, onValueChange = {
                 input = it
@@ -111,12 +111,9 @@ internal fun RouterSettings(
         )
     }
     val selection = models.orEmpty().firstOrNull { it.id == currentModel }
-    if (currentModel.isNotBlank()) Text(selection?.name ?: currentModel, style = MaterialTheme.typography.titleMedium)
-    OutlinedButton(onClick = {
+    AiModelRow(selection?.name ?: currentModel, enabled = !busy && (hasSavedKey || input.isNotBlank())) {
         chooseModel = true
-        if (models == null) request++
-    }, enabled = !busy && (hasSavedKey || input.isNotBlank())) {
-        Text(ui(if (currentModel.isBlank()) R.string.ui_select_model else R.string.ui_change_model))
+        if (models == null && !loading) request++
     }
     if (chooseModel) RouterPicker(models.orEmpty(), currentModel, loading, error,
         refresh = { request++ }, close = { chooseModel = false }) { id ->
@@ -128,16 +125,18 @@ internal fun RouterSettings(
 @Composable
 internal fun ManualModelPicker(currentModel: String, busy: Boolean, select: (String) -> Unit) {
     var choosing by remember { mutableStateOf(false) }
-    if (currentModel.isNotBlank()) Text(currentModel, style = MaterialTheme.typography.titleMedium)
-    OutlinedButton(onClick = { choosing = true }, enabled = !busy) {
-        Text(ui(if (currentModel.isBlank()) R.string.ui_select_model else R.string.ui_change_model))
-    }
+    AiModelRow(currentModel, enabled = !busy) { choosing = true }
     if (choosing) {
         var id by remember(currentModel) { mutableStateOf(currentModel) }
         HorizonAlertDialog(
             onDismissRequest = { choosing = false },
-            title = { Text(ui(R.string.ui_choose_a_model)) },
-            text = { ValueField(ui(R.string.ui_model_id), id, { id = it }, help = R.string.ui_enter_the_model_id_from_your) },
+            title = { Text(ui(if (currentModel.isBlank()) R.string.ui_choose_a_model else R.string.ui_change_model)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    AiHint(ui(R.string.hovq_ai_manual_model_hint))
+                    ValueField(ui(R.string.ui_model_id), id, { id = it }, enabled = !busy)
+                }
+            },
             confirmButton = {
                 Button(enabled = !busy && id.trim().isNotBlank(), onClick = {
                     choosing = false
@@ -145,6 +144,7 @@ internal fun ManualModelPicker(currentModel: String, busy: Boolean, select: (Str
                 }) { Text(ui(R.string.ui_select_model)) }
             },
             dismissButton = { TextButton(onClick = { choosing = false }) { Text(ui(R.string.ui_cancel)) } },
+            light = true,
         )
     }
 }
@@ -163,16 +163,16 @@ internal fun RouterPicker(
         onDismissRequest = close,
         title = { Text(ui(if (selectedId.isBlank()) R.string.ui_choose_a_model else R.string.ui_change_model)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 OutlinedTextField(
                     value = query, onValueChange = { query = it }, label = { Text(ui(R.string.ui_search_by_name)) },
                     modifier = Modifier.fillMaxWidth(), singleLine = true, colors = horizonFieldColors(), shape = horizonFieldShape(),
                 )
-                TextButton(onClick = refresh, enabled = !loading) { Text(ui(R.string.ui_refresh_list)) }
                 if (loading) DottedProgress(Modifier.fillMaxWidth())
-                if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
-                if (!loading && error.isBlank() && filtered.isEmpty()) Text(ui(R.string.ui_no_models_found))
-                LazyColumn(Modifier.heightIn(max = 340.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (error.isNotBlank()) AiHint(error, color = MaterialTheme.colorScheme.error)
+                if (!loading && error.isBlank() && filtered.isEmpty()) AiHint(ui(R.string.ui_no_models_found))
+                LazyColumn(Modifier.weight(1f, fill = false).heightIn(max = 340.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(filtered, key = RouterModel::id) { model ->
                         ListItem(
                             headlineContent = { Text(model.name) },
@@ -181,7 +181,8 @@ internal fun RouterPicker(
                                 Text(model.id + context)
                             },
                             trailingContent = if (model.id == selectedId) ({ Text(ui(R.string.ui_selected)) }) else null,
-                            modifier = Modifier.settingsControlGlass().clickable(enabled = !loading) { select(model.id) },
+                            modifier = Modifier.glassSurface(feedGlassShape, lightNavigation = true,
+                                outlined = model.id == selectedId).clickable(enabled = !loading) { select(model.id) },
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent,
                                 headlineColor = ReadingGlass.text, supportingColor = ReadingGlass.muted,
                                 trailingIconColor = ReadingGlass.text),
@@ -191,5 +192,7 @@ internal fun RouterPicker(
             }
         },
         confirmButton = { TextButton(onClick = close) { Text(ui(R.string.ui_close)) } },
+        dismissButton = { TextButton(onClick = refresh, enabled = !loading) { Text(ui(R.string.ui_refresh_list)) } },
+        light = true,
     )
 }

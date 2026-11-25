@@ -5,7 +5,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -169,144 +168,37 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, dirty
             return
         }
     }
+    if (page == "ai") {
+        AiModelForm(panel, model, stored, storedProfiles, schema, profileIds(storedProfiles), dirtyChange)
+        return
+    }
     var working by remember(serverId, page, panel.config.optInt("revision")) { mutableStateOf(stored.copyObject()) }
-    val aiDrafts = remember(serverId, panel.config.optInt("revision")) { mutableMapOf<String, JSONObject>() }
-    var profiles by remember(serverId, page, panel.config.optInt("revision")) { mutableStateOf(JSONArray(storedProfiles.toString())) }
-    val ids = profileIds(profiles)
+    val ids = profileIds(storedProfiles)
     val fields = schema.getJSONObject("properties")
-    val aiDraft = working.optJSONObject("ai")
-    val secretAlias = aiDraft?.optString("api_key_env").orEmpty()
-    val secrets = panel.config.optJSONArray("secrets")?.strings().orEmpty()
-    val configuredSecret = secretAlias in secrets
-    var genericKey by remember(secretAlias, aiDraft?.optString("provider"), panel.config.optInt("revision")) { mutableStateOf("") }
-    var showGenericKey by remember(secretAlias, panel.config.optInt("revision")) { mutableStateOf(!configuredSecret) }
-    val dirty = working.toString() != stored.toString() || profiles.toString() != storedProfiles.toString() || genericKey.isNotBlank()
+    val dirty = working.toString() != stored.toString()
     SideEffect { dirtyChange(dirty) }
     if (page == "advanced") {
         AdvancedSettings(working, schema, ids) { name, value -> working = working.copyObject().put(name, value) }
         if (dirty) Tile {
             Text(ui(R.string.editorial_unsaved), color = LocalHorizonPalette.current.warning)
-            Button(onClick = { model.saveConfig(working, profiles) }, enabled = !panel.busy) {
+            Button(onClick = { model.saveConfig(working, storedProfiles) }, enabled = !panel.busy) {
                 Text(ui(R.string.ui_save_settings))
             }
         }
         return
     }
     Tile {
-        when (page) {
-            "ai" -> {
-                val ai = working.getJSONObject("ai")
-                val router = AiRouter.configured(ai)
-                val provider = router?.id ?: ai.optString("provider")
-                val providers = panel.schema.getJSONObject("providers")
-                val chatgpt = provider == "openai-chatgpt"
-                val supported = AiRouter.entries.map(AiRouter::id) + providers.keys().asSequence()
-                    .filter { it != "openai-chatgpt" || panel.status.optBoolean("chatgpt_sign_in") }.toList()
-                val revision = panel.config.optInt("revision")
-                val checks by model.savedModelChecks.collectAsStateWithLifecycle()
-                val aiBusy = panel.busy || checks[serverId]?.pending == true
-                val savedAi = stored.getJSONObject("ai")
-                fun replace(value: JSONObject) { working = working.copyObject().put("ai", value) }
-                fun selectModel(id: String, alias: String = secretAlias, enteredKey: String? = null) {
-                    if (aiBusy || id.isBlank()) return
-                    val selected = ai.copyObject().put("model", id)
-                    val keys = JSONObject()
-                    if (alias.isNotBlank()) {
-                        selected.put("api_key_env", alias)
-                        enteredKey?.trim()?.takeIf(String::isNotBlank)?.let { keys.put(alias, it) }
-                    }
-                    if (selected.toString() == savedAi.toString() && keys.length() == 0) return
-                    val updated = working.copyObject().put("ai", selected)
-                    working = updated
-                    model.saveConfig(updated, profiles, keys)
-                }
-                Choice(ui(R.string.ui_provider), supported, provider, { change ->
-                    if (change != provider) {
-                        aiDrafts[provider] = ai
-                        val remembered = aiDrafts[change] ?: panel.config.optJSONObject("ai_providers")?.optJSONObject(change)
-                        val preset = AiRouter.entries.find { it.id == change }
-                        val next = remembered ?: preset?.defaults(ai) ?: run {
-                            val defaults = providers.getJSONObject(change)
-                            ai.copyObject().put("provider", change).put("model", "")
-                                .put("api_key_env", defaults.optString("api_key_env"))
-                                .put("base_url", defaults.opt("base_url") ?: JSONObject.NULL)
-                                .put("azure_endpoint_env", defaults.opt("azure_endpoint_env") ?: JSONObject.NULL)
-                                .put("api_version", defaults.opt("api_version") ?: JSONObject.NULL)
-                                .put("provider_chain", JSONObject.NULL).put("extra_body", JSONObject.NULL)
-                        }
-                        replace(next.copyObject().put("languages", ai.opt("languages")))
-                    }
-                }, { value ->
-                    AiRouter.entries.find { it.id == value }?.title
-                        ?: when (value) {
-                            "openai" -> ui(R.string.ui_openai_compatible_api)
-                            "openai-chatgpt" -> ui(R.string.hovq_chatgpt_provider)
-                            else -> value
-                        }
-                }, enabled = !aiBusy, row = true)
-                if (chatgpt) {
-                    ChatGptSettings(serverId, model, ai.optString("model"), aiBusy) { selectModel(it) }
-                } else if (router == null) {
-                    ValueField(ui(R.string.ui_compatible_api_address_optional), ai.optString("base_url").takeUnless { it == "null" }.orEmpty(), {
-                        replace(ai.copyObject().put("base_url", it.ifBlank { null } ?: JSONObject.NULL))
-                    })
-                    if (provider != "ollama") {
-                        if (configuredSecret) {
-                            Text(ui(R.string.ui_key_saved_on_the_vps), style = MaterialTheme.typography.bodyMedium)
-                            if (!showGenericKey) TextButton(onClick = { showGenericKey = true }) {
-                                Text(ui(R.string.ui_replace_api_key))
-                            }
-                        }
-                        Reveal(showGenericKey) {
-                            PasswordField(ui(R.string.ui_api_key, provider), genericKey) { genericKey = it }
-                        }
-                    }
-                    val advanced = definition(schema, fields.getJSONObject("ai")).copyObject()
-                    val properties = advanced.getJSONObject("properties")
-                    listOf("provider", "model", "base_url", "languages").forEach { properties.remove(it) }
-                    EditValue(schema, advanced, "ai", ai,
-                        { working = working.copyObject().put("ai", it) }, ids, ui(R.string.ui_advanced_ai_options))
-                    key(serverId, provider, revision) {
-                        ManualModelPicker(ai.optString("model"), aiBusy) { selectModel(it, enteredKey = genericKey) }
-                    }
-                } else {
-                    val savedAlias = router.secretAlias(ai)
-                    val knownSecrets = panel.config.optJSONArray("secrets")?.strings().orEmpty()
-                    val alias = savedAlias.takeIf { it in knownSecrets } ?: router.secretName
-                    val hasKey = alias in knownSecrets
-                    key(serverId, router, panel.config.optInt("revision")) {
-                        RouterSettings(
-                            router, ai.optString("model"), hasKey, aiBusy,
-                            { key -> model.loadRouterCatalog(serverId, router, key) },
-                        ) { id, newKey -> selectModel(id, alias, newKey) }
-                    }
-                    val advanced = definition(schema, fields.getJSONObject("ai")).copyObject()
-                    val properties = advanced.getJSONObject("properties")
-                    listOf("provider", "model", "api_key_env", "base_url", "azure_endpoint_env", "api_version", "provider_chain", "languages")
-                        .forEach { properties.remove(it) }
-                    EditValue(schema, advanced, "ai", ai,
-                        { working = working.copyObject().put("ai", it) }, ids, ui(R.string.ui_advanced_ai_options))
-                }
-                SavedModelTest(ai, savedAi, revision, panel.busy, check = checks[serverId],
-                    ready = genericKey.isBlank()) { model.testSavedModel(serverId, revision, ai) }
-            }
-            else -> {
-                val names = when (page) {
-                    "delivery" -> listOf("email", "webhook")
-                    else -> listOf(page)
-                }
-                for (name in names) {
-                    Text(label(name), style = MaterialTheme.typography.titleLarge)
-                    key(name) {
-                        EditValue(schema, fields.getJSONObject(name), name, working.opt(name),
-                            { working = working.copyObject().put(name, it) }, ids, showHeader = false)
-                    }
-                }
+        val names = if (page == "delivery") listOf("email", "webhook") else listOf(page)
+        for (name in names) {
+            Text(label(name), style = MaterialTheme.typography.titleLarge)
+            key(name) {
+                EditValue(schema, fields.getJSONObject(name), name, working.opt(name),
+                    { working = working.copyObject().put(name, it) }, ids, showHeader = false)
             }
         }
-        Reveal(dirty && page != "ai") {
+        Reveal(dirty) {
             Text(ui(R.string.editorial_unsaved), color = LocalHorizonPalette.current.warning)
-            Button(onClick = { model.saveConfig(working, profiles) }, enabled = !panel.busy) {
+            Button(onClick = { model.saveConfig(working, storedProfiles) }, enabled = !panel.busy) {
                 Text(ui(R.string.ui_save_settings))
             }
         }
