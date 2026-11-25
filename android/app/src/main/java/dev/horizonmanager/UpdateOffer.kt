@@ -22,14 +22,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 
-@Composable
-internal fun AgentUpdateOffer(installedVersion: String, dismiss: () -> Unit, update: () -> Unit) {
-    UpdateOffer(
-        ui(R.string.ui_update_vps_agent), ui(R.string.hovq_agent_update_offer, installedVersion, BuildConfig.AGENT_VERSION),
-        ui(R.string.hovq_update_now), dismiss, update,
-    )
-}
-
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun UpdateOffer(title: String, message: String, action: String, dismiss: () -> Unit, update: () -> Unit) {

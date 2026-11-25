@@ -86,7 +86,7 @@ class MainActivity : ComponentActivity() {
                 val notices = remember { NoticeQueue() }
                 CompositionLocalProvider(LocalNoticeQueue provides notices) {
                     HovqLinks {
-                        Manager(viewModel(), notificationServer) { notificationServer = "" }
+                        HovqEntry(viewModel(), notificationServer) { notificationServer = "" }
                     }
                 }
             }
@@ -121,6 +121,23 @@ private fun mainTabs() = listOf(
     HorizonTab(R.string.settings, ImageVector.vectorResource(R.drawable.ic_nav_sliders)),
     HorizonTab(R.string.favorites_title, ImageVector.vectorResource(R.drawable.ic_bookmark_outline)),
 )
+
+@Composable
+private fun HovqEntry(model: ManagerModel, notificationServer: String, consumed: () -> Unit) {
+    val panel by model.state.collectAsStateWithLifecycle()
+    val loaded by model.profilesLoaded.collectAsStateWithLifecycle()
+    var began by rememberSaveable { mutableStateOf(false) }
+    val notices = requireNotNull(LocalNoticeQueue.current).messages
+    LaunchedEffect(model, notices) {
+        model.agentUpdated.collect { notices.showSnackbar(SavedNotice(ui(R.string.hovq_agent_update_success))) }
+    }
+    when {
+        !loaded -> EntryLoading()
+        panel.agentGateRequired() -> AgentGate(panel, model)
+        !began && panel.servers.isEmpty() && panel.problem != "VAULT_READ" -> WelcomeWindow { began = true }
+        else -> Manager(model, notificationServer, consumed)
+    }
+}
 
 @Composable
 private fun Manager(model: ManagerModel, notificationServer: String, consumed: () -> Unit) {
@@ -168,9 +185,6 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         lastLocalSave = localSave
         launcherIcon = LauncherAppearance.current(ctx)
         notices.showSnackbar(SavedNotice(ui(R.string.hovq_settings_saved)))
-    }
-    LaunchedEffect(model, notices) {
-        model.agentUpdated.collect { notices.showSnackbar(SavedNotice(ui(R.string.hovq_agent_update_success))) }
     }
     var archiveIssue by rememberSaveable(currentServer?.id) { mutableStateOf("") }
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current
@@ -285,7 +299,6 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
             else model.checkDigestNotifications()
         }
     }
-    var dismissedAgentUpdates by rememberSaveable { mutableStateOf(emptyList<String>()) }
     val output = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         val content = model.takeExportDocument()
         if (uri != null) scope.launch {
@@ -443,18 +456,9 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     }
     val promptsAllowed = confirm == null && backupDialog.isEmpty() && panel.hostConfirmation == null &&
         overlay == ReadingOverlay.None && !requestingAlerts
-    val installedAgent = panel.status.optString("agent")
-    val updateKey = "${currentServer?.id}/$installedAgent"
-    var requestUpdatePassword by remember(updateKey) { mutableStateOf(false) }
-    val showPermissionOffer = promptsAllowed && notificationOffer && !notificationAllowed
-    val appUpdate = appRelease?.takeIf {
-        promptsAllowed && !showPermissionOffer && !requestUpdatePassword && !canGoBack && !panel.busy && !panel.updatingAgent
-    }
-    val showUpdateOffer = promptsAllowed && appUpdate == null && !showPermissionOffer && !canGoBack && panel.ready &&
-        !panel.busy && !panel.updatingAgent && !enableDigestAfterPermission && currentServer != null &&
-        panel.jobs.none { it.optString("state") in setOf("running", "queued") } &&
-        agentUpdateAvailable(installedAgent) && updateKey !in dismissedAgentUpdates
-    val promptOpen = showPermissionOffer || appUpdate != null || showUpdateOffer || requestUpdatePassword
+    val showPermissionOffer = panel.ready && promptsAllowed && notificationOffer && !notificationAllowed
+    val appUpdate = appRelease?.takeIf { promptsAllowed && !showPermissionOffer && !canGoBack && !panel.busy }
+    val promptOpen = showPermissionOffer || appUpdate != null
     val swipeTabs = panel.ready && !canGoBack && overlay == ReadingOverlay.None && !promptOpen &&
         (tab != FEED || !feedFilters.searchOpen && !feedFilters.optionsOpen)
     val releaseDialogs: @Composable () -> Unit = {
@@ -479,21 +483,6 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                 ui(R.string.hovq_app_update_open), ::postpone) {
                 postpone()
                 links.openUri(appUpdate.pageUrl)
-            }
-        } else if (showUpdateOffer) {
-            fun dismissAgent() { dismissedAgentUpdates = dismissedAgentUpdates + updateKey }
-            AgentUpdateOffer(installedAgent, dismiss = ::dismissAgent) {
-                dismissAgent()
-                val privileges = panel.probe["privileges"]
-                if (currentServer.user == "root" || privileges in listOf("root", "sudo"))
-                    model.updateAgent("")
-                else requestUpdatePassword = true
-            }
-        } else if (requestUpdatePassword) {
-            PasswordDialog(ui(R.string.ui_update_vps_agent), ui(R.string.hovq_update_sudo),
-                close = { requestUpdatePassword = false }) { password ->
-                requestUpdatePassword = false
-                model.updateAgent(password)
             }
         }
     }
@@ -586,8 +575,9 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                             "archive" -> ArchiveScreen(issues.archive, panel, model, top) { archiveIssue = it.getString("id") }
                             "journal" -> Journal(panel, { description, run -> confirm = description to run }, model,
                                 { model.prepareExportDocument(it); output.launch("horizon-journal.json") }, top)
-                            else -> Column(Modifier.fillMaxSize().editorialSideBottomInsets().verticalScroll(rememberScrollState())
-                                .padding(start = 16.dp, end = 16.dp, top = top, bottom = 10.dp),
+                            else -> Column(Modifier.fillMaxSize().editorialSideBottomInsets()
+                                .then(if (screen.page == "setup") Modifier.imePadding() else Modifier)
+                                .verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = top, bottom = 10.dp),
                                 verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Reveal(panel.busy) { DottedProgress(Modifier.fillMaxWidth()) }
                                 when (screen.page) {
@@ -688,9 +678,17 @@ internal fun PasswordDialog(title: String, detail: String, minimum: Int = 0, max
 }
 
 @Composable
-internal fun PasswordField(title: String, value: String, enabled: Boolean = true, change: (String) -> Unit) {
+internal fun PasswordField(title: String, value: String, enabled: Boolean = true, light: Boolean = false,
+                           change: (String) -> Unit) {
+    val colors = if (light) OutlinedTextFieldDefaults.colors(
+        focusedTextColor = ReadingGlass.text, unfocusedTextColor = ReadingGlass.text, cursorColor = ReadingGlass.text,
+        focusedLabelColor = ReadingGlass.text, unfocusedLabelColor = ReadingGlass.muted,
+        focusedBorderColor = ReadingGlass.muted, unfocusedBorderColor = ReadingGlass.muted.copy(alpha = .55f),
+        disabledTextColor = ReadingGlass.muted,
+    ) else horizonFieldColors()
     OutlinedTextField(value, change, label = { Text(title) }, modifier = Modifier.fillMaxWidth(), enabled = enabled,
-        singleLine = true, colors = horizonFieldColors(), shape = horizonFieldShape(), visualTransformation = PasswordVisualTransformation())
+        singleLine = true, colors = colors, shape = if (light) feedGlassShape else horizonFieldShape(),
+        visualTransformation = PasswordVisualTransformation())
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -721,25 +719,26 @@ private fun Setup(panel: Panel, model: ManagerModel) {
         }
     }
     if (server == null || probe.isEmpty()) {
-        Tile {
-            Text(ui(R.string.ui_connect_to_your_vps), style = MaterialTheme.typography.titleLarge)
-            ServerCredentialFields(draft, enabled = !panel.busy) { draft = it }
-            val setupProblem = panel.problem.takeIf { it == "SERVER_FIELDS" || isConnectionFailure(it) }
-            val phase = panel.connectionPhase
-            if (phase != ConnectionPhase.Idle) Text(ui(phase.label()))
+        Column(Modifier.fillMaxWidth().readingNavigationGlass(MaterialTheme.shapes.extraLarge)
+            .padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(ui(R.string.ui_connect_to_your_vps), color = ReadingGlass.text, style = MaterialTheme.typography.titleLarge)
+            Text(ui(R.string.hovq_vps_connect_detail), color = ReadingGlass.muted, style = MaterialTheme.typography.bodyMedium)
+        }
+        ServerCredentialFields(draft, enabled = !panel.busy, sectioned = true) { draft = it }
+        val setupProblem = panel.problem.takeIf { it == "SERVER_FIELDS" || isConnectionFailure(it) }
+        if (panel.connectionPhase != ConnectionPhase.Idle || setupProblem != null) VpsFormSection {
+            if (panel.connectionPhase != ConnectionPhase.Idle) Text(ui(panel.connectionPhase.label()))
             if (setupProblem != null) Text(errorText(setupProblem), color = MaterialTheme.colorScheme.error)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { model.connect(draft, server) },
-                    enabled = !panel.busy && draft.credential.isNotBlank()) {
-                    Text(ui(if (setupProblem != null) R.string.ui_retry else R.string.ui_connect))
-                }
-                if (panel.connectionCancellable) TextButton(onClick = model::cancelConnection) {
-                    Text(ui(R.string.ui_cancel))
-                }
-            }
+        }
+        Box(Modifier.fillMaxWidth().padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
+            SavedGlassButton(ui(if (setupProblem != null) R.string.ui_retry else R.string.ui_connect),
+                enabled = !panel.busy && draft.credential.isNotBlank()) { model.connect(draft, server) }
+        }
+        if (panel.connectionCancellable) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            TextButton(onClick = model::cancelConnection) { Text(ui(R.string.ui_cancel)) }
         }
     } else {
-        Tile {
+        VpsFormSection {
             Text(ui(R.string.ui_vps_checks), style = MaterialTheme.typography.titleLarge)
             Text("${probe["os"].orEmpty()} ${probe["version"].orEmpty()} · ${probe["arch"].orEmpty()}")
             Text(ui(R.string.ui_cpu_ram_free_disk, probe["cpu"].orEmpty(), kb(probe["memory_kb"]), kb(probe["disk_kb"])))
@@ -756,7 +755,7 @@ private fun Setup(panel: Panel, model: ManagerModel) {
             "service" to ui(R.string.ui_install_agent_service), "health" to ui(R.string.ui_check_api))
         val install = probe["install"].orEmpty()
         val step = probe["step"].orEmpty()
-        if (install.isNotEmpty()) Tile {
+        if (install.isNotEmpty()) VpsFormSection {
             Text(ui(R.string.ui_vps_installation), style = MaterialTheme.typography.titleLarge)
             stages.entries.forEachIndexed { index, (id, title) ->
                 val current = stages.keys.indexOf(step)

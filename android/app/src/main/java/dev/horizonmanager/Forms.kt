@@ -5,9 +5,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -134,6 +136,7 @@ internal fun Choice(
     labelOf: (String) -> String = ::label, enabled: Boolean = true,
     row: Boolean = false,
     help: Int? = null,
+    menuDetail: Int? = null,
     entryEnabled: (String) -> Boolean = { true },
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -146,6 +149,12 @@ internal fun Choice(
             TextButton(onClick = { expanded = true }, enabled = enabled) { Text(selected) }
         }
         GlassDropdownMenu(expanded = expanded && enabled, onDismissRequest = { expanded = false }) {
+            if (menuDetail != null) {
+                Text(ui(menuDetail), Modifier.widthIn(max = 256.dp).padding(horizontal = 16.dp, vertical = 8.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (LocalLightGlass.current) ReadingGlass.muted else LocalHorizonPalette.current.muted)
+                HorizontalDivider()
+            }
             entries.forEach { value ->
                 DropdownMenuItem(text = {
                     Text(labelOf(value), color = if (LocalLightGlass.current) ReadingGlass.text else Color.Unspecified)

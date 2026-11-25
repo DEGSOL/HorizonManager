@@ -85,14 +85,22 @@ class FluidScreensTest {
         compose.waitForIdle()
     }
 
+    private fun dismissNotificationOffer() {
+        val offer = compose.onAllNodesWithText(ui(R.string.hovq_notification_offer))
+        if (offer.fetchSemanticsNodes().isNotEmpty()) text(R.string.hovq_later).performClick()
+    }
+
     // Only the test owns this snapshot. The released app reads ManagerModel's agent/cache flow.
     @Suppress("UNCHECKED_CAST")
     private fun loadIssue(
         longHeadline: String? = null, observeServer: Boolean = false,
         articleCount: Int = 105, showEmptyFeedFirst: Boolean = false, agentVersion: String = BuildConfig.AGENT_VERSION,
     ): String {
-        val notificationOffer = compose.onAllNodesWithText(ui(R.string.hovq_notification_offer))
-        if (notificationOffer.fetchSemanticsNodes().isNotEmpty()) text(R.string.hovq_later).performClick()
+        val model = ViewModelProvider(compose.activity)[ManagerModel::class.java]
+        compose.waitUntil(5000) { model.profilesLoaded.value }
+        if (compose.onAllNodesWithText(ui(R.string.hovq_welcome_start)).fetchSemanticsNodes().isNotEmpty())
+            text(R.string.hovq_welcome_start).performClick()
+        dismissNotificationOffer()
         val now = Instant.now()
         val date = now.minusSeconds(900).toString()
         val server =
@@ -181,6 +189,7 @@ class FluidScreensTest {
             server = server,
             servers = listOf(server),
             ready = true,
+            agentVersion = agentVersion,
             selectedRun = "current",
             syncedDigest = "current",
             language = "ru",
@@ -203,7 +212,6 @@ class FluidScreensTest {
                     .put("component", "horizon").put("level", "INFO"),
             ),
         )
-        val model = ViewModelProvider(compose.activity)[ManagerModel::class.java]
         val field = ManagerModel::class.java.getDeclaredField("mutable").apply { isAccessible = true }
         val state = field.get(model) as MutableStateFlow<Panel>
         if (showEmptyFeedFirst) {
@@ -211,6 +219,7 @@ class FluidScreensTest {
                 state.value = loaded.copy(selectedRun = "", syncedDigest = "", markdown = "", articles = emptyList(),
                     total = 0, archive = emptyList())
             }
+            dismissNotificationOffer()
             text(R.string.schedule_next).assertIsDisplayed()
             compose.onNodeWithText(localEpoch(loaded.schedule.optDouble("next"))).assertIsDisplayed()
             val prepare = text(R.string.prepare_digest_now).assertIsDisplayed().assertIsEnabled()
@@ -224,21 +233,54 @@ class FluidScreensTest {
                 .apply { isAccessible = true }.invoke(model, server.id)
         }
         compose.waitForIdle()
+        dismissNotificationOffer()
         return ui(R.string.feed) + " " + shortDigestDate(date)
     }
 
     @Test
-    fun launchOffersSystemNotificationsAndPromptsForAnOlderAgent() {
-        text(R.string.hovq_notification_offer).assertIsDisplayed()
-        text(R.string.hovq_allow_notifications).assertIsEnabled()
-        text(R.string.hovq_later).performClick()
-        val heading = loadIssue(agentVersion = "0.1.10", articleCount = 8)
-        compose.onNodeWithText(ui(R.string.hovq_agent_update_offer, "0.1.10", BuildConfig.AGENT_VERSION))
-            .assertIsDisplayed()
+    fun firstLaunchShowsWelcomeAndOpensTheVpsForm() {
+        val model = ViewModelProvider(compose.activity)[ManagerModel::class.java]
+        compose.waitUntil(5000) { model.profilesLoaded.value }
+        assertEquals("", model.state.value.problem)
+        compose.waitUntil(5000) { compose.onAllNodesWithText(ui(R.string.hovq_welcome_title)).fetchSemanticsNodes().isNotEmpty() }
+        text(R.string.hovq_welcome_title).assertIsDisplayed()
+        text(R.string.hovq_welcome_steps).assertIsDisplayed()
+        snapshot("30-welcome")
+        text(R.string.hovq_welcome_start).performClick()
+        text(R.string.ui_connect_to_your_vps).assertIsDisplayed()
+        text(R.string.ui_ssh_settings).assertIsDisplayed()
+        text(R.string.hovq_welcome_start).assertDoesNotExist()
+        snapshot("30-vps-setup")
+    }
+
+    @Test
+    fun olderAgentLocksTheAppUntilTheUpdatedVersionIsVerified() {
+        val heading = loadIssue(agentVersion = "0.1.19", articleCount = 8)
+        val updateMessage = ui(R.string.hovq_agent_update_offer, "0.1.19", BuildConfig.AGENT_VERSION)
+        compose.onNodeWithText(updateMessage).assertIsDisplayed()
         text(R.string.hovq_update_now).assertIsEnabled()
-        text(R.string.hovq_later).assertIsEnabled()
-        snapshot("31-agent-update")
-        text(R.string.hovq_later).performClick()
+        text(R.string.hovq_later).assertDoesNotExist()
+        back()
+        compose.onNodeWithText(updateMessage).assertIsDisplayed()
+        compose.onNodeWithText(heading).assertDoesNotExist()
+        snapshot("31-agent-update-required")
+
+        val model = ViewModelProvider(compose.activity)[ManagerModel::class.java]
+        @Suppress("UNCHECKED_CAST")
+        val state = ManagerModel::class.java.getDeclaredField("mutable").apply { isAccessible = true }
+            .get(model) as MutableStateFlow<Panel>
+        compose.runOnIdle { state.value = state.value.copy(updatingAgent = true) }
+        text(R.string.hovq_agent_updating_title).assertIsDisplayed()
+        text(R.string.hovq_update_now).assertDoesNotExist()
+        snapshot("31-agent-updating")
+        back()
+        text(R.string.hovq_agent_updating_title).assertIsDisplayed()
+
+        compose.runOnIdle { state.value = state.value.copy(updatingAgent = false, problem = "AGENT_UPDATE_FAILED") }
+        text(R.string.hovq_update_now).assertIsEnabled()
+        compose.onNodeWithText(heading).assertDoesNotExist()
+        compose.runOnIdle { state.value = state.value.copy(agentVersion = BuildConfig.AGENT_VERSION, problem = "") }
+        dismissNotificationOffer()
         compose.onNodeWithText(heading).assertIsDisplayed()
     }
 

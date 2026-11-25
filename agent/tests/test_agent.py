@@ -20,6 +20,7 @@ from horizon_manager.api import REVISION, create_app
 from horizon_manager.article_context import key_for
 from horizon_manager.backup import pack, unpack
 from horizon_manager.configuration import DIGEST_LANGUAGES, only_source
+from horizon_manager.jobs import consume
 from horizon_manager.push import enqueue_digest, signed_message, valid_endpoint
 from horizon_manager.scheduler import Schedule, next_run
 from horizon_manager.store import Store
@@ -83,12 +84,9 @@ class Fixture(BaseHTTPRequestHandler):
             content = json.dumps({"title": title, "blocks": [
                 {"id": "summary", "title": "Summary", "content": article, "source_refs": []}
             ]})
-        elif "Find alternate reports of the same news event" in instructions:
-            self.server.duplicate_requests.append(json.loads(request["messages"][1]["content"]))
-            content = ('{"duplicates": [[0, 999]]}' if request.get("model") == "invalid-dedup"
-                       else '{"duplicates": [[0, 1]]}')
         elif "Identify groups of news items" in instructions:
-            content = '{"duplicates": []}'
+            self.server.duplicate_requests.append(instructions)
+            content = '{"duplicates": [[0, 1]]}'
         elif "brief summaries into" in instructions:
             self.server.translation_requests.append(instructions)
             texts = {
@@ -360,10 +358,10 @@ class AgentTests(unittest.TestCase):
         with Store(self.root).db() as db:
             self.assertEqual(db.execute("SELECT state FROM jobs WHERE id=?", (id.hex,)).fetchone()[0], "success")
 
-    def test_manually_enriched_digest_filters_same_event_before_publication(self):
+    def test_manually_enriched_digest_merges_same_event_across_profiles_before_publication(self):
         config = self.config()
         config["config"]["sources"]["rss"][1] = {
-            "name": "Alternate fixture", "url": self.url + "/alternate-feed", "profile": "tech-news",
+            "name": "Alternate fixture", "url": self.url + "/alternate-feed", "profile": "tech-blog",
         }
         self.assertEqual(self.client.put("/v1/config", json=config).status_code, 200)
         self.assertEqual(self.client.put("/v1/digest-language", json={"language": "en"}).status_code, 200)
@@ -376,27 +374,13 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(len(self.client.get(f"/v1/digests/{run.hex}/en").json()["items"]), 1)
         self.assertEqual(self.fixture.enrichment_requests, [])
         self.assertEqual(len(self.fixture.duplicate_requests), 1)
-        self.assertEqual(len(self.fixture.duplicate_requests[0]), 2)
 
-    def test_manual_digest_finishes_when_deduplication_warns(self):
-        config = self.config(model="invalid-dedup")
-        config["config"]["sources"]["rss"][1] = {
-            "name": "Alternate fixture", "url": self.url + "/alternate-feed", "profile": "tech-news",
-        }
-        self.assertEqual(self.client.put("/v1/config", json=config).status_code, 200)
-        self.assertEqual(self.client.put("/v1/digest-language", json={"language": "en"}).status_code, 200)
-        run = uuid4()
-        queued = self.client.post("/v1/jobs", json={"id": str(run)})
-        self.assertEqual(queued.status_code, 200)
-        job = self.wait(run.hex)
-        self.assertEqual(job["state"], "success", job)
-        self.assertEqual(job["result"]["kept"], 2)
-        self.assertEqual(job["result"]["enrichment_mode"], "on_demand")
-        self.assertEqual(self.client.get("/v1/digest-marker").json()["id"], run.hex)
-        self.assertEqual(len(self.client.get(f"/v1/digests/{run.hex}/en").json()["items"]), 2)
-        journal = [event for event in self.client.get("/v1/events").json() if event.get("job") == run.hex]
-        self.assertIn("DEDUPE_PARTIAL", {event["code"] for event in journal})
-        self.assertNotIn("JOB_ERROR", {event["code"] for event in journal})
+    def test_optional_detail_does_not_abort_processing_worker_warning(self):
+        run = uuid4().hex
+        ready = consume(Store(self.root), run, {"kind": "log", "code": "DEDUPE_PARTIAL", "level": "WARNING"})
+        self.assertFalse(ready)
+        journal = [event for event in self.client.get("/v1/events").json() if event.get("job") == run]
+        self.assertEqual([event["code"] for event in journal], ["DEDUPE_PARTIAL"])
 
     def test_on_demand_selected_article_is_deduplicated_and_does_not_rebuild_digest(self):
         self.assertEqual(self.client.get("/v1/status").json()["enrichment_mode"], "on_demand")

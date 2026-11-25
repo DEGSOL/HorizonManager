@@ -20,4 +20,13 @@
     <string name="hovq_app_update_title">Hovq 업데이트 가능</string>
     <string name="hovq_app_update_message">설치된 버전은 %1$s입니다. GitHub에서 %2$s 버전을 받을 수 있습니다.</string>
     <string name="hovq_app_update_open">릴리스 열기</string>
+    <string name="hovq_welcome_title">Hovq에 오신 것을 환영합니다!</string>
+    <string name="hovq_welcome_start">시작하기</string>
+    <string name="hovq_welcome_steps">1. VPS에 연결하세요. Hovq가 필요한 것을 설치합니다.\n2. 읽고 싶은 소스를 추가하세요.\n3. 다이제스트를 준비할 시간을 선택하세요.</string>
+    <string name="hovq_agent_check_title">VPS 에이전트 확인 중</string>
+    <string name="hovq_agent_check_detail">Hovq가 에이전트 버전을 확인할 수 있도록 VPS에 연결하세요.</string>
+    <string name="hovq_agent_updating_title">에이전트 업데이트 중</string>
+    <string name="hovq_agent_updating_detail">Hovq가 VPS에 업데이트를 설치하고 에이전트가 시작되는지 확인합니다.</string>
+    <string name="hovq_vps_connect_detail">VPS 관리 화면에서 SSH 주소와 로그인 정보를 확인할 수 있습니다.</string>
+    <string name="hovq_enrichment_token_cost">자동 보강은 더 많은 토큰을 사용합니다. 수동 모드에서는 선택한 기사만 AI로 보강합니다.</string>
 </resources>

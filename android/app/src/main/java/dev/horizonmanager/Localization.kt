@@ -76,10 +76,17 @@ internal fun digestLanguageLabel(code: String): String = when (code) {
 internal fun digestLanguage(available: List<String>, preferred: String = digestLocale()): String? =
     (listOf(preferred, "en") + digestLanguages).firstOrNull { it in available }
 
+private fun agentVersionParts(version: String): List<Int>? {
+    val parts = version.split('.')
+    if (parts.size != 3 || parts.any { it.isEmpty() || !it.all { digit -> digit in '0'..'9' } }) return null
+    return parts.map { it.toIntOrNull() ?: return null }
+}
+
+internal fun isAgentVersion(version: String): Boolean = agentVersionParts(version) != null
+
 internal fun agentUpdateAvailable(installed: String): Boolean {
-    val current = installed.split('.').mapNotNull(String::toIntOrNull)
-    val target = BuildConfig.AGENT_VERSION.split('.').mapNotNull(String::toIntOrNull)
-    if (current.size != 3 || target.size != 3) return false
+    val current = agentVersionParts(installed) ?: return false
+    val target = agentVersionParts(BuildConfig.AGENT_VERSION) ?: return false
     val difference = current.zip(target).firstOrNull { (left, right) -> left != right }
     return difference != null && difference.first < difference.second
 }

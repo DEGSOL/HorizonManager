@@ -20,4 +20,13 @@
     <string name="hovq_app_update_title">Aggiornamento di Hovq disponibile</string>
     <string name="hovq_app_update_message">Hai installato Hovq %1$s. La versione %2$s è disponibile su GitHub.</string>
     <string name="hovq_app_update_open">Apri la versione</string>
+    <string name="hovq_welcome_title">Ti diamo il benvenuto in Hovq!</string>
+    <string name="hovq_welcome_start">Inizia</string>
+    <string name="hovq_welcome_steps">1. Collega il tuo VPS. Hovq installa tutto il necessario.\n2. Aggiungi le fonti che vuoi leggere.\n3. Scegli quando preparare la rassegna.</string>
+    <string name="hovq_agent_check_title">Verifica dell’agente sul VPS</string>
+    <string name="hovq_agent_check_detail">Collegati al tuo VPS per consentire a Hovq di verificare la versione dell’agente.</string>
+    <string name="hovq_agent_updating_title">Aggiornamento dell’agente</string>
+    <string name="hovq_agent_updating_detail">Hovq installa l’aggiornamento sul tuo VPS e verifica che l’agente si avvii.</string>
+    <string name="hovq_vps_connect_detail">Trovi l’indirizzo e i dati di accesso SSH nel pannello del tuo VPS.</string>
+    <string name="hovq_enrichment_token_cost">L’arricchimento automatico usa più token. In modalità manuale l’IA arricchisce solo gli articoli selezionati.</string>
 </resources>

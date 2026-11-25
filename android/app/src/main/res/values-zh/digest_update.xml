@@ -20,4 +20,13 @@
     <string name="hovq_app_update_title">Hovq 有新版本</string>
     <string name="hovq_app_update_message">当前安装的是 %1$s 版。GitHub 上已发布 %2$s 版。</string>
     <string name="hovq_app_update_open">打开发布页面</string>
+    <string name="hovq_welcome_title">欢迎使用 Hovq！</string>
+    <string name="hovq_welcome_start">开始使用</string>
+    <string name="hovq_welcome_steps">1. 连接 VPS，Hovq 会自动安装所需组件。\n2. 添加想阅读的资讯来源。\n3. 选择生成摘要的时间。</string>
+    <string name="hovq_agent_check_title">正在检查 VPS 代理</string>
+    <string name="hovq_agent_check_detail">请连接 VPS，以便 Hovq 检查代理版本。</string>
+    <string name="hovq_agent_updating_title">正在更新代理</string>
+    <string name="hovq_agent_updating_detail">Hovq 正在 VPS 上安装更新，并检查代理是否启动。</string>
+    <string name="hovq_vps_connect_detail">可在 VPS 控制台查看 SSH 地址和登录信息。</string>
+    <string name="hovq_enrichment_token_cost">自动补充会消耗更多令牌。在手动模式下，AI 只补充你选中的文章。</string>
 </resources>

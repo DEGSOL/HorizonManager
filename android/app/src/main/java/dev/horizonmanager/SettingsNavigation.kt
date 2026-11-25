@@ -109,7 +109,8 @@ internal fun AiSettings(panel: Panel, model: ManagerModel, open: (String) -> Uni
         Choice(ui(R.string.enrichment_mode), listOf("on_demand", "automatic"),
             mode.ifBlank { "on_demand" }, model::enrichmentMode, {
                 ui(if (it == "automatic") R.string.enrichment_automatic else R.string.enrichment_on_demand)
-            }, enabled = mode.isNotBlank() && !panel.busy, row = true, help = R.string.setting_help_enrichment)
+            }, enabled = mode.isNotBlank() && !panel.busy, row = true, help = R.string.setting_help_enrichment,
+            menuDetail = R.string.hovq_enrichment_token_cost)
         if (!supportsLanguage || mode.isBlank()) Text(ui(R.string.article_context_update), style = MaterialTheme.typography.bodySmall)
     }
     SettingsSection(R.string.ui_advanced_settings) {

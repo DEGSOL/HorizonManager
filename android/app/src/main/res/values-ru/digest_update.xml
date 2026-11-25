@@ -20,4 +20,13 @@
     <string name="hovq_app_update_title">Доступно обновление Hovq</string>
     <string name="hovq_app_update_message">У тебя установлена версия %1$s. На GitHub доступна версия %2$s.</string>
     <string name="hovq_app_update_open">Открыть релиз</string>
+    <string name="hovq_welcome_title">Добро пожаловать в Hovq!</string>
+    <string name="hovq_welcome_start">Приступим</string>
+    <string name="hovq_welcome_steps">1. Подключи свой VPS. Hovq сам установит всё нужное.\n2. Добавь источники, которые хочешь читать.\n3. Выбери, когда готовить дайджест.</string>
+    <string name="hovq_agent_check_title">Проверяем агент на VPS</string>
+    <string name="hovq_agent_check_detail">Подключись к VPS, чтобы Hovq мог проверить версию агента.</string>
+    <string name="hovq_agent_updating_title">Обновляем агент</string>
+    <string name="hovq_agent_updating_detail">Hovq устанавливает обновление на VPS и проверяет запуск агента.</string>
+    <string name="hovq_vps_connect_detail">Адрес и данные для входа по SSH есть в панели твоего VPS.</string>
+    <string name="hovq_enrichment_token_cost">Автообогащение тратит больше токенов. В ручном режиме ИИ дополняет только те материалы, которые ты выберешь.</string>
 </resources>

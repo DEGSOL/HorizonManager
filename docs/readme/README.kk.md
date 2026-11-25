@@ -1,4 +1,4 @@
-# Hovq 0.5.7
+# Hovq 0.5.8
 
 [Русский](../../README.md) · [English](README.en.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Italiano](README.it.md) · [Español](README.es.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [简体中文](README.zh.md) · **Қазақша** · [Татарча](README.tt.md)
 
@@ -26,7 +26,7 @@ Hovq — өз VPS серверіңізге [Horizon](https://github.com/Thysrael
 
 **Параметрлер → Интерфейс → Хабарландырулар** бөлімінде жаңа дайджест хабарландыруларын қосып, Android-та рұқсат беріңіз. Hovq VPS серверіне SSH немесе бапталған HTTPS арқылы тікелей қосылымды сақтайды. Бақылау кезінде Android дыбыссыз қызметтік хабарландыру көрсетеді. Дайджест дайын болғанда бөлек хабарландыру келеді. Байланыс үзілсе, Hovq қайта қосылып, жаңа шығарылымды тексереді.
 
-Сертификаты бірдей Hovq 0.4.5–0.5.6 нұсқасының үстінен APK орнатуға болады. 0.4.4 және одан ескі нұсқалар таза орнатуды қажет етеді. Бұрын қосылған VPS серверіндегі агентті Hovq арқылы 0.1.19 нұсқасына жаңартыңыз. Мәтінді қолмен толықтыру режимінде де агент әртүрлі жазылған мақалалардың бір оқиға туралы екенін тексереді. Әр профильдің тақырыптық қайталауларды жою параметрі қолданыла береді.
+Сертификаты бірдей Hovq 0.4.5–0.5.7 нұсқасының үстінен APK орнатуға болады. 0.4.4 және одан ескі нұсқалар таза орнатуды қажет етеді. Бұрын қосылған VPS серверіндегі агентті Hovq арқылы 0.1.20 нұсқасына жаңартыңыз. Мәтінді қолмен толықтыру режимінде де агент әртүрлі жазылған мақалалардың бір оқиға туралы екенін тексереді. Әр профильдің тақырыптық қайталауларды жою параметрі қолданыла береді.
 
 ## Бастапқы кодтан құрастыру
 
@@ -41,4 +41,4 @@ cd android
 
 `HM_RELEASE_KEYSTORE`, `HM_RELEASE_KEY_ALIAS`, `HM_RELEASE_STORE_PASSWORD`, `HM_RELEASE_KEY_PASSWORD`
 
-[Осы нұсқаның қолданба мен агент коды](https://github.com/DEGSOL/HorizonManager/tree/v0.5.7) · [Архитектура және API](https://github.com/DEGSOL/HorizonManager/blob/v0.5.7/docs/ARCHITECTURE.md) · [Тестілеу](https://github.com/DEGSOL/HorizonManager/blob/v0.5.7/docs/TESTING.md)
+[Осы нұсқаның қолданба мен агент коды](https://github.com/DEGSOL/HorizonManager/tree/v0.5.8) · [Архитектура және API](https://github.com/DEGSOL/HorizonManager/blob/v0.5.8/docs/ARCHITECTURE.md) · [Тестілеу](https://github.com/DEGSOL/HorizonManager/blob/v0.5.8/docs/TESTING.md)

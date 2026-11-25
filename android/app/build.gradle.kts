@@ -15,9 +15,9 @@ android {
         applicationId = "dev.horizonmanager.mobile"
         minSdk = 26
         targetSdk = 36
-        versionCode = 37
-        versionName = "0.5.7"
-        buildConfigField("String", "AGENT_VERSION", "\"0.1.19\"")
+        versionCode = 38
+        versionName = "0.5.8"
+        buildConfigField("String", "AGENT_VERSION", "\"0.1.20\"")
     }
     testOptions {
         unitTests.isIncludeAndroidResources = true

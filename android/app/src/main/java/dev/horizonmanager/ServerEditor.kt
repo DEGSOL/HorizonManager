@@ -46,7 +46,8 @@ internal fun Server.sameSshCredentials(other: Server): Boolean =
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun ServerCredentialFields(draft: ServerDraft, enabled: Boolean, change: (ServerDraft) -> Unit) {
+internal fun ServerCredentialFields(draft: ServerDraft, enabled: Boolean, sectioned: Boolean = false,
+                                    change: (ServerDraft) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var keyError by remember { mutableStateOf(false) }
@@ -61,35 +62,59 @@ internal fun ServerCredentialFields(draft: ServerDraft, enabled: Boolean, change
             if (!keyError && current.keyMode) change(current.copy(credential = key.orEmpty()))
         }
     }
-    ValueField(ui(R.string.ui_server_name), draft.name, { change(draft.copy(name = it)) }, enabled = enabled)
-    ValueField(ui(R.string.ui_ip_address_or_domain), draft.host, { change(draft.copy(host = it)) }, enabled = enabled)
-    Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-        Box(Modifier.weight(1f)) {
-            ValueField(ui(R.string.ui_ssh_port), draft.port, { change(draft.copy(port = it)) }, numeric = true, enabled = enabled)
-        }
-        Box(Modifier.weight(2f)) {
-            ValueField(ui(R.string.ui_ssh_user), draft.user, { change(draft.copy(user = it)) }, enabled = enabled)
-        }
-    }
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        for ((key, label) in listOf(false to R.string.ui_password, true to R.string.ui_ssh_key)) {
-            FilterChip(draft.keyMode == key, {
-                if (draft.keyMode != key) {
-                    keyError = false
-                    change(draft.copy(keyMode = key, credential = "", passphrase = ""))
-                }
-            }, { Text(ui(label)) }, enabled = enabled)
+    @Composable
+    fun Address() {
+        ValueField(ui(R.string.ui_server_name), draft.name, { change(draft.copy(name = it)) }, enabled = enabled)
+        ValueField(ui(R.string.ui_ip_address_or_domain), draft.host, { change(draft.copy(host = it)) }, enabled = enabled)
+        Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+            Box(Modifier.weight(1f)) {
+                ValueField(ui(R.string.ui_ssh_port), draft.port, { change(draft.copy(port = it)) }, numeric = true, enabled = enabled)
+            }
+            Box(Modifier.weight(2f)) {
+                ValueField(ui(R.string.ui_ssh_user), draft.user, { change(draft.copy(user = it)) }, enabled = enabled)
+            }
         }
     }
-    if (draft.keyMode) {
-        OutlinedButton(onClick = { picker.launch(arrayOf("*/*")) }, enabled = enabled) {
-            Text(ui(if (draft.credential.isEmpty()) R.string.ui_select_private_key else R.string.ui_replace_selected_key))
+
+    @Composable
+    fun Credentials() {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for ((key, label) in listOf(false to R.string.ui_password, true to R.string.ui_ssh_key)) {
+                FilterChip(draft.keyMode == key, {
+                    if (draft.keyMode != key) {
+                        keyError = false
+                        change(draft.copy(keyMode = key, credential = "", passphrase = ""))
+                    }
+                }, { Text(ui(label)) }, enabled = enabled)
+            }
         }
-        if (keyError) Text(ui(R.string.ui_could_not_read_the_key_file), color = MaterialTheme.colorScheme.error)
-        PasswordField(ui(R.string.ui_key_passphrase_if_set), draft.passphrase, enabled) { change(draft.copy(passphrase = it)) }
+        if (draft.keyMode) {
+            OutlinedButton(onClick = { picker.launch(arrayOf("*/*")) }, enabled = enabled) {
+                Text(ui(if (draft.credential.isEmpty()) R.string.ui_select_private_key else R.string.ui_replace_selected_key))
+            }
+            if (keyError) Text(ui(R.string.ui_could_not_read_the_key_file), color = MaterialTheme.colorScheme.error)
+            PasswordField(ui(R.string.ui_key_passphrase_if_set), draft.passphrase, enabled) { change(draft.copy(passphrase = it)) }
+        } else {
+            PasswordField(ui(R.string.ui_ssh_password), draft.credential, enabled) { change(draft.copy(credential = it)) }
+        }
+    }
+    if (sectioned) {
+        VpsFormSection { Address() }
+        VpsFormSection {
+            Text(ui(R.string.ui_ssh_settings), style = MaterialTheme.typography.titleMedium)
+            Credentials()
+        }
     } else {
-        PasswordField(ui(R.string.ui_ssh_password), draft.credential, enabled) { change(draft.copy(credential = it)) }
+        Address()
+        Credentials()
     }
+}
+
+@Composable
+internal fun VpsFormSection(content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxWidth().glassSurface(MaterialTheme.shapes.extraLarge, backdrop = true, raised = true)
+        .padding(horizontal = 17.dp, vertical = 15.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
 }
 
 @Composable

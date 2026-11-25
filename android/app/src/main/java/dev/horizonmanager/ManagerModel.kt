@@ -73,9 +73,13 @@ internal data class Panel(
     val file: String? = null,
     val deviceFile: Boolean = false,
     val updatingAgent: Boolean = false,
+    val agentVersion: String = "",
 )
 
 internal fun Panel.preferredDigestLanguage() = status.optString("digest_language", digestLocale())
+
+internal fun Panel.agentGateRequired() = updatingAgent || server?.installed == true &&
+    (!isAgentVersion(agentVersion) || agentUpdateAvailable(agentVersion))
 
 internal class ManagerModel(private val app: Application) : AndroidViewModel(app) {
     val appUpdates = AppUpdates(app.getSharedPreferences("app_updates", 0))
@@ -95,6 +99,8 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     private val cache = ManagerDb.get(app).cache()
     private val mutable = MutableStateFlow(Panel())
     val state = mutable.asStateFlow()
+    private val initializedProfiles = MutableStateFlow(false)
+    val profilesLoaded = initializedProfiles.asStateFlow()
     val favorites = cache.favorites()
 
     fun unreadFeed(server: String, run: String, language: String) =
@@ -122,6 +128,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     private var lastError = ""
     private var lastErrorTime = 0L
     private val selection = app.getSharedPreferences("selected_server", 0)
+    private val verifiedAgentVersions = app.getSharedPreferences("verified_agent_versions", 0)
     private var journalSync = 0L
     private var pendingNotification = ""
     private var installOperation = ""
@@ -152,15 +159,17 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                     vault.load().also(vault::removeLegacyRouterKeys)
                 }
                 mutable.update { it.copy(servers = servers) }
-                DigestWorker.schedule(app, servers)
-                DigestDeliveryService.reconcile(app, servers)
                 val id = pendingNotification.ifEmpty { selection.getString("id", "").orEmpty() }
                 pendingNotification = ""
                 servers.find { it.id == id }?.let(::select) ?: observe("setup")
+                runCatching { DigestWorker.schedule(app, servers) }
+                runCatching { DigestDeliveryService.reconcile(app, servers) }
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
                 mutable.update { it.copy(problem = "VAULT_READ", userProblem = "VAULT_READ") }
+            } finally {
+                initializedProfiles.value = true
             }
         }
     }
@@ -295,7 +304,10 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         vault.save(profiles)
         if (previous?.background == true && !server.background) DigestNotifications.resetMarker(app, server.id)
         selection.edit().putString("id", server.id).apply()
-        mutable.update { it.copy(servers = profiles, server = server, ready = server.installed) }
+        mutable.update {
+            it.copy(servers = profiles, server = server, ready = server.installed,
+                agentVersion = if (it.server?.id == server.id) it.agentVersion else "")
+        }
         if (server != previous && (server.background || previous?.background == true)) {
             DigestWorker.schedule(app, profiles)
             DigestDeliveryService.reconcile(app, profiles)
@@ -354,6 +366,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         selection.edit().putString("id", server?.id).apply()
         mutable.update { previous ->
             Panel(servers = servers, server = server, ready = server?.installed == true, busy = previous.busy,
+                agentVersion = server?.let { verifiedAgentVersions.getString(it.id, "").orEmpty() }.orEmpty(),
                 collectionHours = server?.let { archiveSettings.getInt(it.id, DEFAULT_COLLECTION_HOURS) } ?: DEFAULT_COLLECTION_HOURS,
                 manuallyArchived = server?.let { archiveOverrides.getStringSet(it.id, emptySet()).orEmpty().toSet() }.orEmpty())
         }
@@ -372,6 +385,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         if (panel.servers.none { it.id == id }) return@operation
         val remaining = panel.servers.filterNot { it.id == id }
         vault.save(remaining)
+        verifiedAgentVersions.edit().remove(id).apply()
         settingsSaved()
         // The connection is removed locally. The remote service and its data are untouched.
         runCatching { DigestNotifications.forget(app, id) }
@@ -459,8 +473,10 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         }
         val profiles = panel.servers.map { if (it.id == updated.id) updated else it }
         vault.save(profiles)
+        if (addressChanged || httpsChanged) verifiedAgentVersions.edit().remove(updated.id).apply()
         mutable.update {
             it.copy(servers = profiles, server = if (it.server?.id == updated.id) updated else it.server,
+                agentVersion = if (it.server?.id == updated.id && (addressChanged || httpsChanged)) "" else it.agentVersion,
                 editedServer = updated.id)
         }
         candidate = null
@@ -562,15 +578,34 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     fun updateAgent(password: String) {
         val server = state.value.server ?: return
         operation {
-            val stage = shell(server) { session ->
-                val before = Ssh.probe(app, session)
-                installOperation = before["operation"].orEmpty()
-                Ssh.install(app, session, server, before["privileges"].orEmpty(),
-                    password.ifEmpty { if (!server.keyMode) server.credential else "" })
-                Ssh.probe(app, session)
+            mutable.update { it.copy(updatingAgent = true) }
+            try {
+                val stage = shell(server) { session ->
+                    val before = Ssh.probe(app, session)
+                    // After reopening the app, a previous attempt may still be installing on the VPS.
+                    if (before["install"] == "running") {
+                        installOperation = ""
+                        before
+                    } else {
+                        installOperation = before["operation"].orEmpty()
+                        Ssh.install(app, session, server, before["privileges"].orEmpty(),
+                            password.ifEmpty { if (!server.keyMode) server.credential else "" })
+                        Ssh.probe(app, session)
+                    }
+                }
+                mutable.update { it.copy(probe = stage) }
+            } catch (error: Exception) {
+                mutable.update { it.copy(updatingAgent = false) }
+                throw error
             }
-            mutable.update { it.copy(probe = stage, updatingAgent = true) }
         }
+    }
+
+    private fun rememberAgentVersion(server: Server, version: String) {
+        if (state.value.server?.id != server.id || !isAgentVersion(version)) return
+        if (verifiedAgentVersions.getString(server.id, null) != version)
+            verifiedAgentVersions.edit().putString(server.id, version).apply()
+        mutable.update { it.copy(agentVersion = version) }
     }
 
     private suspend fun checkAgentUpdate(server: Server) {
@@ -581,9 +616,17 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             throw Problem(if (report["code"] == "30") "ACTIVE_JOB" else "AGENT_UPDATE_FAILED",
                 report["code"].orEmpty())
         }
-        val version = runCatching { withAgent(server) { (it.get("health") as JSONObject).optString("agent") } }.getOrNull()
-        if (version == BuildConfig.AGENT_VERSION && fresh && report["install"] == "success") {
-            mutable.update { it.copy(probe = report, updatingAgent = false, schema = JSONObject()) }
+        val version = if (fresh && report["install"] == "success") {
+            try {
+                withAgent(server) { it.health().optString("agent") }
+            } catch (_: Problem) {
+                ""
+            }
+        } else ""
+        if (isAgentVersion(version)) {
+            rememberAgentVersion(server, version)
+            mutable.update { it.copy(probe = report, updatingAgent = false, schema = JSONObject(), problem = "", userProblem = "") }
+            if (agentUpdateAvailable(version)) throw Problem("AGENT_UPDATE_FAILED")
             updateNotices.trySend(Unit)
             DigestDeliveryService.reconcile(app, state.value.servers, restart = server.id)
             DigestWorker.sync(app, server.id, reschedule = true)
@@ -709,6 +752,10 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             if (checking) connectionStage(ConnectionPhase.CheckingAgent)
             val status = api.status()
             connected(server)
+            val version = status.optString("agent")
+            if (!isAgentVersion(version)) throw Problem("AGENT_PROTOCOL")
+            rememberAgentVersion(server, version)
+            if (agentUpdateAvailable(version)) return@withAgent null
             if (status.has("digest_language") && !status.optBoolean("digest_language_chosen")) {
                 val accepted = status.optJSONArray("digest_languages")?.strings() ?: legacyDigestLanguages
                 val language = digestLocale()
@@ -764,7 +811,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                 runCatching { Triple(id, requireNotNull(lang), api.get("media/$id") as JSONObject) }.getOrNull()
             } else null
             Refresh(archive, hasMore, digest, config, schema, schedule, sources, status, jobs, events, media, repairs)
-        }
+        } ?: return
         cache.saveArchive(CachedArchive(server.id, JSONArray(remote.archive).toString()))
         val hours = collectionHours(remote.config, state.value.collectionHours)
         if (hours != state.value.collectionHours) archiveSettings.edit().putInt(server.id, hours).apply()
