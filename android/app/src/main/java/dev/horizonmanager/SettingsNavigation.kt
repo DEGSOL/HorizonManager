@@ -3,6 +3,7 @@ package dev.horizonmanager
 import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.material3.*
@@ -187,6 +188,7 @@ internal fun ServerSettings(panel: Panel, model: ManagerModel, servers: () -> Un
 internal fun NotificationSettings(panel: Panel, model: ManagerModel, allowed: Boolean,
                                   permission: () -> Unit, delivery: () -> Unit) {
     val server = panel.server ?: return
+    val live by DigestDeliveryService.connected.collectAsStateWithLifecycle()
     Tile {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -199,7 +201,8 @@ internal fun NotificationSettings(panel: Panel, model: ManagerModel, allowed: Bo
         }
         Reveal(server.background) {
             if (allowed) {
-                Text(ui(R.string.hovq_polling_active), style = MaterialTheme.typography.bodyMedium,
+                Text(ui(if (server.id in live) R.string.hovq_listener_connected else R.string.hovq_polling_active),
+                    style = MaterialTheme.typography.bodyMedium,
                     color = LocalHorizonPalette.current.muted)
             } else {
                 Text(ui(R.string.hovq_alerts_blocked), color = LocalHorizonPalette.current.warning)

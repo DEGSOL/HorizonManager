@@ -19,7 +19,9 @@
     <string name="hovq_vps_restore_password">Introduce la contraseña de la copia de Horizon. La importación reemplaza los ajustes y la programación en el VPS activo.</string>
     <string name="hovq_digest_channel">Nuevos resúmenes</string>
     <string name="hovq_digest_channel_detail">Avisos cuando Horizon termina una nueva edición.</string>
-    <string name="hovq_polling_active">Comprobaciones en segundo plano activadas.</string>
+    <string name="hovq_polling_active">Hovq busca nuevos resúmenes en segundo plano mientras la conexión directa no está disponible.</string>
     <string name="hovq_alerts_blocked">Las notificaciones están desactivadas en Android.</string>
     <string name="hovq_existing_horizon">Se ha detectado Horizon en %1$s.</string>
+    <string name="hovq_agent_update_success">Agente actualizado correctamente</string>
+    <string name="hovq_listener_connected">La conexión permanente con el VPS está activa.</string>
 </resources>

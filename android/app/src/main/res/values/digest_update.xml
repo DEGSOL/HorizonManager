@@ -6,7 +6,7 @@
     <string name="hovq_headline_save">Save headline length</string>
     <string name="hovq_headline_upgrade">Update the VPS agent to change headline length.</string>
     <string name="hovq_digest_notifications">New digest notifications</string>
-    <string name="hovq_push_delivery_help">Hovq checks the VPS in the background, with extra checks near scheduled runs and while a digest is being prepared. Android may delay background checks.</string>
+    <string name="hovq_push_delivery_help">Hovq listens for new digests on your VPS. Android shows a silent service notification while the live connection is running.</string>
     <string name="hovq_notification_offer">Allow Android notifications to see new digest alerts when Hovq is closed.</string>
     <string name="hovq_allow_notifications">Allow notifications</string>
     <string name="hovq_later">Later</string>
@@ -15,4 +15,6 @@
     <string name="hovq_update_sudo">sudo password, if required</string>
     <string name="hovq_open_photo">Open image</string>
     <string name="prepare_digest_now">Prepare digest now</string>
+    <string name="hovq_listener_title">Live digest delivery</string>
+    <string name="hovq_listener_detail">Hovq is listening for new digests on your VPS.</string>
 </resources>

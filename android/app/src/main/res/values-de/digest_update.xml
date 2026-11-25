@@ -6,7 +6,7 @@
     <string name="hovq_headline_save">Überschriftenlänge speichern</string>
     <string name="hovq_headline_upgrade">Aktualisieren Sie den Agenten auf dem VPS, um die Überschriftenlänge zu ändern.</string>
     <string name="hovq_digest_notifications">Mitteilungen zu neuen Ausgaben</string>
-    <string name="hovq_push_delivery_help">Hovq prüft den VPS im Hintergrund. Rund um geplante Starts und während der Erstellung einer Ausgabe prüft die App häufiger. Android kann Prüfungen verzögern.</string>
+    <string name="hovq_push_delivery_help">Hovq wartet auf neue Ausgaben vom VPS. Während die Direktverbindung aktiv ist, zeigt Android eine stumme Dienstbenachrichtigung.</string>
     <string name="hovq_notification_offer">Erlauben Sie Android-Mitteilungen, um auch bei geschlossenem Hovq über neue Ausgaben informiert zu werden.</string>
     <string name="hovq_allow_notifications">Mitteilungen erlauben</string>
     <string name="hovq_later">Später</string>
@@ -15,4 +15,6 @@
     <string name="hovq_update_sudo">sudo-Passwort, falls erforderlich</string>
     <string name="hovq_open_photo">Bild öffnen</string>
     <string name="prepare_digest_now">Digest jetzt erstellen</string>
+    <string name="hovq_listener_title">Direkte Zustellung von Ausgaben</string>
+    <string name="hovq_listener_detail">Hovq wartet auf neue Ausgaben vom VPS.</string>
 </resources>

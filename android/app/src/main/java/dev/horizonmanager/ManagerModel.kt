@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import android.net.ConnectivityManager
 import android.net.Network
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.callbackFlow
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -103,6 +105,8 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         }.distinctUntilChanged().flowOn(Dispatchers.Default)
     private val saved = MutableStateFlow(0)
     val settingsSaved = saved.asStateFlow()
+    private val updateNotices = Channel<Unit>(Channel.BUFFERED)
+    val agentUpdated = updateNotices.receiveAsFlow()
 
     private fun settingsSaved() { saved.update { it + 1 } }
     private data class PendingConnection(val server: Server, val editing: Boolean = false)
@@ -148,6 +152,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                 }
                 mutable.update { it.copy(servers = servers) }
                 DigestWorker.schedule(app, servers)
+                DigestDeliveryService.reconcile(app, servers)
                 val id = pendingNotification.ifEmpty { selection.getString("id", "").orEmpty() }
                 pendingNotification = ""
                 servers.find { it.id == id }?.let(::select) ?: observe("setup")
@@ -292,6 +297,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         mutable.update { it.copy(servers = profiles, server = server, ready = server.installed) }
         if (server != previous && (server.background || previous?.background == true)) {
             DigestWorker.schedule(app, profiles)
+            DigestDeliveryService.reconcile(app, profiles)
             if (server.installed && server.background) DigestWorker.sync(app, server.id, reschedule = true)
             else if (previous?.background == true) DigestWorker.cancelChecks(app, server.id)
         }
@@ -369,6 +375,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         // The connection is removed locally. The remote service and its data are untouched.
         runCatching { DigestNotifications.forget(app, id) }
         runCatching { DigestWorker.remove(app, id, remaining) }
+        DigestDeliveryService.reconcile(app, remaining)
         if (panel.server?.id == id) {
             val next = remaining.firstOrNull()
             withContext(Dispatchers.Main.immediate) { selectLocally(next, remaining) }
@@ -456,7 +463,10 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                 editedServer = updated.id)
         }
         candidate = null
-        if (updated.background) DigestWorker.sync(app, updated.id, reschedule = true)
+        if (updated.background) {
+            DigestDeliveryService.reconcile(app, profiles)
+            DigestWorker.sync(app, updated.id, reschedule = true)
+        }
         settingsSaved()
     }
 
@@ -571,10 +581,12 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                 report["code"].orEmpty())
         }
         val version = runCatching { withAgent(server) { (it.get("health") as JSONObject).optString("agent") } }.getOrNull()
-        if (version == BuildConfig.AGENT_VERSION && (fresh && report["install"] == "success" || !fresh && report["install"] != "running")) {
+        if (version == BuildConfig.AGENT_VERSION && fresh && report["install"] == "success") {
             mutable.update { it.copy(probe = report, updatingAgent = false, schema = JSONObject()) }
-            synchronize(server, everything = true)
+            updateNotices.trySend(Unit)
+            DigestDeliveryService.reconcile(app, state.value.servers, restart = server.id)
             DigestWorker.sync(app, server.id, reschedule = true)
+            synchronize(server, everything = true)
         } else {
             mutable.update { it.copy(probe = report) }
         }
@@ -990,7 +1002,9 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         }
 
     fun checkDigestNotifications() {
-        if (state.value.servers.any { it.installed && it.background } && DigestNotifications.deliveryAllowed(app))
+        val servers = state.value.servers
+        DigestDeliveryService.reconcile(app, servers)
+        if (deliveryProfiles(servers).isNotEmpty() && DigestNotifications.deliveryAllowed(app))
             DigestWorker.catchUp(app)
     }
 
@@ -1166,6 +1180,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             selectLocally(next, profiles)
         }
         DigestWorker.schedule(app, profiles)
+        DigestDeliveryService.reconcile(app, profiles)
         val previouslyEnabled = previous.filter { it.background }.map(Server::id).toSet()
         for (profile in profiles.filter { it.installed }) {
             if (!profile.background && profile.id in previouslyEnabled) {

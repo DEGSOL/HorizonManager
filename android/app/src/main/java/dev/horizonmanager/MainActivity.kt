@@ -167,6 +167,9 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         launcherIcon = LauncherAppearance.current(ctx)
         notices.showSnackbar(SavedNotice(ui(R.string.hovq_settings_saved)))
     }
+    LaunchedEffect(model, notices) {
+        model.agentUpdated.collect { notices.showSnackbar(SavedNotice(ui(R.string.hovq_agent_update_success))) }
+    }
     var archiveIssue by rememberSaveable(currentServer?.id) { mutableStateOf("") }
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val now by produceState(Instant.now(), lifecycle) {
@@ -261,21 +264,20 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 notificationAllowed = DigestNotifications.deliveryAllowed(ctx)
-                if (notificationAllowed) model.checkDigestNotifications()
+                model.checkDigestNotifications()
             }
         }
         lifecycle.lifecycle.addObserver(observer)
         onDispose { lifecycle.lifecycle.removeObserver(observer) }
     }
     LaunchedEffect(notificationAllowed) {
-        DigestNotifications.removeLegacyWaitingNotice(ctx)
-        if (notificationAllowed) model.checkDigestNotifications()
+        model.checkDigestNotifications()
     }
     LaunchedEffect(enableDigestAfterPermission, notificationAllowed, currentServer, panel.ready, panel.busy) {
         if (enableDigestAfterPermission && notificationAllowed && panel.ready && !panel.busy && currentServer != null) {
             enableDigestAfterPermission = false
             if (!currentServer.background) model.settings(currentServer.https, true)
-            else DigestWorker.sync(ctx, currentServer.id)
+            else model.checkDigestNotifications()
         }
     }
     var dismissedAgentUpdates by rememberSaveable { mutableStateOf(emptyList<String>()) }

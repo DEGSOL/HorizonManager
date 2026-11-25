@@ -6,7 +6,7 @@
     <string name="hovq_headline_save">Башисем озынлыгын саклау</string>
     <string name="hovq_headline_upgrade">Башисем озынлыгын үзгәртү өчен VPS агентын яңартыгыз.</string>
     <string name="hovq_digest_notifications">Яңа дайджестлар турында хәбәрләр</string>
-    <string name="hovq_push_delivery_help">Hovq VPS серверын фон режимында тикшерә. Планлаштырылган эшләтү вакыты тирәсендә һәм дайджест әзерләнгәндә тикшерүләр ешрак була. Android аларны кичектерә ала.</string>
+    <string name="hovq_push_delivery_help">Hovq VPS серверыгызда яңа чыгарылышларны көтә. Туры тоташу вакытында Android тавышсыз хезмәт белдерүен күрсәтә.</string>
     <string name="hovq_notification_offer">Hovq ябык булганда да яңа дайджестлар турында белү өчен Android хәбәрләрен рөхсәт итегез.</string>
     <string name="hovq_allow_notifications">Хәбәрләрне рөхсәт итү</string>
     <string name="hovq_later">Соңрак</string>
@@ -15,4 +15,6 @@
     <string name="hovq_update_sudo">Кирәк булса, sudo серсүзе</string>
     <string name="hovq_open_photo">Рәсемне ачу</string>
     <string name="prepare_digest_now">Дайджестны хәзер әзерләү</string>
+    <string name="hovq_listener_title">Дайджестларны туры китерү</string>
+    <string name="hovq_listener_detail">Hovq VPS серверыгызда яңа чыгарылышларны көтә.</string>
 </resources>

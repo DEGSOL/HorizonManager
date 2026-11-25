@@ -6,7 +6,7 @@
     <string name="hovq_headline_save">Guardar longitud del titular</string>
     <string name="hovq_headline_upgrade">Actualiza el agente del VPS para cambiar la longitud de los titulares.</string>
     <string name="hovq_digest_notifications">Notificaciones de nuevos resúmenes</string>
-    <string name="hovq_push_delivery_help">Hovq comprueba el VPS en segundo plano. Repite las comprobaciones con mayor frecuencia cerca de la hora programada y mientras se prepara un resumen. Android puede retrasarlas.</string>
+    <string name="hovq_push_delivery_help">Hovq espera nuevos resúmenes en tu VPS. Android muestra una notificación silenciosa del servicio mientras la conexión directa está activa.</string>
     <string name="hovq_notification_offer">Permite las notificaciones de Android para recibir avisos de nuevos resúmenes aunque Hovq esté cerrado.</string>
     <string name="hovq_allow_notifications">Permitir notificaciones</string>
     <string name="hovq_later">Más tarde</string>
@@ -15,4 +15,6 @@
     <string name="hovq_update_sudo">Contraseña de sudo, si es necesaria</string>
     <string name="hovq_open_photo">Abrir imagen</string>
     <string name="prepare_digest_now">Preparar el resumen ahora</string>
+    <string name="hovq_listener_title">Entrega directa de resúmenes</string>
+    <string name="hovq_listener_detail">Hovq espera nuevos resúmenes en tu VPS.</string>
 </resources>

@@ -6,7 +6,7 @@
     <string name="hovq_headline_save">Тақырып ұзындығын сақтау</string>
     <string name="hovq_headline_upgrade">Тақырып ұзындығын өзгерту үшін VPS агентін жаңартыңыз.</string>
     <string name="hovq_digest_notifications">Жаңа дайджест хабарландырулары</string>
-    <string name="hovq_push_delivery_help">Hovq VPS серверін фондық режимде тексереді. Жоспарланған іске қосу уақыты жақындағанда және дайджест дайындалып жатқанда тексеру жиілейді. Android тексеруді кейінге қалдыруы мүмкін.</string>
+    <string name="hovq_push_delivery_help">Hovq VPS серверіңізден жаңа шығарылымдарды күтеді. Тікелей байланыс кезінде Android дыбыссыз қызметтік хабарландыру көрсетеді.</string>
     <string name="hovq_notification_offer">Hovq жабық кезде де жаңа дайджестер туралы білу үшін Android хабарландыруларына рұқсат беріңіз.</string>
     <string name="hovq_allow_notifications">Хабарландыруларға рұқсат беру</string>
     <string name="hovq_later">Кейін</string>
@@ -15,4 +15,6 @@
     <string name="hovq_update_sudo">Қажет болса, sudo құпиясөзі</string>
     <string name="hovq_open_photo">Суретті ашу</string>
     <string name="prepare_digest_now">Дайджесті қазір дайындау</string>
+    <string name="hovq_listener_title">Дайджесттерді тікелей жеткізу</string>
+    <string name="hovq_listener_detail">Hovq VPS серверіңізден жаңа шығарылымдарды күтеді.</string>
 </resources>

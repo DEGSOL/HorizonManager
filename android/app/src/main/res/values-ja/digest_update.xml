@@ -6,7 +6,7 @@
     <string name="hovq_headline_save">見出しの長さを保存</string>
     <string name="hovq_headline_upgrade">見出しの長さを変更するには、VPSのエージェントを更新してください。</string>
     <string name="hovq_digest_notifications">新着ダイジェストの通知</string>
-    <string name="hovq_push_delivery_help">HovqはVPSをバックグラウンドで確認します。予定時刻の前後とダイジェスト作成中は確認頻度が上がります。Androidにより確認が遅れることがあります。</string>
+    <string name="hovq_push_delivery_help">HovqはVPSからの新しいダイジェストを待ち受けます。直接接続中はAndroidに音の鳴らないサービス通知が表示されます。</string>
     <string name="hovq_notification_offer">Hovqを閉じていても新着ダイジェストを知ることができるように、Androidの通知を許可してください。</string>
     <string name="hovq_allow_notifications">通知を許可</string>
     <string name="hovq_later">後で</string>
@@ -15,4 +15,6 @@
     <string name="hovq_update_sudo">sudoパスワード（必要な場合）</string>
     <string name="hovq_open_photo">画像を開く</string>
     <string name="prepare_digest_now">今すぐダイジェストを作成</string>
+    <string name="hovq_listener_title">ダイジェストの直接受信</string>
+    <string name="hovq_listener_detail">VPSからの新しいダイジェストを待っています。</string>
 </resources>

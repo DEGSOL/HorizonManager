@@ -53,6 +53,7 @@ class DigestNotificationTest {
         assertTrue(agentUpdateAvailable("0.1.14"))
         assertTrue(agentUpdateAvailable("0.1.15"))
         assertTrue(agentUpdateAvailable("0.1.16"))
+        assertTrue(agentUpdateAvailable("0.1.17"))
         assertFalse(agentUpdateAvailable(BuildConfig.AGENT_VERSION))
     }
 }

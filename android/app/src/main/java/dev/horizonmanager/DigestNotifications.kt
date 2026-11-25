@@ -82,10 +82,6 @@ internal object DigestNotifications {
             manager.getNotificationChannel(CHANNEL)?.importance != NotificationManager.IMPORTANCE_NONE
     }
 
-    fun removeLegacyWaitingNotice(context: Context) {
-        context.getSystemService(NotificationManager::class.java).cancel(0x484f5651)
-    }
-
     private fun notify(context: Context, server: String, title: String, text: String): Boolean {
         if (!deliveryAllowed(context)) return false
         val manager = context.getSystemService(NotificationManager::class.java)

@@ -16,7 +16,9 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -42,12 +44,15 @@ internal fun nextDigestCheck(now: Instant, nextRun: Instant?, preparingSince: In
 internal class DigestScheduleReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action !in setOf(Intent.ACTION_MY_PACKAGE_REPLACED, Intent.ACTION_BOOT_COMPLETED)) return
-        if (intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) DigestNotifications.removeLegacyWaitingNotice(context)
         val pending = goAsync()
-        try {
-            DigestWorker.catchUp(context).result.addListener({ pending.finish() }, Executor { it.run() })
-        } catch (_: IllegalStateException) {
-            pending.finish()
+        val app = context.applicationContext
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                DigestDeliveryService.restore(app)
+                DigestWorker.catchUp(app).result.addListener({ pending.finish() }, Executor { it.run() })
+            } catch (_: IllegalStateException) {
+                pending.finish()
+            }
         }
     }
 }
@@ -71,7 +76,10 @@ internal class DigestWorker(context: Context, params: WorkerParameters) : Corout
         for (server in profiles.filter { it.installed && (id == null || id == it.id) }) {
             val legacy = DigestNotifications.legacyDevice(app, server.id)
             val delivery = server.background && DigestNotifications.deliveryAllowed(app)
-            if (!delivery && legacy == null) continue
+            if (legacy == null && (!delivery || server.id in DigestDeliveryService.connected.value)) {
+                if (plannedAt != 0L) updatePlan(app, server.id, plannedAt, null)
+                continue
+            }
             val before = DigestNotifications.currentMarker(app, server.id)
             var migrationError: Exception? = null
             try {
@@ -99,8 +107,9 @@ internal class DigestWorker(context: Context, params: WorkerParameters) : Corout
                 }
                 if (delivery && Vault(app).load().any { it == server }) {
                     DigestNotifications.marker(app, server, before, snapshot.marker)
-                    updatePlan(app, server.id, plannedAt,
-                        nextDigestCheck(Instant.now(), snapshot.nextRun, snapshot.preparingSince))
+                    val next = if (server.id in DigestDeliveryService.connected.value) null
+                        else nextDigestCheck(Instant.now(), snapshot.nextRun, snapshot.preparingSince)
+                    updatePlan(app, server.id, plannedAt, next)
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled

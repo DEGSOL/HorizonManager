@@ -34,15 +34,20 @@ class Fixture(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
-        if self.path != "/feed":
+        if self.path not in {"/feed", "/alternate-feed"}:
             self.send_error(404)
             return
         date = format_datetime(datetime.now(timezone.utc), usegmt=True)
+        title, story, item = (
+            ("Chipmaker starts selling its PocketStream handheld", "alternate-news", "alternate-id")
+            if self.path == "/alternate-feed" else
+            ("Fixture engineering article", "fixture-news", "fixture-id")
+        )
         data = f'''<?xml version="1.0"?>
         <rss version="2.0"><channel><title>Fixture</title><link>https://example.org/</link>
-        <description>Local integration test feed</description><item><title>Fixture engineering article</title>
-        <link>https://example.org/fixture-news</link><description>Fixture article content</description>
-        <guid>fixture-id</guid><pubDate>{date}</pubDate></item></channel></rss>'''.encode()
+        <description>Local integration test feed</description><item><title>{title}</title>
+        <link>https://example.org/{story}</link><description>Fixture article content</description>
+        <guid>{item}</guid><pubDate>{date}</pubDate></item></channel></rss>'''.encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/rss+xml")
         self.send_header("Content-Length", str(len(data)))
@@ -78,6 +83,11 @@ class Fixture(BaseHTTPRequestHandler):
             content = json.dumps({"title": title, "blocks": [
                 {"id": "summary", "title": "Summary", "content": article, "source_refs": []}
             ]})
+        elif "Find alternate reports of the same news event" in instructions:
+            self.server.duplicate_requests.append(json.loads(request["messages"][1]["content"]))
+            content = '{"duplicates": [[0, 1]]}'
+        elif "Identify groups of news items" in instructions:
+            content = '{"duplicates": []}'
         elif "brief summaries into" in instructions:
             self.server.translation_requests.append(instructions)
             texts = {
@@ -121,6 +131,7 @@ class AgentTests(unittest.TestCase):
     def setUp(self):
         self.fixture.classification_requests = []
         self.fixture.enrichment_requests = []
+        self.fixture.duplicate_requests = []
         self.fixture.translation_requests = []
         self.temp = TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -347,6 +358,24 @@ class AgentTests(unittest.TestCase):
         self.assertNotIn(SECRET, json.dumps(events))
         with Store(self.root).db() as db:
             self.assertEqual(db.execute("SELECT state FROM jobs WHERE id=?", (id.hex,)).fetchone()[0], "success")
+
+    def test_manually_enriched_digest_filters_same_event_before_publication(self):
+        config = self.config()
+        config["config"]["sources"]["rss"][1] = {
+            "name": "Alternate fixture", "url": self.url + "/alternate-feed", "profile": "tech-news",
+        }
+        self.assertEqual(self.client.put("/v1/config", json=config).status_code, 200)
+        self.assertEqual(self.client.put("/v1/digest-language", json={"language": "en"}).status_code, 200)
+        run = uuid4()
+        self.client.post("/v1/jobs", json={"id": str(run)})
+        job = self.wait(run.hex)
+        self.assertEqual(job["state"], "success", job)
+        self.assertEqual(job["result"]["kept"], 1)
+        self.assertEqual(job["result"]["enrichment_mode"], "on_demand")
+        self.assertEqual(len(self.client.get(f"/v1/digests/{run.hex}/en").json()["items"]), 1)
+        self.assertEqual(self.fixture.enrichment_requests, [])
+        self.assertEqual(len(self.fixture.duplicate_requests), 1)
+        self.assertEqual(len(self.fixture.duplicate_requests[0]), 2)
 
     def test_on_demand_selected_article_is_deduplicated_and_does_not_rebuild_digest(self):
         self.assertEqual(self.client.get("/v1/status").json()["enrichment_mode"], "on_demand")
