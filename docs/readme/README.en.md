@@ -1,4 +1,4 @@
-# Hovq 0.5.9
+# Hovq 0.6.0
 
 [Русский](../../README.md) · **English** · [Deutsch](README.de.md) · [Français](README.fr.md) · [Italiano](README.it.md) · [Español](README.es.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [简体中文](README.zh.md) · [Қазақша](README.kk.md) · [Татарча](README.tt.md)
 
@@ -26,7 +26,7 @@ Hovq is an Android app for installing and managing [Horizon](https://github.com/
 
 Turn on new digest notifications under **Settings → Interface → Notifications** and allow them in Android. Hovq keeps a direct connection to your VPS over SSH or configured HTTPS. Android displays a silent service notification while monitoring is active. You get a separate alert when an issue is ready. If the connection drops, Hovq reconnects and checks for a new issue.
 
-The APK installs over Hovq 0.4.5–0.5.8 signed with the same certificate. Versions 0.4.4 and earlier require a clean install. On an existing VPS, use Hovq to update the agent to 0.1.20. It checks whether differently worded reports describe the same event, even in on-demand enrichment mode. Each profile’s topic deduplication setting still applies.
+The APK installs over Hovq 0.4.5–0.5.9 signed with the same certificate. Versions 0.4.4 and earlier require a clean install. On an existing VPS, use Hovq to update the agent to 0.1.20. It checks whether differently worded reports describe the same event, even in on-demand enrichment mode. Each profile’s topic deduplication setting still applies.
 
 ## Build from source
 
@@ -41,4 +41,4 @@ For a signed build, set
 
 `HM_RELEASE_KEYSTORE`, `HM_RELEASE_KEY_ALIAS`, `HM_RELEASE_STORE_PASSWORD`, `HM_RELEASE_KEY_PASSWORD`
 
-[App and agent source for this release](https://github.com/DEGSOL/HorizonManager/tree/v0.5.9) · [Architecture and API](https://github.com/DEGSOL/HorizonManager/blob/v0.5.9/docs/ARCHITECTURE.md) · [Testing](https://github.com/DEGSOL/HorizonManager/blob/v0.5.9/docs/TESTING.md)
+[App and agent source for this release](https://github.com/DEGSOL/HorizonManager/tree/v0.6.0) · [Architecture and API](https://github.com/DEGSOL/HorizonManager/blob/v0.6.0/docs/ARCHITECTURE.md) · [Testing](https://github.com/DEGSOL/HorizonManager/blob/v0.6.0/docs/TESTING.md)

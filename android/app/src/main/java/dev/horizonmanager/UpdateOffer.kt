@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -17,10 +18,49 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+
+@Composable
+internal fun DigestNotificationOffer(dismiss: () -> Unit, request: () -> Unit) {
+    val title = ui(R.string.hovq_digest_notifications)
+    Dialog(onDismissRequest = dismiss) {
+        DialogMotion()
+        CompositionLocalProvider(LocalGlassScene provides LocalMenuScene.current) {
+            Column(
+                Modifier.widthIn(max = 420.dp).fillMaxWidth().padding(horizontal = 12.dp)
+                    .readingNavigationGlass(feedGlassShape, menu = true)
+                    .semantics { paneTitle = title }.verticalScroll(rememberScrollState()).padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Text(title, Modifier.fillMaxWidth().semantics { heading() }, color = Color.Black,
+                    style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
+                Text(ui(R.string.hovq_notification_offer), Modifier.fillMaxWidth(), color = Color.Black,
+                    style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
+                Column(
+                    Modifier.fillMaxWidth().padding(top = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    SavedGlassButton(
+                        ui(R.string.hovq_allow_notifications), Modifier.heightIn(min = 52.dp),
+                        inLightDialog = true, onClick = request,
+                    )
+                    MaterialTextButton(
+                        onClick = dismiss, modifier = Modifier.heightIn(min = 48.dp), shape = noticeGlassShape,
+                        colors = ButtonDefaults.textButtonColors(contentColor = Color.Black),
+                    ) { Text(ui(R.string.hovq_later)) }
+                }
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

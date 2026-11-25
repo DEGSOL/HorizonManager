@@ -22,7 +22,12 @@
     <string name="hovq_app_update_open">Release öffnen</string>
     <string name="hovq_welcome_title">Willkommen bei Hovq!</string>
     <string name="hovq_welcome_start">Los geht’s</string>
-    <string name="hovq_welcome_steps">1. Verbinde deinen VPS. Hovq installiert alles Nötige.\n2. Füge die Quellen hinzu, die du lesen möchtest.\n3. Wähle, wann die Ausgabe erstellt wird.</string>
+    <string name="hovq_welcome_intro">Hovq sammelt Nachrichten aus deinen Quellen, erstellt Ausgaben auf deinem VPS und zeigt sie im Feed an.</string>
+    <string name="hovq_welcome_server">Gib die SSH-Adresse ein und melde dich mit einem Passwort oder Schlüssel an. Hovq kann den Horizon-Agenten installieren oder einen vorhandenen nutzen.</string>
+    <string name="hovq_welcome_sources">Füge RSS-Feeds oder Telegram-Kanäle hinzu, denen du folgen möchtest.</string>
+    <string name="hovq_welcome_ai">Wähle unter „%1$s“ einen Anbieter und ein Modell und hinterlege den API-Schlüssel unter „%2$s“.</string>
+    <string name="hovq_welcome_schedule">Lege Uhrzeit und Zeitzone für automatische Ausgaben fest und wähle Wochentage oder ein regelmäßiges Intervall.</string>
+    <string name="hovq_welcome_alerts">Aktiviere Benachrichtigungen, wenn Android dich auch bei geschlossener App über neue Ausgaben informieren soll.</string>
     <string name="hovq_agent_check_title">VPS-Agent wird geprüft</string>
     <string name="hovq_agent_check_detail">Verbinde dich mit deinem VPS, damit Hovq die Agentenversion prüfen kann.</string>
     <string name="hovq_agent_updating_title">Agent wird aktualisiert</string>

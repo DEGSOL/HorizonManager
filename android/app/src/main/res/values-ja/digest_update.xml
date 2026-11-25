@@ -22,7 +22,12 @@
     <string name="hovq_app_update_open">リリースを開く</string>
     <string name="hovq_welcome_title">Hovq へようこそ！</string>
     <string name="hovq_welcome_start">はじめる</string>
-    <string name="hovq_welcome_steps">1. VPS に接続します。必要なものは Hovq がインストールします。\n2. 読みたい情報源を追加します。\n3. ダイジェストを作る時間を選びます。</string>
+    <string name="hovq_welcome_intro">Hovq は選んだ情報源からニュースを集め、VPS 上でダイジェストを作成してフィードに表示します。</string>
+    <string name="hovq_welcome_server">SSH アドレスを入力し、パスワードまたは鍵で接続します。Horizon エージェントを新規インストールすることも、既存のものに接続することもできます。</string>
+    <string name="hovq_welcome_sources">フォローしたい RSS フィードや Telegram チャンネルを追加します。</string>
+    <string name="hovq_welcome_ai">「%1$s」でプロバイダーとモデルを選び、「%2$s」で API キーを追加します。</string>
+    <string name="hovq_welcome_schedule">自動作成の時刻とタイムゾーンを設定し、曜日指定または一定の間隔を選びます。</string>
+    <string name="hovq_welcome_alerts">通知を有効にすると、Hovq を閉じていても新しいダイジェストができたときに Android が知らせます。</string>
     <string name="hovq_agent_check_title">VPS のエージェントを確認中</string>
     <string name="hovq_agent_check_detail">Hovq がエージェントのバージョンを確認できるよう、VPS に接続してください。</string>
     <string name="hovq_agent_updating_title">エージェントを更新中</string>

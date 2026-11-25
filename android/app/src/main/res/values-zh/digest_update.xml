@@ -22,7 +22,12 @@
     <string name="hovq_app_update_open">打开发布页面</string>
     <string name="hovq_welcome_title">欢迎使用 Hovq！</string>
     <string name="hovq_welcome_start">开始使用</string>
-    <string name="hovq_welcome_steps">1. 连接 VPS，Hovq 会自动安装所需组件。\n2. 添加想阅读的资讯来源。\n3. 选择生成摘要的时间。</string>
+    <string name="hovq_welcome_intro">Hovq 从你选择的来源收集新闻，在你的 VPS 上生成摘要，并在资讯流中展示。</string>
+    <string name="hovq_welcome_server">输入 SSH 地址并使用密码或密钥登录。Hovq 可以安装 Horizon 代理，也可以连接已有的代理。</string>
+    <string name="hovq_welcome_sources">添加你想关注的 RSS 订阅或 Telegram 频道。</string>
+    <string name="hovq_welcome_ai">在「%1$s」中选择服务提供商和模型，然后在「%2$s」中添加 API 密钥。</string>
+    <string name="hovq_welcome_schedule">设置自动生成摘要的时间和时区，并选择固定的星期几或定期生成的间隔。</string>
+    <string name="hovq_welcome_alerts">开启通知后，即使 Hovq 已关闭，Android 也会提醒你查看新的摘要。</string>
     <string name="hovq_agent_check_title">正在检查 VPS 代理</string>
     <string name="hovq_agent_check_detail">请连接 VPS，以便 Hovq 检查代理版本。</string>
     <string name="hovq_agent_updating_title">正在更新代理</string>

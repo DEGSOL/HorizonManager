@@ -22,7 +22,12 @@
     <string name="hovq_app_update_open">Abrir la versión</string>
     <string name="hovq_welcome_title">¡Te damos la bienvenida a Hovq!</string>
     <string name="hovq_welcome_start">Empezar</string>
-    <string name="hovq_welcome_steps">1. Conecta tu VPS. Hovq instala todo lo necesario.\n2. Añade las fuentes que quieres leer.\n3. Elige cuándo preparar el resumen.</string>
+    <string name="hovq_welcome_intro">Hovq reúne las noticias de tus fuentes, prepara resúmenes en tu VPS y los muestra en tu feed.</string>
+    <string name="hovq_welcome_server">Introduce la dirección SSH e inicia sesión con una contraseña o una clave. Hovq puede instalar el agente Horizon o usar uno ya instalado.</string>
+    <string name="hovq_welcome_sources">Añade los canales de Telegram o las fuentes RSS que quieras seguir.</string>
+    <string name="hovq_welcome_ai">Elige un proveedor y un modelo en «%1$s» y añade la clave de API en «%2$s».</string>
+    <string name="hovq_welcome_schedule">Elige la hora y la zona horaria de los resúmenes automáticos. Puedes seleccionar días concretos o un intervalo regular.</string>
+    <string name="hovq_welcome_alerts">Activa las notificaciones si quieres saber cuándo hay un resumen nuevo, incluso con Hovq cerrado.</string>
     <string name="hovq_agent_check_title">Comprobando el agente del VPS</string>
     <string name="hovq_agent_check_detail">Conéctate a tu VPS para que Hovq pueda comprobar la versión del agente.</string>
     <string name="hovq_agent_updating_title">Actualizando el agente</string>

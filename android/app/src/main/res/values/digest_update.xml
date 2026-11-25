@@ -22,7 +22,12 @@
     <string name="hovq_app_update_open">Open release</string>
     <string name="hovq_welcome_title">Welcome to Hovq!</string>
     <string name="hovq_welcome_start">Get started</string>
-    <string name="hovq_welcome_steps">1. Connect your VPS. Hovq installs everything it needs.\n2. Add the sources you want to read.\n3. Choose when to prepare your digest.</string>
+    <string name="hovq_welcome_intro">Hovq gathers news from your sources, prepares digests on your VPS, and brings them to your feed.</string>
+    <string name="hovq_welcome_server">Enter the SSH address and sign in with a password or key. Hovq can install the Horizon agent or connect to an existing one.</string>
+    <string name="hovq_welcome_sources">Add RSS feeds or Telegram channels you want to follow.</string>
+    <string name="hovq_welcome_ai">Choose a provider and a model in «%1$s», then add the API key in «%2$s».</string>
+    <string name="hovq_welcome_schedule">Set the time and time zone for automatic digests. Choose specific days or a regular interval.</string>
+    <string name="hovq_welcome_alerts">Enable digest alerts if you want Android to let you know when a new issue is ready, even when Hovq is closed.</string>
     <string name="hovq_agent_check_title">Checking the VPS agent</string>
     <string name="hovq_agent_check_detail">Connect to your VPS so Hovq can check the agent version.</string>
     <string name="hovq_agent_updating_title">Updating the agent</string>

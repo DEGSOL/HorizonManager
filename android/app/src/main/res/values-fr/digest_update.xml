@@ -22,7 +22,12 @@
     <string name="hovq_app_update_open">Ouvrir la version</string>
     <string name="hovq_welcome_title">Bienvenue dans Hovq !</string>
     <string name="hovq_welcome_start">Commencer</string>
-    <string name="hovq_welcome_steps">1. Connecte ton VPS. Hovq installe tout le nécessaire.\n2. Ajoute les sources que tu veux lire.\n3. Choisis quand préparer le bulletin.</string>
+    <string name="hovq_welcome_intro">Hovq rassemble les actualités de tes sources, prépare des bulletins sur ton VPS et les affiche dans ton fil.</string>
+    <string name="hovq_welcome_server">Saisis l’adresse SSH et connecte-toi avec un mot de passe ou une clé. Hovq peut installer l’agent Horizon ou utiliser un agent déjà installé.</string>
+    <string name="hovq_welcome_sources">Ajoute les flux RSS ou les chaînes Telegram que tu veux suivre.</string>
+    <string name="hovq_welcome_ai">Choisis un fournisseur et un modèle dans « %1$s », puis ajoute la clé API dans « %2$s ».</string>
+    <string name="hovq_welcome_schedule">Définis l’heure et le fuseau horaire des bulletins automatiques. Choisis des jours précis ou un intervalle régulier.</string>
+    <string name="hovq_welcome_alerts">Active les notifications pour être informé des nouveaux bulletins, même lorsque Hovq est fermé.</string>
     <string name="hovq_agent_check_title">Vérification de l’agent sur le VPS</string>
     <string name="hovq_agent_check_detail">Connecte-toi à ton VPS pour que Hovq puisse vérifier la version de l’agent.</string>
     <string name="hovq_agent_updating_title">Mise à jour de l’agent</string>

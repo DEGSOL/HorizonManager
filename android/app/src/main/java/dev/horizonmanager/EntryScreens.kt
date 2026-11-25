@@ -1,6 +1,7 @@
 package dev.horizonmanager
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -29,8 +30,11 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
@@ -39,32 +43,65 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 @Composable
-internal fun SavedGlassButton(label: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
+internal fun SavedGlassButton(
+    label: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    inLightDialog: Boolean = false,
+    labelStyle: TextStyle = MaterialTheme.typography.labelLarge,
+    onClick: () -> Unit,
+) {
+    val surface = if (inLightDialog) Modifier.glassSurface(
+        noticeGlassShape, backdrop = true, menu = true, lightNavigation = true,
+    )
+    else Modifier.navigationGlass(noticeGlassShape)
     Box(
         modifier.widthIn(min = 152.dp)
-            .navigationGlass(noticeGlassShape)
+            .then(surface)
             .then(if (enabled) Modifier.savedNoticeWash() else Modifier)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .heightIn(min = 48.dp).padding(horizontal = 20.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = Color.White.copy(alpha = if (enabled) 1f else .65f),
-            style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center)
+        val textColor = if (inLightDialog) Color.Black else Color.White
+        Text(label, color = textColor.copy(alpha = if (enabled) 1f else .65f),
+            style = labelStyle, textAlign = TextAlign.Center)
     }
 }
 
 @Composable
-private fun EntryScene(content: @Composable BoxScope.() -> Unit) {
+private fun EntryScene(grayWash: Boolean = false, content: @Composable BoxScope.() -> Unit) {
     val palette = LocalHorizonPalette.current
     val layer = rememberGraphicsLayer()
     val scene = remember(layer) { GlassScene(layer) }
-    Box(Modifier.fillMaxSize().background(palette.background)) {
-        Canvas(Modifier.fillMaxSize().recordScene(scene)) {
-            val glow = Offset(size.width * .48f, size.height * .42f)
-            drawRect(Brush.radialGradient(
-                listOf(palette.glassRaised, palette.background),
-                center = glow, radius = size.maxDimension * .71f,
-            ))
+    if (grayWash) {
+        val window = LocalActivity.current?.window
+        DisposableEffect(window) {
+            val controller = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
+            val lightStatus = controller?.isAppearanceLightStatusBars
+            val lightNavigation = controller?.isAppearanceLightNavigationBars
+            controller?.isAppearanceLightStatusBars = true
+            controller?.isAppearanceLightNavigationBars = true
+            onDispose {
+                if (controller != null && lightStatus != null && lightNavigation != null) {
+                    controller.isAppearanceLightStatusBars = lightStatus
+                    controller.isAppearanceLightNavigationBars = lightNavigation
+                }
+            }
+        }
+    }
+    Box(Modifier.fillMaxSize()) {
+        if (grayWash) {
+            Box(Modifier.matchParentSize().recordScene(scene)
+                .background(Color(0xFFCCCCCC)).savedNoticeWash(NoticeWash.Monochrome))
+        } else {
+            Canvas(Modifier.matchParentSize().recordScene(scene).background(palette.background)) {
+                val glow = Offset(size.width * .48f, size.height * .42f)
+                drawRect(Brush.radialGradient(
+                    listOf(palette.glassRaised, palette.background),
+                    center = glow, radius = size.maxDimension * .71f,
+                ))
+            }
         }
         CompositionLocalProvider(LocalGlassScene provides scene) {
             Box(Modifier.fillMaxSize().safeDrawingPadding().imePadding().padding(horizontal = 20.dp, vertical = 12.dp),
@@ -86,13 +123,45 @@ private fun EntryWindow(title: String, scrollable: Boolean = true, content: @Com
 }
 
 @Composable
-internal fun WelcomeWindow(begin: () -> Unit) {
+internal fun WelcomeScreen(begin: () -> Unit) {
     BackHandler { }
-    EntryScene {
-        EntryWindow(ui(R.string.hovq_welcome_title)) {
-            Text(ui(R.string.hovq_welcome_steps), color = ReadingGlass.muted, style = MaterialTheme.typography.bodyLarge)
-            SavedGlassButton(ui(R.string.hovq_welcome_start), Modifier.align(Alignment.CenterHorizontally), onClick = begin)
+    EntryScene(grayWash = true) {
+        Column(Modifier.widthIn(max = 520.dp).fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
+                    .padding(start = 6.dp, end = 6.dp, top = 18.dp, bottom = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(13.dp),
+            ) {
+                Text(ui(R.string.hovq_welcome_title), Modifier.fillMaxWidth().semantics { heading() },
+                    color = Color.Black, style = MaterialTheme.typography.displaySmall)
+                Text(ui(R.string.hovq_welcome_intro), color = Color.Black,
+                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp, lineHeight = 25.sp))
+                WelcomeStep(ui(R.string.hovq_welcome_server), R.string.mr_server, R.string.ui_servers)
+                WelcomeStep(ui(R.string.hovq_welcome_sources), R.string.mr_news, R.string.sources)
+                WelcomeStep(
+                    ui(R.string.hovq_welcome_ai, ui(R.string.settings_ai_model), ui(R.string.ui_secrets)),
+                    R.string.editorial_ai_processing,
+                )
+                WelcomeStep(ui(R.string.hovq_welcome_schedule), R.string.mr_news, R.string.ui_schedule)
+                WelcomeStep(ui(R.string.hovq_welcome_alerts), R.string.mr_interface, R.string.settings_notifications)
+            }
+            Spacer(Modifier.height(12.dp))
+            SavedGlassButton(
+                ui(R.string.hovq_welcome_start),
+                Modifier.widthIn(max = 300.dp).fillMaxWidth().heightIn(min = 64.dp),
+                labelStyle = MaterialTheme.typography.titleLarge,
+                onClick = begin,
+            )
         }
+    }
+}
+
+@Composable
+private fun WelcomeStep(detail: String, vararg destination: Int) {
+    val path = (listOf(ui(R.string.settings)) + destination.map { ui(it) }).joinToString(" → ")
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(path, color = Color.Black, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
+        Text(detail, color = Color.Black, style = MaterialTheme.typography.bodyLarge)
     }
 }
 
@@ -148,7 +217,7 @@ private fun AgentUpdateAnimation() {
     val motion = rememberInfiniteTransition(label = "Agent installation")
     val phase = motion.animateFloat(0f, 1f, infiniteRepeatable(tween(5000, easing = LinearEasing)),
         label = "Glass orbit")
-    EntryScene {
+    EntryScene(grayWash = true) {
         Column(Modifier.widthIn(max = 420.dp).fillMaxWidth().verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -156,22 +225,22 @@ private fun AgentUpdateAnimation() {
                 .semantics { progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate }) {
                 val radius = size.minDimension * .32f
                 val angle = phase.value * 360f
-                val silver = Color(0xFFD9E2E9)
-                drawCircle(Brush.radialGradient(listOf(Color(0xFFBACDD9).copy(alpha = .26f), Color.Transparent),
+                val graphite = Color(0xFF252525)
+                drawCircle(Brush.radialGradient(listOf(Color.White.copy(alpha = .42f), Color.Transparent),
                     center = center, radius = radius * 1.55f), radius * 1.55f)
                 for (orbit in 0..2) {
                     val offset = orbit * radius * .21f
                     val extent = radius + offset
                     val ring = Size(extent * 2f, extent * 2f)
                     val origin = center - Offset(extent, extent)
-                    drawCircle(silver.copy(alpha = .16f), extent, style = Stroke(1.dp.toPx()))
-                    drawArc(silver.copy(alpha = .38f - orbit * .08f),
+                    drawCircle(graphite.copy(alpha = .24f), extent, style = Stroke(1.dp.toPx()))
+                    drawArc(graphite.copy(alpha = .76f - orbit * .14f),
                         startAngle = angle * if (orbit == 1) -1f else 1f, sweepAngle = 102f,
                         useCenter = false, topLeft = origin, size = ring, style = Stroke(4.dp.toPx()))
                 }
                 val radians = angle * kotlin.math.PI.toFloat() / 180f
                 val reflection = center + Offset(cos(radians) * radius, sin(radians) * radius)
-                drawCircle(Brush.radialGradient(listOf(silver.copy(alpha = .65f), Color.Transparent),
+                drawCircle(Brush.radialGradient(listOf(Color.White.copy(alpha = .85f), Color.Transparent),
                     center = reflection, radius = 21.dp.toPx()), 21.dp.toPx(), reflection)
                 drawCircle(Color.White.copy(alpha = .9f), 4.dp.toPx(), reflection)
             }

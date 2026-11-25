@@ -22,7 +22,12 @@
     <string name="hovq_app_update_open">Шығарылымды ашу</string>
     <string name="hovq_welcome_title">Hovq қолданбасына қош келдің!</string>
     <string name="hovq_welcome_start">Бастайық</string>
-    <string name="hovq_welcome_steps">1. VPS серверіңе қосыл. Hovq керегін өзі орнатады.\n2. Оқығың келетін дереккөздерді қос.\n3. Дайджест дайындалатын уақытты таңда.</string>
+    <string name="hovq_welcome_intro">Hovq сен таңдаған дереккөздерден жаңалықтар жинайды, VPS серверіңде дайджест дайындап, оны жаңалықтар таспасында көрсетеді.</string>
+    <string name="hovq_welcome_server">SSH мекенжайын енгізіп, құпиясөзбен немесе кілтпен кір. Hovq Horizon агентін орната алады немесе бар агентке қосылады.</string>
+    <string name="hovq_welcome_sources">Бақылағың келетін RSS таспаларын немесе Telegram арналарын қос.</string>
+    <string name="hovq_welcome_ai">«%1$s» бөлімінде провайдер мен модельді таңда, содан кейін «%2$s» бөлімінде API кілтін қос.</string>
+    <string name="hovq_welcome_schedule">Автоматты дайджест үшін уақыт пен уақыт белдеуін көрсет. Апта күндерін немесе тұрақты аралықты таңда.</string>
+    <string name="hovq_welcome_alerts">Hovq жабық кезде де жаңа дайджест туралы біліп отыру үшін хабарландыруларды қос.</string>
     <string name="hovq_agent_check_title">VPS агентін тексеру</string>
     <string name="hovq_agent_check_detail">Hovq агент нұсқасын тексеруі үшін VPS серверіне қосыл.</string>
     <string name="hovq_agent_updating_title">Агент жаңартылып жатыр</string>

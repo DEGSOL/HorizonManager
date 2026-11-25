@@ -22,7 +22,12 @@
     <string name="hovq_app_update_open">Чыгарылышны ачу</string>
     <string name="hovq_welcome_title">Hovq кушымтасына рәхим ит!</string>
     <string name="hovq_welcome_start">Башлыйк</string>
-    <string name="hovq_welcome_steps">1. VPS серверыңа тоташ. Hovq кирәкле әйберләрне үзе урнаштыра.\n2. Укырга теләгән чыганакларны өстә.\n3. Дайджест әзерләү вакытын сайла.</string>
+    <string name="hovq_welcome_intro">Hovq син сайлаган чыганаклардан яңалык җыя, VPS серверыңда дайджест әзерли һәм аны тасмада күрсәтә.</string>
+    <string name="hovq_welcome_server">SSH адресын керт һәм серсүз яки ачкыч белән кер. Hovq Horizon агентын урнаштыра яки урнаштырылган агентка тоташа ала.</string>
+    <string name="hovq_welcome_sources">Күзәтергә теләгән RSS тасмаларын яки Telegram каналларын өстә.</string>
+    <string name="hovq_welcome_ai">«%1$s» бүлегендә провайдер һәм модель сайла, аннары «%2$s» бүлегендә API ачкычын өстә.</string>
+    <string name="hovq_welcome_schedule">Дайджест автоматик әзерләнсен өчен вакытны һәм сәгать поясын билгелә. Атна көннәрен яки даими араны сайла.</string>
+    <string name="hovq_welcome_alerts">Hovq ябык булганда да яңа дайджест турында белү өчен белдерүләрне кабыз.</string>
     <string name="hovq_agent_check_title">VPS агенты тикшерелә</string>
     <string name="hovq_agent_check_detail">Hovq агент версиясен тикшерсен өчен VPS серверына тоташ.</string>
     <string name="hovq_agent_updating_title">Агент яңартыла</string>

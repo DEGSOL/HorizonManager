@@ -99,6 +99,7 @@ class FluidScreensTest {
     private fun loadIssue(
         longHeadline: String? = null, observeServer: Boolean = false,
         articleCount: Int = 105, showEmptyFeedFirst: Boolean = false, agentVersion: String = BuildConfig.AGENT_VERSION,
+        keepNotificationOffer: Boolean = false,
     ): String {
         val model = ViewModelProvider(compose.activity)[ManagerModel::class.java]
         compose.waitUntil(5000) { model.profilesLoaded.value }
@@ -237,7 +238,7 @@ class FluidScreensTest {
                 .apply { isAccessible = true }.invoke(model, server.id)
         }
         compose.waitForIdle()
-        dismissNotificationOffer()
+        if (!keepNotificationOffer) dismissNotificationOffer()
         return ui(R.string.feed) + " " + shortDigestDate(date)
     }
 
@@ -248,13 +249,38 @@ class FluidScreensTest {
         assertEquals("", model.state.value.problem)
         compose.waitUntil(5000) { compose.onAllNodesWithText(ui(R.string.hovq_welcome_title)).fetchSemanticsNodes().isNotEmpty() }
         text(R.string.hovq_welcome_title).assertIsDisplayed()
-        text(R.string.hovq_welcome_steps).assertIsDisplayed()
+        text(R.string.hovq_welcome_intro).assertIsDisplayed()
+        val begin = text(R.string.hovq_welcome_start).assertIsDisplayed()
+        val button = begin.getUnclippedBoundsInRoot()
+        val screen = compose.onRoot().getUnclippedBoundsInRoot()
+        assertTrue(button.bottom - screen.top > (screen.bottom - screen.top) * .90f)
+        assertEquals((screen.left + screen.right).value, (button.left + button.right).value, 4f)
         snapshot("30-welcome")
-        text(R.string.hovq_welcome_start).performClick()
+        compose.onNodeWithText(listOf(R.string.settings, R.string.mr_interface, R.string.settings_notifications)
+            .joinToString(" → ") { ui(it) }).performScrollTo().assertIsDisplayed()
+        begin.assertIsDisplayed().performClick()
         text(R.string.ui_connect_to_your_vps).assertIsDisplayed()
         text(R.string.ui_ssh_settings).assertIsDisplayed()
         text(R.string.hovq_welcome_start).assertDoesNotExist()
         snapshot("30-vps-setup")
+    }
+
+    @Test
+    fun digestNotificationOfferCentersItsActionsInAVerticalStack() {
+        val feed = loadIssue(articleCount = 2, keepNotificationOffer = true)
+        val title = text(R.string.hovq_digest_notifications).assertIsDisplayed().getUnclippedBoundsInRoot()
+        val description = text(R.string.hovq_notification_offer).assertIsDisplayed().getUnclippedBoundsInRoot()
+        val allow = text(R.string.hovq_allow_notifications).assertIsEnabled().getUnclippedBoundsInRoot()
+        val laterButton = text(R.string.hovq_later).assertIsEnabled()
+        val later = laterButton.getUnclippedBoundsInRoot()
+        assertTrue(description.bottom < allow.top)
+        assertTrue(allow.bottom < later.top)
+        assertEquals((title.left + title.right).value, (allow.left + allow.right).value, 4f)
+        assertEquals((allow.left + allow.right).value, (later.left + later.right).value, 4f)
+        snapshot("32-digest-notification-offer")
+        laterButton.performClick()
+        text(R.string.hovq_notification_offer).assertDoesNotExist()
+        compose.onNodeWithText(feed).assertIsDisplayed()
     }
 
     @Test

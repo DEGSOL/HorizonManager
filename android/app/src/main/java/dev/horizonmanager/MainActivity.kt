@@ -134,7 +134,7 @@ private fun HovqEntry(model: ManagerModel, notificationServer: String, consumed:
     when {
         !loaded -> EntryLoading()
         panel.agentGateRequired() -> AgentGate(panel, model)
-        !began && panel.servers.isEmpty() && panel.problem != "VAULT_READ" -> WelcomeWindow { began = true }
+        !began && panel.servers.isEmpty() && panel.problem != "VAULT_READ" -> WelcomeScreen { began = true }
         else -> Manager(model, notificationServer, consumed)
     }
 }
@@ -463,18 +463,11 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         (tab != FEED || !feedFilters.searchOpen && !feedFilters.optionsOpen)
     val releaseDialogs: @Composable () -> Unit = {
         if (showPermissionOffer) {
-            HorizonAlertDialog(onDismissRequest = { notificationOffer = false },
-                title = { Text(ui(R.string.hovq_digest_notifications)) },
-                text = { Text(ui(R.string.hovq_notification_offer)) },
-                confirmButton = {
-                    Button(onClick = {
-                        notificationOffer = false
-                        enableDigestAfterPermission = true
-                        requestNotifications()
-                    }) { Text(ui(R.string.hovq_allow_notifications)) }
-                }, dismissButton = {
-                    TextButton(onClick = { notificationOffer = false }) { Text(ui(R.string.hovq_later)) }
-                })
+            DigestNotificationOffer(dismiss = { notificationOffer = false }) {
+                notificationOffer = false
+                enableDigestAfterPermission = true
+                requestNotifications()
+            }
         } else if (appUpdate != null) {
             val links = LocalUriHandler.current
             fun postpone() { model.appUpdates.postpone(appUpdate) }
