@@ -149,7 +149,7 @@ async def main(payload, job):
     if kind == "ai":
         model = Config.model_validate(config)
         response = await asyncio.wait_for(
-            create_ai_client(model.ai).complete("Return OK as plain text.", "Confirm that the API responds.", max_tokens=512),
+            create_ai_client(model.ai.model_copy(update={"provider_chain": None})).complete("Return OK as plain text.", "Confirm that the API responds.", max_tokens=512),
             timeout=75,
         )
         if not response.strip():
@@ -321,6 +321,10 @@ if __name__ == "__main__":
             code = str(exc)
         elif getattr(exc, "status_code", None) in {401, 403, 404, 429}:
             code = "HTTP_" + str(exc.status_code)
+        elif type(exc).__name__ == "AIProviderUnavailableError" and "subscription_sharing_usage_limit_exceeded" in str(exc):
+            code = "RATE_LIMIT"
+        elif type(exc).__name__ == "AIProviderUnavailableError" and "subscription_sharing_user_not_eligible" in str(exc):
+            code = "CHATGPT_PLAN_REQUIRED"
         elif isinstance(exc, TimeoutError):
             code = "TIMEOUT"
         else:

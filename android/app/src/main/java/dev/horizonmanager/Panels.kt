@@ -168,8 +168,9 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, dirty
             return
         }
     }
-    var working by remember(page, panel.config.optInt("revision")) { mutableStateOf(stored.copyObject()) }
-    var profiles by remember(page, panel.config.optInt("revision")) { mutableStateOf(JSONArray(storedProfiles.toString())) }
+    var working by remember(serverId, page, panel.config.optInt("revision")) { mutableStateOf(stored.copyObject()) }
+    val aiDrafts = remember(serverId, panel.config.optInt("revision")) { mutableMapOf<String, JSONObject>() }
+    var profiles by remember(serverId, page, panel.config.optInt("revision")) { mutableStateOf(JSONArray(storedProfiles.toString())) }
     val ids = profileIds(profiles)
     val fields = schema.getJSONObject("properties")
     val aiDraft = working.optJSONObject("ai")
@@ -197,26 +198,40 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, dirty
                 val router = AiRouter.configured(ai)
                 val provider = router?.id ?: ai.optString("provider")
                 val providers = panel.schema.getJSONObject("providers")
-                val supported = AiRouter.entries.map(AiRouter::id) +
-                    providers.keys().asSequence().filter { it != "openai-chatgpt" }.toList()
+                val chatgpt = provider == "openai-chatgpt"
+                val supported = AiRouter.entries.map(AiRouter::id) + providers.keys().asSequence()
+                    .filter { it != "openai-chatgpt" || panel.status.optBoolean("chatgpt_sign_in") }.toList()
                 fun replace(value: JSONObject) { working = working.copyObject().put("ai", value) }
                 Choice(ui(R.string.ui_provider), supported, provider, { change ->
                     if (change != provider) {
+                        aiDrafts[provider] = ai
+                        val remembered = aiDrafts[change] ?: panel.config.optJSONObject("ai_providers")?.optJSONObject(change)
                         val preset = AiRouter.entries.find { it.id == change }
-                        if (preset != null) replace(preset.defaults(ai))
-                        else {
+                        val next = remembered ?: preset?.defaults(ai) ?: run {
                             val defaults = providers.getJSONObject(change)
-                            replace(ai.copyObject().put("provider", change).put("model", "")
-                                .put("api_key_env", defaults.optString("api_key_env")).put("base_url", defaults.opt("base_url") ?: JSONObject.NULL)
+                            ai.copyObject().put("provider", change).put("model", "")
+                                .put("api_key_env", defaults.optString("api_key_env"))
+                                .put("base_url", defaults.opt("base_url") ?: JSONObject.NULL)
                                 .put("azure_endpoint_env", defaults.opt("azure_endpoint_env") ?: JSONObject.NULL)
-                                .put("api_version", defaults.opt("api_version") ?: JSONObject.NULL))
+                                .put("api_version", defaults.opt("api_version") ?: JSONObject.NULL)
+                                .put("provider_chain", JSONObject.NULL).put("extra_body", JSONObject.NULL)
                         }
+                        replace(next.copyObject().put("languages", ai.opt("languages")))
                     }
                 }, { value ->
                     AiRouter.entries.find { it.id == value }?.title
-                        ?: if (value == "openai") ui(R.string.ui_openai_compatible_api) else value
+                        ?: when (value) {
+                            "openai" -> ui(R.string.ui_openai_compatible_api)
+                            "openai-chatgpt" -> ui(R.string.hovq_chatgpt_provider)
+                            else -> value
+                        }
                 }, row = true)
-                if (router == null) {
+                if (chatgpt) {
+                    ChatGptSettings(serverId, model, ai.optString("model"), panel.busy,
+                        select = { replace(ai.copyObject().put("model", it)) }) {
+                        model.saveConfig(working, profiles)
+                    }
+                } else if (router == null) {
                     ValueField(ui(R.string.ui_model_id), ai.optString("model"),
                         { replace(ai.copyObject().put("model", it)) }, help = R.string.ui_enter_the_model_id_from_your)
                     ValueField(ui(R.string.ui_compatible_api_address_optional), ai.optString("base_url").takeUnless { it == "null" }.orEmpty(), {
@@ -239,7 +254,7 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, dirty
                     EditValue(schema, advanced, "ai", ai,
                         { working = working.copyObject().put("ai", it) }, ids, ui(R.string.ui_advanced_ai_options))
                 } else {
-                    val savedAlias = router.secretAlias(stored.getJSONObject("ai"))
+                    val savedAlias = router.secretAlias(ai)
                     val knownSecrets = panel.config.optJSONArray("secrets")?.strings().orEmpty()
                     val alias = savedAlias.takeIf { it in knownSecrets } ?: router.secretName
                     val hasKey = alias in knownSecrets
@@ -262,10 +277,7 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, dirty
                     EditValue(schema, advanced, "ai", ai,
                         { working = working.copyObject().put("ai", it) }, ids, ui(R.string.ui_advanced_ai_options))
                 }
-                val savedAi = stored.getJSONObject("ai")
-                val canTest = savedAi.optString("model").isNotBlank() && (savedAi.optString("provider") == "ollama" ||
-                    savedAi.optString("api_key_env") in panel.config.optJSONArray("secrets")?.strings().orEmpty())
-                TextButton(onClick = { model.submit("ai") }, enabled = !panel.busy && canTest) { Text(ui(R.string.ui_test_saved_model)) }
+                SavedModelTest(panel, model, stored.getJSONObject("ai").optString("model"))
             }
             else -> {
                 val names = when (page) {
@@ -282,7 +294,8 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, dirty
             }
         }
         Reveal(dirty &&
-            (page != "ai" || AiRouter.configured(working.getJSONObject("ai")) == null)) {
+            (page != "ai" || (AiRouter.configured(working.getJSONObject("ai")) == null &&
+                aiDraft?.optString("provider") != "openai-chatgpt"))) {
             Text(ui(R.string.editorial_unsaved), color = LocalHorizonPalette.current.warning)
             Button(onClick = {
                 val keys = JSONObject()

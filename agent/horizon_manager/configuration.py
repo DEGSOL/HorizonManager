@@ -83,7 +83,7 @@ def write_profiles(target, documents):
         (folder / "profile.json").write_text(definition.model_dump_json(indent=2), encoding="utf-8")
 
 
-def validate(config, documents, secrets, ready=False, openbb=False):
+def validate(config, documents, secrets, ready=False, openbb=False, auth_root=None):
     if not 1 <= len(documents) <= 32:
         raise ValueError("PROFILE_COUNT")
     # Resolve only registered secret variables. Avoid including submitted values in errors.
@@ -119,12 +119,10 @@ def validate(config, documents, secrets, ready=False, openbb=False):
         raise ValueError("OPENBB_DEPENDENCY")
     if model.wechat and model.wechat.enabled:
         raise ValueError("WECHAT_AUTH_UNAVAILABLE")
-    if model.ai.provider.value == "openai-chatgpt" or "openai-chatgpt" in (model.ai.provider_chain or "").split(","):
-        raise ValueError("CHATGPT_AUTH_UNAVAILABLE")
     if model.ai.provider_chain:
         from src.models import AIProvider
         names = [x.strip() for x in model.ai.provider_chain.split(",")]
-        if not all(x in {provider.value for provider in AIProvider} - {"openai-chatgpt"} for x in names):
+        if not all(x in {provider.value for provider in AIProvider} for x in names):
             raise ValueError("AI_CHAIN")
     for url in (model.ai.base_url,):
         if url:
@@ -133,7 +131,7 @@ def validate(config, documents, secrets, ready=False, openbb=False):
             if (parts.scheme != "https" and not (local and parts.scheme == "http")) or not parts.hostname or parts.username or parts.password:
                 raise ValueError("AI_BASE_URL")
     required = []
-    if model.ai.provider.value != "ollama":
+    if model.ai.provider.value not in {"ollama", "openai-chatgpt"}:
         required.append(model.ai.api_key_env)
     if model.ai.provider.value == "azure":
         required.append(model.ai.azure_endpoint_env)
@@ -148,7 +146,7 @@ def validate(config, documents, secrets, ready=False, openbb=False):
     for extractor in model.extractors.values():
         if hasattr(extractor, "api_key_env") and not secret_name_allowed(extractor.api_key_env):
             raise ValueError("SECRET_NAME")
-    if ready and (not model.ai.model.strip() or any(not secrets.get(name) for name in required)):
+    if ready and (ai_missing(model.ai, secrets, auth_root) or any(not secrets.get(name) for name in required)):
         raise ValueError("AI_OR_DELIVERY_SETUP_REQUIRED")
     with TemporaryDirectory() as scratch:
         path = Path(scratch) / "profiles"
@@ -173,11 +171,15 @@ def validate(config, documents, secrets, ready=False, openbb=False):
     return model, enabled, sorted(set(required) - secrets.keys())
 
 
-def ai_missing(ai, secrets):
+def ai_missing(ai, secrets, auth_root=None):
     fields = []
     if not ai.model.strip():
         fields.append("ai.model")
-    if ai.provider.value != "ollama" and not secrets.get(ai.api_key_env):
+    if ai.provider.value == "openai-chatgpt":
+        from .chatgpt_login import plan_available
+        if auth_root is None or not plan_available(auth_root, ai.chatgpt_account):
+            fields.append("ai.chatgpt_account")
+    elif ai.provider.value != "ollama" and not secrets.get(ai.api_key_env):
         fields.append(ai.api_key_env)
     if ai.provider.value == "azure" and not secrets.get(ai.azure_endpoint_env):
         fields.append(ai.azure_endpoint_env)

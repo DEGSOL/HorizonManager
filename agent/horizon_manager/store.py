@@ -5,6 +5,7 @@ from pathlib import Path
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
+from .router_catalog import ROUTERS
 from .configuration import DEFAULT_HEADLINE_RANGE, DEFAULT_HEADLINE_WORDS, DIGEST_LANGUAGES, builtin_profiles, initial_config
 
 
@@ -23,6 +24,7 @@ class Store:
                 CREATE TABLE IF NOT EXISTS configuration (
                     id INTEGER PRIMARY KEY CHECK (id=1), revision INTEGER NOT NULL,
                     config TEXT NOT NULL, profiles TEXT NOT NULL, secrets TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS ai_provider_settings (provider TEXT PRIMARY KEY, config TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS previous (id INTEGER PRIMARY KEY CHECK (id=1), payload TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS jobs (
                     id TEXT PRIMARY KEY, kind TEXT NOT NULL, state TEXT NOT NULL,
@@ -148,7 +150,18 @@ class Store:
         row = db.execute("SELECT * FROM configuration WHERE id=1").fetchone()
         return {"revision": row["revision"], **{key: json.loads(row[key]) for key in ("config", "profiles", "secrets")}}
 
+    @staticmethod
+    def provider_settings(db):
+        return {row["provider"]: json.loads(row["config"]) for row in db.execute("SELECT * FROM ai_provider_settings")}
+
     def put_settings(self, db, current, updated):
+        for settings in (current, updated):
+            ai = settings["config"]["ai"]
+            provider = ai["provider"]
+            if provider == "openai":
+                url = str(ai.get("base_url") or "").rstrip("/")
+                provider = next((name for name, spec in ROUTERS.items() if spec[0] == url), provider)
+            db.execute("INSERT OR REPLACE INTO ai_provider_settings VALUES (?, ?)", (provider, json.dumps(ai)))
         db.execute("INSERT OR REPLACE INTO previous VALUES (1, ?)", (json.dumps(current),))
         db.execute("UPDATE configuration SET revision=?, config=?, profiles=?, secrets=? WHERE id=1",
                    (current["revision"] + 1, *(json.dumps(updated[key]) for key in ("config", "profiles", "secrets"))))

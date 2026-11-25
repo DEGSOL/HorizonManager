@@ -1,0 +1,23 @@
+<resources>
+    <string name="hovq_chatgpt_provider">ChatGPT subscription</string>
+    <string name="hovq_chatgpt_plan_help">Authorize Hovq to use the ChatGPT allowance of an eligible account. The session is saved on this VPS for scheduled digests.</string>
+    <string name="hovq_chatgpt_connected">ChatGPT is connected</string>
+    <string name="hovq_chatgpt_account">Signed in as %1$s</string>
+    <string name="hovq_chatgpt_sign_in">Sign in with ChatGPT</string>
+    <string name="hovq_chatgpt_reconnect">Sign in again</string>
+    <string name="hovq_chatgpt_waiting">Complete sign-in in your browser, then return to Hovq.</string>
+    <string name="hovq_chatgpt_return">Authorization received. Return to Hovq to see the result.</string>
+    <string name="hovq_chatgpt_callback_error">This callback does not match the sign-in request. Return to Hovq and try again.</string>
+    <string name="hovq_chatgpt_login_active">A ChatGPT sign-in is still active on this VPS. Let it finish or retry in a few minutes.</string>
+    <string name="hovq_chatgpt_login_retry">This sign-in could not finish. Select Sign in with ChatGPT to try again.</string>
+    <string name="hovq_chatgpt_cancelled">ChatGPT sign-in was cancelled.</string>
+    <string name="hovq_chatgpt_login_failed">ChatGPT sign-in failed. Check the account and try again.</string>
+    <string name="hovq_chatgpt_plan_required">This account did not grant access to ChatGPT plan usage, or the plan is unavailable.</string>
+    <string name="hovq_chatgpt_models_unavailable">Could not load ChatGPT models. Check the account or sign in again.</string>
+    <string name="hovq_chatgpt_status_unavailable">Could not check the ChatGPT session on the VPS.</string>
+    <string name="hovq_ai_testing">Checking whether %1$s responds…</string>
+    <string name="hovq_ai_test_success">%1$s responded. The saved model works.</string>
+    <string name="hovq_ai_test_failed">The check for %1$s failed. %2$s</string>
+    <string name="hovq_ai_test_save_first">Save a model to test it.</string>
+    <string name="hovq_ai_test_no_reply">The provider did not return a usable response.</string>
+</resources>

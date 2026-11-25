@@ -25,6 +25,7 @@ from src.processing.content import split_content
 
 from . import VERSION, backup, jobs, push, router_catalog
 from .article_context import find_item, key_for, localized_context, previous_context, read_json
+from .chatgpt_login import ChatGptLogin
 from .configuration import (DIGEST_LANGUAGES, MAX_HEADLINE_CHARACTERS, MAX_HEADLINE_WORDS, MIN_HEADLINE_WORDS,
                             DigestLanguageCode, ai_missing, schema, secret_name_allowed, validate)
 from .localized_digest import LocalizedSummarizer, restore_original_cards
@@ -59,6 +60,7 @@ class JobInput(Body):
     bucket: str | None = Field(default=None, max_length=20)
     index: int | None = Field(default=None, ge=0, le=10000)
     run: str | None = Field(default=None, max_length=32)
+    config_revision: int | None = Field(default=None, ge=1)
 
 
 class MediaSearch(Body):
@@ -98,6 +100,19 @@ class CatalogKey(Body):
     key: str = Field(min_length=8, max_length=512)
 
 
+class ChatGptCallback(Body):
+    state: str = Field(pattern=r"^[A-Za-z0-9_-]{32,128}$")
+    code: str | None = Field(default=None, min_length=1, max_length=4096)
+    client_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,256}$")
+    error: str | None = Field(default=None, pattern=r"^[a-z_]{1,64}$")
+
+    @model_validator(mode="after")
+    def result(self):
+        if bool(self.code) == bool(self.error):
+            raise ValueError("A single authorization result is required")
+        return self
+
+
 class PushDevice(Body):
     endpoint: str = Field(max_length=512)
     secret: str = Field(pattern=r"^[a-f0-9]{64}$")
@@ -133,6 +148,7 @@ def public(config):
 
 def create_app(root, token):
     store = Store(root)
+    chatgpt = ChatGptLogin(root)
     upstream_lock = threading.Lock()
     upstream_cache = {}
     installer_lock = threading.Lock()
@@ -196,7 +212,7 @@ def create_app(root, token):
     @app.get("/v1/health")
     def health():
         return {"api": 1, "agent": VERSION, "horizon": REVISION,
-                "runtime": "systemd/venv", "digest_notifications": True, "openbb": importlib.util.find_spec("openbb") is not None}
+                "runtime": "systemd/venv", "digest_notifications": True, "chatgpt_sign_in": True, "openbb": importlib.util.find_spec("openbb") is not None}
 
     @app.get("/v1/upstream")
     def upstream():
@@ -277,10 +293,16 @@ def create_app(root, token):
                 Store.event(db, "DIGEST_LANGUAGE_CHANGED", detail=language)
             return {"language": language}
 
+    def public_settings(db, include_ai_providers=False):
+        settings = public(store.settings(db))
+        if include_ai_providers:
+            settings["ai_providers"] = store.provider_settings(db)
+        return settings
+
     @app.get("/v1/config")
-    def get_config():
+    def get_config(include_ai_providers: bool = False):
         with store.db() as db:
-            return public(store.settings(db))
+            return public_settings(db, include_ai_providers)
 
     async def load_catalog(router, key):
         if not key:
@@ -294,19 +316,61 @@ def create_app(root, token):
     async def saved_router_catalog(router: Literal["openrouter", "unorouter"]):
         with store.db() as db:
             settings = store.settings(db)
-        key = router_catalog.saved_key(router, settings["config"]["ai"], settings["secrets"])
+            preferences = store.provider_settings(db)
+        ai = preferences.get(router, settings["config"]["ai"])
+        key = router_catalog.saved_key(router, ai, settings["secrets"])
         return await load_catalog(router, key)
 
     @app.post("/v1/ai/catalog/{router}")
     async def preview_router_catalog(router: Literal["openrouter", "unorouter"], body: CatalogKey):
         return await load_catalog(router, body.key)
 
+    def login_action(action, *args):
+        try:
+            return action(*args)
+        except ValueError as error:
+            fail(409, str(error))
+
+    @app.get("/v1/ai/chatgpt")
+    def chatgpt_status():
+        try:
+            status = chatgpt.auth.status()
+            return {"email": status.get("email"), "plan_usage": status["plan_usage"]}
+        except Exception:
+            fail(503, "CHATGPT_STATUS_UNAVAILABLE")
+
+    @app.post("/v1/ai/chatgpt/login")
+    def chatgpt_start():
+        return login_action(chatgpt.start)
+
+    @app.get("/v1/ai/chatgpt/login/{attempt}")
+    def chatgpt_attempt(attempt: str):
+        return login_action(chatgpt.status, attempt)
+
+    @app.post("/v1/ai/chatgpt/login/{attempt}")
+    def chatgpt_finish(attempt: str, body: ChatGptCallback):
+        return login_action(chatgpt.finish, attempt, body.model_dump(exclude_none=True))
+
+    @app.delete("/v1/ai/chatgpt/login/{attempt}")
+    def chatgpt_cancel(attempt: str):
+        return login_action(chatgpt.cancel, attempt)
+
+    @app.get("/v1/ai/chatgpt/models")
+    def chatgpt_models():
+        if not chatgpt_status()["plan_usage"]:
+            fail(409, "CHATGPT_PLAN_REQUIRED")
+        try:
+            return {"data": [{"id": row["slug"], "name": row["display_name"]} for row in chatgpt.auth.models()]}
+        except Exception as error:
+            code = "RATE_LIMIT" if "subscription_sharing_usage_limit_exceeded" in str(error) else "CHATGPT_MODELS_UNAVAILABLE"
+            fail(502, code)
+
     def no_active(db):
         if db.execute(f"SELECT 1 FROM jobs WHERE {jobs.PIPELINE_ACTIVE}").fetchone():
             fail(409, "ACTIVE_JOB")
 
     @app.put("/v1/config")
-    def set_config(body: ConfigInput):
+    def set_config(body: ConfigInput, include_ai_providers: bool = False):
         with store.db() as db:
             db.execute("BEGIN IMMEDIATE")
             no_active(db)
@@ -324,7 +388,7 @@ def create_app(root, token):
             _, _, missing = check_config(body.config, body.profiles, secrets)
             store.put_settings(db, current, {"config": body.config, "profiles": body.profiles, "secrets": secrets})
             Store.event(db, "CONFIG_SAVED")
-            return {**public(store.settings(db)), "missing": missing}
+            return {**public_settings(db, include_ai_providers), "missing": missing}
 
     @app.post("/v1/config/check")
     def check():
@@ -348,10 +412,12 @@ def create_app(root, token):
             check_config(updated["config"], updated["profiles"], updated["secrets"])
             store.put_settings(db, current, updated)
             Store.event(db, "CONFIG_REVERTED")
-            return public(store.settings(db))
+            return public_settings(db)
 
     @app.post("/v1/jobs")
     def submit(body: JobInput):
+        if body.kind != "ai" and body.config_revision is not None:
+            fail(422, "REQUEST_INVALID")
         if body.kind == "source" and body.source not in SOURCE_REGISTRY:
             fail(422, "SOURCE_UNKNOWN")
         if body.kind != "source" and any(value is not None for value in (body.source, body.bucket, body.index)):
@@ -377,8 +443,10 @@ def create_app(root, token):
                     fail(409, "ACTIVE_JOB")
                 if body.kind in {"ai", "localize"}:
                     settings = store.settings(db)
+                    if body.config_revision is not None and body.config_revision != settings["revision"]:
+                        fail(409, "CONFIG_CHANGED")
                     model, _, _ = check_config(settings["config"], settings["profiles"], settings["secrets"])
-                    if missing := ai_missing(model.ai, settings["secrets"]):
+                    if missing := ai_missing(model.ai, settings["secrets"], root):
                         fail(422, "AI_SETUP_REQUIRED", fields=missing)
                 Store.queue(db, job, body.kind, data)
         return {"id": job}
@@ -391,6 +459,14 @@ def create_app(root, token):
                       CASE WHEN kind != 'article_context' THEN result END AS result
                       FROM jobs {where} ORDER BY rowid DESC LIMIT ?""", (limit,))
             return [{**dict(row), "result": json.loads(row["result"]) if row["result"] else None} for row in rows]
+
+    @app.get("/v1/jobs/{job}")
+    def ai_job(job: str):
+        with store.db() as db:
+            row = db.execute("SELECT id,state,phase,result FROM jobs WHERE id=? AND kind='ai'", (job,)).fetchone()
+        if row is None:
+            fail(404, "JOB_UNKNOWN")
+        return {**dict(row), "result": json.loads(row["result"]) if row["result"] else None}
 
     @app.post("/v1/jobs/{job}/stop")
     def stop(job: str):
@@ -763,7 +839,7 @@ def create_app(root, token):
             if characters is not None:
                 Store.set_headline_range(db, characters.minimum, characters.maximum)
             Store.event(db, "BACKUP_RESTORED")
-            return public(store.settings(db))
+            return public_settings(db)
 
     return app
 

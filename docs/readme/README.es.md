@@ -1,4 +1,4 @@
-# Hovq 0.6.0
+# Hovq 0.6.1
 
 [Русский](../../README.md) · [English](README.en.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Italiano](README.it.md) · **Español** · [日本語](README.ja.md) · [한국어](README.ko.md) · [简体中文](README.zh.md) · [Қазақша](README.kk.md) · [Татарча](README.tt.md)
 
@@ -26,7 +26,7 @@ Hovq es una aplicación para Android que permite instalar y administrar [Horizon
 
 Activa las notificaciones en **Ajustes → Interfaz → Notificaciones** y autorízalas en Android. Hovq mantiene una conexión directa con el VPS por SSH o HTTPS configurado. Android muestra una notificación silenciosa del servicio durante la supervisión. Recibirás un aviso aparte cuando haya un resumen listo. Si se pierde la conexión, Hovq vuelve a conectarse y comprueba si hay una nueva edición.
 
-El APK se instala sobre Hovq 0.4.5–0.5.9 con el mismo certificado. Las versiones 0.4.4 y anteriores requieren una instalación limpia. Desde Hovq, actualiza el agente del VPS a 0.1.20. Detecta publicaciones sobre el mismo evento aunque la redacción difiera, incluso con el enriquecimiento bajo demanda. Se respeta el ajuste de deduplicación temática de cada perfil.
+El APK se instala sobre Hovq 0.4.5–0.6.0 con el mismo certificado. Las versiones 0.4.4 y anteriores requieren una instalación limpia. Desde Hovq, actualiza el agente del VPS a 0.1.21. Detecta publicaciones sobre el mismo evento aunque la redacción difiera, incluso con el enriquecimiento bajo demanda. Se respeta el ajuste de deduplicación temática de cada perfil.
 
 ## Compilar desde el código fuente
 
@@ -41,4 +41,4 @@ Para generar un APK firmado, configura
 
 `HM_RELEASE_KEYSTORE`, `HM_RELEASE_KEY_ALIAS`, `HM_RELEASE_STORE_PASSWORD`, `HM_RELEASE_KEY_PASSWORD`
 
-[Código de la aplicación y del agente de esta versión](https://github.com/DEGSOL/HorizonManager/tree/v0.6.0) · [Arquitectura y API](https://github.com/DEGSOL/HorizonManager/blob/v0.6.0/docs/ARCHITECTURE.md) · [Pruebas](https://github.com/DEGSOL/HorizonManager/blob/v0.6.0/docs/TESTING.md)
+[Código de la aplicación y del agente de esta versión](https://github.com/DEGSOL/HorizonManager/tree/v0.6.1) · [Arquitectura y API](https://github.com/DEGSOL/HorizonManager/blob/v0.6.1/docs/ARCHITECTURE.md) · [Pruebas](https://github.com/DEGSOL/HorizonManager/blob/v0.6.1/docs/TESTING.md)

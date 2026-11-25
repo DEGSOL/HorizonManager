@@ -134,13 +134,15 @@ internal fun RouterSettings(
         selected(it)
         chooseModel = false
     }
-    Button(enabled = !busy && !loading && selection != null, onClick = { save(checkedKey) }) {
+    Button(enabled = !busy && !loading &&
+        (selection != null || hasSavedKey && input.isBlank() && currentModel.isNotBlank()),
+        onClick = { save(checkedKey) }) {
         Text(ui(R.string.ui_save_settings))
     }
 }
 
 @Composable
-private fun RouterPicker(models: List<RouterModel>, selectedId: String, close: () -> Unit, select: (String) -> Unit) {
+internal fun RouterPicker(models: List<RouterModel>, selectedId: String, close: () -> Unit, select: (String) -> Unit) {
     var query by remember { mutableStateOf("") }
     val filtered = remember(models, query) {
         val text = query.trim()

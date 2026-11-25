@@ -1,0 +1,23 @@
+<resources>
+    <string name="hovq_chatgpt_provider">ChatGPT по подписке</string>
+    <string name="hovq_chatgpt_plan_help">Разреши Hovq использовать лимит подписки ChatGPT. Сессия хранится на этом VPS и используется для дайджестов по расписанию.</string>
+    <string name="hovq_chatgpt_connected">ChatGPT подключён</string>
+    <string name="hovq_chatgpt_account">Выполнен вход в %1$s</string>
+    <string name="hovq_chatgpt_sign_in">Войти через ChatGPT</string>
+    <string name="hovq_chatgpt_reconnect">Войти заново</string>
+    <string name="hovq_chatgpt_waiting">Заверши вход в браузере и вернись в Hovq.</string>
+    <string name="hovq_chatgpt_return">Ответ получен. Вернись в Hovq, чтобы посмотреть результат.</string>
+    <string name="hovq_chatgpt_callback_error">Ответ не соответствует запросу на вход. Вернись в Hovq и повтори попытку.</string>
+    <string name="hovq_chatgpt_login_active">На этом VPS уже выполняется вход. Заверши его или повтори попытку через несколько минут.</string>
+    <string name="hovq_chatgpt_login_retry">Вход не завершился. Нажми «Войти через ChatGPT», чтобы повторить попытку.</string>
+    <string name="hovq_chatgpt_cancelled">Вход в ChatGPT отменён.</string>
+    <string name="hovq_chatgpt_login_failed">Войти в ChatGPT не удалось. Проверь аккаунт и повтори попытку.</string>
+    <string name="hovq_chatgpt_plan_required">Для этого аккаунта не предоставлено разрешение на использование подписки или подписка недоступна.</string>
+    <string name="hovq_chatgpt_models_unavailable">Не удалось загрузить модели ChatGPT. Проверь аккаунт или войди заново.</string>
+    <string name="hovq_chatgpt_status_unavailable">Не удалось проверить сессию ChatGPT на VPS.</string>
+    <string name="hovq_ai_testing">Проверяю ответ модели %1$s…</string>
+    <string name="hovq_ai_test_success">Модель %1$s ответила. Проверка пройдена.</string>
+    <string name="hovq_ai_test_failed">Модель %1$s не прошла проверку. %2$s</string>
+    <string name="hovq_ai_test_save_first">Сохрани модель, чтобы проверить её.</string>
+    <string name="hovq_ai_test_no_reply">Провайдер не вернул пригодный ответ.</string>
+</resources>

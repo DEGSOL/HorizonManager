@@ -11,6 +11,7 @@ from email.utils import format_datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 from unittest.mock import AsyncMock, patch
 
@@ -603,11 +604,111 @@ class AgentTests(unittest.TestCase):
         self.assertEqual([row["id"] for row in first], ids[:2])
         self.assertEqual([row["id"] for row in self.client.get("/v1/digests", params={"after": ids[1]}).json()], ids[2:])
 
+    def test_provider_history_keeps_model_and_secret_alias_across_switches(self):
+        incoming = self.config("openrouter-first")
+        ai = incoming["config"]["ai"]
+        ai.update(base_url="https://openrouter.ai/api/v1", api_key_env="HM_SECRET_CUSTOM_ROUTER")
+        incoming["secrets"] = {"HM_SECRET_CUSTOM_ROUTER": SECRET}
+        endpoint = "/v1/config?include_ai_providers=true"
+        self.assertEqual(self.client.put(endpoint, json=incoming).status_code, 200)
+        incoming["revision"] += 1
+        ai.update(provider="openai-chatgpt", model="plan-model", base_url=None, api_key_env="")
+        incoming["secrets"] = {}
+        saved = self.client.put(endpoint, json=incoming)
+        self.assertEqual(saved.status_code, 200, saved.text)
+        choices = saved.json()["ai_providers"]
+        self.assertEqual(choices["openrouter"]["model"], "openrouter-first")
+        self.assertEqual(choices["openrouter"]["api_key_env"], "HM_SECRET_CUSTOM_ROUTER")
+        self.assertEqual(choices["openai-chatgpt"]["model"], "plan-model")
+        self.assertNotIn(SECRET, saved.text)
+        fetch = AsyncMock(return_value={"data": []})
+        with patch("horizon_manager.router_catalog.fetch", fetch):
+            self.assertEqual(self.client.get("/v1/ai/catalog/openrouter").status_code, 200)
+            fetch.assert_awaited_once_with("openrouter", SECRET)
+        blocked = self.client.post("/v1/jobs", json={"id": str(uuid4()), "kind": "ai"})
+        self.assertEqual(blocked.json()["detail"]["fields"], ["ai.chatgpt_account"])
+
+    def test_chatgpt_callback_relays_only_the_matching_attempt(self):
+        import httpx
+        import jwt
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        from src.ai.chatgpt_auth import ChatGPTAuth, DISCOVERY_URL, ISSUER, PLAN_SCOPE, TOKEN_URL
+
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        start = "/v1/ai/chatgpt/login"
+        expected = {}
+        exchange_calls = []
+
+        def upstream(request):
+            if str(request.url) == TOKEN_URL:
+                form = parse_qs(request.content.decode())
+                exchange_calls.append(form)
+                self.assertEqual(form["redirect_uri"], expected["redirect_uri"])
+                self.assertEqual(form["code"], ["example-code"])
+                claims = {
+                    "iss": ISSUER, "sub": "fixture", "email": "reader@example.com",
+                    "aud": "oaiapp_fixture", "nonce": expected["nonce"][0], "exp": time.time() + 3600,
+                }
+                return httpx.Response(200, json={
+                    "access_token": "fixture-access", "refresh_token": "fixture-refresh",
+                    "id_token": jwt.encode(claims, key, algorithm="RS256", headers={"kid": "fixture"}),
+                    "scope": PLAN_SCOPE, "expires_in": 3600, "token_type": "Bearer",
+                })
+            if str(request.url) == DISCOVERY_URL:
+                return httpx.Response(200, json={"issuer": ISSUER, "jwks_uri": f"{ISSUER}/jwks"})
+            if request.url.path == "/jwks":
+                jwk = json.loads(jwt.algorithms.RSAAlgorithm.to_jwk(key.public_key()))
+                return httpx.Response(200, json={"keys": [{**jwk, "kid": "fixture"}]})
+            if request.url.path == "/v1/models":
+                self.assertEqual(request.headers["Authorization"], "Bearer fixture-access")
+                return httpx.Response(200, json={"models": [
+                    {"slug": "plan-model", "display_name": "Plan Model", "visibility": "list"}
+                ]})
+            raise AssertionError("Unexpected authorization request")
+
+        with httpx.Client(transport=httpx.MockTransport(upstream)) as remote, patch.object(ChatGPTAuth, "_http") as client:
+            client.return_value.__enter__.return_value = remote
+            result = self.client.post(start, json={})
+            self.assertEqual(result.status_code, 200, result.text)
+            flow = result.json()
+            expected.update(parse_qs(urlsplit(flow["url"]).query))
+            path = start + "/" + flow["id"]
+            callback = {"state": expected["state"][0], "code": "example-code", "client_id": "oaiapp_fixture"}
+            self.assertEqual(self.client.post(path, json={**callback, "state": "x" * 43}).status_code, 409)
+            self.assertEqual(exchange_calls, [])
+            self.assertEqual(self.client.post(path, json=callback, headers={"Authorization": ""}).status_code, 401)
+            self.assertEqual(self.client.post(path, json=callback).status_code, 200)
+            deadline = time.monotonic() + 6
+            status = self.client.get(path).json()
+            while status["state"] == "checking" and time.monotonic() < deadline:
+                time.sleep(.05)
+                status = self.client.get(path).json()
+            self.assertEqual(status["state"], "connected", status)
+            self.assertEqual(len(exchange_calls), 1)
+            self.assertEqual(self.client.get("/v1/ai/chatgpt").json(),
+                             {"email": "reader@example.com", "plan_usage": True})
+            self.assertEqual(self.client.get("/v1/ai/chatgpt/models").json(),
+                             {"data": [{"id": "plan-model", "name": "Plan Model"}]})
+            self.assertEqual((self.root / "chatgpt" / "credentials.json").stat().st_mode & 0o777, 0o600)
+            self.assertEqual(self.client.post(path, json=callback).json()["state"], "connected")
+            self.assertEqual(len(exchange_calls), 1)
+
+    def test_saved_model_reports_a_verified_response_for_its_revision(self):
+        self.assertEqual(self.client.put("/v1/config", json=self.config()).status_code, 200)
+        job = uuid4()
+        job_data = {"id": str(job), "kind": "ai", "config_revision": 1}
+        self.assertEqual(self.client.post("/v1/jobs", json=job_data).json()["detail"]["code"], "CONFIG_CHANGED")
+        self.assertEqual(self.client.post("/v1/jobs", json={**job_data, "config_revision": 2}).status_code, 200)
+        self.assertEqual(self.wait(job.hex)["state"], "success")
+        self.assertEqual(self.client.get(f"/v1/jobs/{job.hex}").json()["result"],
+                         {"model": "fixture-model", "verified": True})
+
     def test_ai_wrong_secret_and_cancel(self):
         self.assertEqual(self.client.put("/v1/config", json=self.config(secret="wrong")).status_code, 200)
         first = uuid4()
         self.client.post("/v1/jobs", json={"id": str(first), "kind": "ai"})
         self.assertEqual(self.wait(first.hex)["state"], "failed")
+        self.assertEqual(self.client.get(f"/v1/jobs/{first.hex}").json()["phase"], "HTTP_401")
         events = self.client.get("/v1/events").text
         self.assertIn("HTTP_401", events)
         self.assertNotIn(SECRET, events)

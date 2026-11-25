@@ -862,6 +862,14 @@ internal fun errorText(code: String) = when (code.substringBefore(" · ")) {
     "SECRET_REFERENCE" -> ui(R.string.ui_add_the_secrets_referenced_by_the)
     "LANGUAGE_UNVERIFIED" -> ui(R.string.ui_english_simplified_chinese_and_russian_are)
     "NO_ENABLED_SOURCES", "SOURCE_ALL_FAILED" -> ui(R.string.ui_sources_are_unavailable_or_disabled_check)
+    "CHATGPT_BROWSER_UNAVAILABLE" -> ui(R.string.browser_no_handler)
+    "CHATGPT_LOGIN_ACTIVE" -> ui(R.string.hovq_chatgpt_login_active)
+    "CHATGPT_LOGIN_EXPIRED", "CHATGPT_CALLBACK_PORT" -> ui(R.string.hovq_chatgpt_login_retry)
+    "CHATGPT_LOGIN_CANCELLED" -> ui(R.string.hovq_chatgpt_cancelled)
+    "CHATGPT_LOGIN_FAILED", "CHATGPT_CALLBACK_INVALID" -> ui(R.string.hovq_chatgpt_login_failed)
+    "CHATGPT_PLAN_REQUIRED" -> ui(R.string.hovq_chatgpt_plan_required)
+    "CHATGPT_MODELS_UNAVAILABLE" -> ui(R.string.hovq_chatgpt_models_unavailable)
+    "CHATGPT_STATUS_UNAVAILABLE" -> ui(R.string.hovq_chatgpt_status_unavailable)
     "AI_SETUP_REQUIRED", "AI_OR_DELIVERY_SETUP_REQUIRED", "RUN_SETUP_REQUIRED" -> ui(R.string.ui_check_the_ai_model_and_missing)
     "AUTH", "HTTP_401", "HTTP_403" -> ui(R.string.ui_a_source_or_ai_provider_rejected)
     "RATE_LIMIT", "HTTP_429" -> ui(R.string.ui_the_provider_rate_limit_or_quota)
@@ -869,6 +877,7 @@ internal fun errorText(code: String) = when (code.substringBefore(" · ")) {
     "NETWORK" -> ui(R.string.ui_the_source_did_not_respond_over)
     "HTTP_NOT_FOUND", "HTTP_404" -> ui(R.string.ui_the_source_api_address_or_model)
     "INVALID_FORMAT" -> ui(R.string.ui_the_response_was_in_an_unexpected)
+    "EMPTY_AI_RESPONSE" -> ui(R.string.hovq_ai_test_no_reply)
     else -> ui(R.string.ui_operation_details)
 }
 

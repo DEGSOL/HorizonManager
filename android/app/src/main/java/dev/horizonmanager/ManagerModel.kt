@@ -13,6 +13,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -80,6 +82,9 @@ internal fun Panel.preferredDigestLanguage() = status.optString("digest_language
 
 internal fun Panel.agentGateRequired() = updatingAgent || server?.installed == true &&
     (!isAgentVersion(agentVersion) || agentUpdateAvailable(agentVersion))
+
+internal data class SavedModelCheck(val model: String, val revision: Int, val pending: Boolean, val error: String = "")
+internal data class ChatGptLoginStatus(val server: String, val waiting: Boolean, val error: String = "")
 
 internal class ManagerModel(private val app: Application) : AndroidViewModel(app) {
     val appUpdates = AppUpdates(app.getSharedPreferences("app_updates", 0))
@@ -771,7 +776,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             val panel = state.value
             val run = archiveRun
             val older = panel.archive.drop(DIGEST_PAGE_SIZE)
-            val config = if (everything || panel.config.length() == 0) api.get("config") as JSONObject else panel.config
+            val config = if (everything || panel.config.length() == 0) api.get("config?include_ai_providers=true") as JSONObject else panel.config
             val hours = collectionHours(config, panel.collectionHours)
             val selected = if (run == null) panel.feedIssue(head + older, hours) else head.find { it.optString("id") == run }
                 ?: if (older.any { it.optString("id") == run }) {
@@ -1061,6 +1066,113 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             if (kind == "run") state.value.server?.takeIf { it.background }?.let { DigestWorker.sync(app, it.id) }
         }
 
+    private val modelChecks = MutableStateFlow<Map<String, SavedModelCheck>>(emptyMap())
+    val savedModelChecks = modelChecks.asStateFlow()
+
+    fun testSavedModel() {
+        val panel = state.value
+        val server = panel.server ?: return
+        val model = panel.config.optJSONObject("config")?.optJSONObject("ai")?.optString("model").orEmpty()
+        if (model.isBlank() || modelChecks.value[server.id]?.pending == true) return
+        val revision = panel.config.optInt("revision")
+        fun show(pending: Boolean, error: String = "") {
+            modelChecks.update { it + (server.id to SavedModelCheck(model, revision, pending, error)) }
+        }
+        show(pending = true)
+        viewModelScope.launch {
+            try {
+                val job = UUID.randomUUID().toString()
+                val jobId = job.replace("-", "")
+                retryConnection { withAgent(server) { api ->
+                    api.post("jobs", JSONObject().put("id", job).put("kind", "ai").put("config_revision", revision))
+                } }
+                val result = withTimeoutOrNull(115_000) {
+                    while (true) {
+                        val probe = retryConnection {
+                            withAgent(server) { it.get("jobs/$jobId") as JSONObject }
+                        }
+                        if (probe.optString("state") !in setOf("queued", "running")) return@withTimeoutOrNull probe
+                        delay(2000)
+                    }
+                    @Suppress("UNREACHABLE_CODE")
+                    null
+                } ?: throw Problem("TIMEOUT")
+                if (result.optString("state") == "success" && result.optJSONObject("result")?.optBoolean("verified") == true) {
+                    show(pending = false)
+                } else {
+                    show(pending = false, result.optString("phase").takeUnless { it in setOf("", "queued", "complete") }
+                        ?: "UPSTREAM_FAILURE")
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                show(pending = false, (error as? Problem)?.code ?: "AGENT_UNREACHABLE")
+            }
+        }
+    }
+
+    private val chatgptLoginState = MutableStateFlow<ChatGptLoginStatus?>(null)
+    val chatgptLogin = chatgptLoginState.asStateFlow()
+    private var chatgptTask: Job? = null
+
+    suspend fun chatgptAccount(serverId: String): JSONObject {
+        val server = state.value.server?.takeIf { it.id == serverId } ?: throw Problem("AGENT_UNREACHABLE")
+        return withAgent(server) { it.get("ai/chatgpt") as JSONObject }
+    }
+
+    suspend fun chatgptModels(serverId: String): List<RouterModel> {
+        val server = state.value.server?.takeIf { it.id == serverId } ?: throw Problem("AGENT_UNREACHABLE")
+        return RouterCatalog.parse(withAgent(server) { it.get("ai/chatgpt/models").toString() })
+    }
+
+    fun signInChatGpt(serverId: String, openBrowser: (String) -> Unit) {
+        val server = state.value.server?.takeIf { it.id == serverId } ?: return
+        if (chatgptTask?.isActive == true) return
+        chatgptLoginState.value = ChatGptLoginStatus(server.id, waiting = true)
+        chatgptTask = viewModelScope.launch {
+            var attemptPath = ""
+            try {
+                val started = withAgent(server) { it.post("ai/chatgpt/login") as JSONObject }
+                val id = started.optString("id")
+                if (!id.matches(Regex("[a-f0-9]{32}"))) throw Problem("AGENT_PROTOCOL")
+                attemptPath = "ai/chatgpt/login/$id"
+                val url = started.getString("url")
+                val callback = withContext(Dispatchers.IO) {
+                    ChatGptCallback(url).use { listener ->
+                        withContext(Dispatchers.Main) { openBrowser(url) }
+                        listener.await()
+                    }
+                }
+                if (callback.has("error")) throw Problem("CHATGPT_LOGIN_CANCELLED")
+                var status = retryConnection { withAgent(server) { it.post(attemptPath, callback) as JSONObject } }
+                val result = withTimeoutOrNull(60_000) {
+                    while (status.optString("state") in setOf("checking", "waiting")) {
+                        delay(1000)
+                        status = retryConnection { withAgent(server) { it.get(attemptPath) as JSONObject } }
+                    }
+                    status
+                } ?: throw Problem("CHATGPT_LOGIN_EXPIRED")
+                if (result.optString("state") != "connected")
+                    throw Problem(result.optString("code").ifBlank { "CHATGPT_LOGIN_FAILED" })
+                chatgptLoginState.value = ChatGptLoginStatus(server.id, waiting = false)
+            } catch (error: CancellationException) {
+                chatgptLoginState.value = ChatGptLoginStatus(server.id, waiting = false, error = "CHATGPT_LOGIN_CANCELLED")
+                throw error
+            } catch (error: Exception) {
+                chatgptLoginState.value = ChatGptLoginStatus(server.id, waiting = false,
+                    error = (error as? Problem)?.code ?: "CHATGPT_LOGIN_FAILED")
+            } finally {
+                if (attemptPath.isNotEmpty() && chatgptLoginState.value?.error?.isNotEmpty() == true) {
+                    withContext(NonCancellable) { runCatching { withAgent(server) { it.delete(attemptPath) } } }
+                }
+            }
+        }
+    }
+
+    fun cancelChatGptLogin(serverId: String) {
+        if (chatgptLoginState.value?.server == serverId) chatgptTask?.cancel()
+    }
+
     fun checkDigestNotifications() {
         val servers = state.value.servers
         DigestDeliveryService.reconcile(app, servers)
@@ -1161,7 +1273,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         operation {
             if (state.value.server?.id != server.id) return@operation
             val savedConfig = withAgent(server) { api ->
-                api.put("config", JSONObject().put("revision", revision)
+                api.put("config?include_ai_providers=true", JSONObject().put("revision", revision)
                     .put("config", config).put("profiles", profiles).put("secrets", secrets)) as JSONObject
             }
             if (state.value.server?.id != server.id) return@operation

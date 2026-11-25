@@ -29,7 +29,7 @@ def recovery(store):
                 elapsed = datetime.now(timezone.utc) - datetime.fromisoformat(started[0] if started else row["updated"])
                 Store.event(db, "ARTICLE_CONTEXT_INTERRUPTED", "WARNING", "horizon", row["id"],
                             f"{max(0, int(elapsed.total_seconds() * 1000))} ms · INTERRUPTED_BY_RESTART")
-        db.execute("UPDATE jobs SET phase='INTERRUPTED_BY_RESTART' WHERE kind='article_context' AND state='running'")
+        db.execute("UPDATE jobs SET phase='INTERRUPTED_BY_RESTART' WHERE kind IN ('article_context','ai') AND state='running'")
         db.execute("UPDATE jobs SET state='interrupted',updated=? WHERE state='running'", (utc(),))
 
 
@@ -112,17 +112,17 @@ async def execute(store, row, settings, enrichment_mode, digest_language, on_dig
             config = only_source(config, params["source"], params.get("bucket"), params.get("index"))
         model, enabled, _ = validate(
             config, settings["profiles"], settings["secrets"], ready=row["kind"] == "run",
-            openbb=importlib.util.find_spec("openbb") is not None,
+            openbb=importlib.util.find_spec("openbb") is not None, auth_root=store.root,
         )
         if row["kind"] == "run" and not enabled:
             raise ValueError("NO_ENABLED_SOURCES")
         if row["kind"] in {"ai", "localize", "article_context"}:
-            missing = ai_missing(model.ai, settings["secrets"])
+            missing = ai_missing(model.ai, settings["secrets"], store.root)
             if missing:
                 raise ValueError("AI_SETUP_REQUIRED")
         env = {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "HOME": str(store.root),
                "HM_STATE": str(store.root), "PYTHONPATH": os.path.dirname(os.path.dirname(__file__)),
-               **settings["secrets"]}
+               **settings["secrets"], "HORIZON_CHATGPT_AUTH_DIR": str(store.root / "chatgpt")}
         process = await asyncio.create_subprocess_exec(
             sys.executable, "-m", "horizon_manager.worker", job,
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
@@ -180,10 +180,11 @@ async def execute(store, row, settings, enrichment_mode, digest_language, on_dig
         with store.db() as db:
             db.execute("UPDATE jobs SET state=?,updated=? WHERE id=?", (state, utc(), job))
             Store.event(db, "JOB_" + state.upper(), "INFO" if state == "success" else "WARNING", job=job)
-            if article:
+            if article or row["kind"] == "ai":
                 reason = {"timeout": "TIMEOUT", "interrupted": "INTERRUPTED_BY_RESTART",
                           "cancelled": "CANCELLED", "failed": failure}.get(state, "")
                 db.execute("UPDATE jobs SET phase=? WHERE id=?", (reason or "complete", job))
+            if article:
                 Store.event(db, "ARTICLE_CONTEXT_" + state.upper(),
                             "INFO" if state == "success" else "WARNING", "horizon", job,
                             f"{int((time.monotonic() - start) * 1000)} ms" + (f" · {reason}" if reason else ""))

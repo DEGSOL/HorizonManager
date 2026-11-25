@@ -1,4 +1,4 @@
-# Hovq 0.6.0
+# Hovq 0.6.1
 
 [Русский](../../README.md) · [English](README.en.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · **Italiano** · [Español](README.es.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [简体中文](README.zh.md) · [Қазақша](README.kk.md) · [Татарча](README.tt.md)
 
@@ -26,7 +26,7 @@ Hovq è un’app Android per installare e gestire [Horizon](https://github.com/T
 
 Attiva le notifiche in **Impostazioni → Interfaccia → Notifiche** e concedi il permesso in Android. Hovq mantiene una connessione diretta al VPS tramite SSH o HTTPS configurato. Android mostra una notifica di servizio silenziosa durante il monitoraggio. Una notifica separata avvisa quando è pronta una rassegna. Se la connessione cade, Hovq si riconnette e verifica se è uscita una nuova rassegna.
 
-L’APK si installa sopra Hovq 0.4.5–0.5.9 se il certificato coincide. Le versioni 0.4.4 e precedenti richiedono un’installazione pulita. Aggiorna l’agente sul VPS alla versione 0.1.20 da Hovq. Riconosce articoli sullo stesso evento formulati diversamente, anche con l’arricchimento su richiesta. L’impostazione di deduplicazione tematica di ciascun profilo continua a valere.
+L’APK si installa sopra Hovq 0.4.5–0.6.0 se il certificato coincide. Le versioni 0.4.4 e precedenti richiedono un’installazione pulita. Aggiorna l’agente sul VPS alla versione 0.1.21 da Hovq. Riconosce articoli sullo stesso evento formulati diversamente, anche con l’arricchimento su richiesta. L’impostazione di deduplicazione tematica di ciascun profilo continua a valere.
 
 ## Compilazione dal codice sorgente
 
@@ -41,4 +41,4 @@ Per ottenere un APK firmato, imposta
 
 `HM_RELEASE_KEYSTORE`, `HM_RELEASE_KEY_ALIAS`, `HM_RELEASE_STORE_PASSWORD`, `HM_RELEASE_KEY_PASSWORD`
 
-[Sorgenti dell’app e dell’agente per questa versione](https://github.com/DEGSOL/HorizonManager/tree/v0.6.0) · [Architettura e API](https://github.com/DEGSOL/HorizonManager/blob/v0.6.0/docs/ARCHITECTURE.md) · [Test](https://github.com/DEGSOL/HorizonManager/blob/v0.6.0/docs/TESTING.md)
+[Sorgenti dell’app e dell’agente per questa versione](https://github.com/DEGSOL/HorizonManager/tree/v0.6.1) · [Architettura e API](https://github.com/DEGSOL/HorizonManager/blob/v0.6.1/docs/ARCHITECTURE.md) · [Test](https://github.com/DEGSOL/HorizonManager/blob/v0.6.1/docs/TESTING.md)
