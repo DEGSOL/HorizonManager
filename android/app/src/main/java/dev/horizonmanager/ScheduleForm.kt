@@ -115,13 +115,13 @@ internal fun ScheduleForm(panel: Panel, model: ManagerModel, dirtyChange: (Boole
 
     Tile(accented = true) {
         Text(ui(if (panel.connectionProblem.isBlank()) R.string.schedule_next else R.string.schedule_last_known),
-            style = MaterialTheme.typography.labelLarge, color = palette.muted)
+            style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         val nextTime = nextRun?.format(DateTimeFormatter.ofPattern("EEE, d MMM · HH:mm", appLocale()))
         Text(nextTime ?: ui(if (savedMode == "off") R.string.schedule_manual else R.string.schedule_unavailable),
             style = MaterialTheme.typography.titleMedium)
-        if (nextRun != null) Text(zoneLabel(nextRun.zone.id, at = nextRun.toInstant()), color = palette.muted,
+        if (nextRun != null) Text(zoneLabel(nextRun.zone.id, at = nextRun.toInstant()), color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall)
-        Text(ui(R.string.schedule_vps_hint), style = MaterialTheme.typography.bodySmall, color = palette.muted)
+        Text(ui(R.string.schedule_vps_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     Tile {
         SettingHeading(ui(R.string.schedule_frequency), R.string.setting_help_schedule_modes)
@@ -187,7 +187,7 @@ internal fun ScheduleForm(panel: Panel, model: ManagerModel, dirtyChange: (Boole
             }
         }
         Reveal(changed) {
-            Text(ui(R.string.editorial_unsaved), color = palette.warning)
+            SettingNote(ui(R.string.editorial_unsaved))
             Button(enabled = !panel.busy && when (mode) {
                 "interval" -> (parsedHours ?: 0) in 1..168 && (!supportsIntervalStart || intervalStart.isNotBlank())
                 "calendar" -> days != 0
@@ -260,7 +260,10 @@ private fun ScheduleZonePicker(current: String, close: () -> Unit, choose: (Stri
     val visible = remember(query, zones) { zones.filter { (id, name) ->
         id.contains(query.trim(), true) || name.contains(query.trim(), true)
     } }
-    ModalBottomSheet(onDismissRequest = close, modifier = Modifier.imePadding()) {
+    ModalBottomSheet(onDismissRequest = close,
+        modifier = Modifier.imePadding().readingNavigationGlass(feedGlassShape),
+        shape = feedGlassShape, containerColor = Color.Transparent, contentColor = ReadingGlass.text,
+    ) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
             Text(ui(R.string.ui_time_zone), style = MaterialTheme.typography.titleLarge)
             OutlinedTextField(query, { query = it }, label = { Text(ui(R.string.schedule_zone_search)) },

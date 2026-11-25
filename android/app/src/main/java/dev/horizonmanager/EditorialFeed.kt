@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -75,9 +76,16 @@ internal fun NewsScreen(
     val run = issue?.optString("id").orEmpty()
     val loaded = run.isNotEmpty() && panel.selectedRun == run && panel.markdown.isNotEmpty()
     val state = rememberLazyStaggeredGridState()
-    var bubble by rememberSaveable(run) { mutableStateOf(false) }
+    var bubble by rememberSaveable(panel.server?.id, run) { mutableStateOf(false) }
     var full by rememberSaveable(run) { mutableStateOf(false) }
     val serverId = panel.server?.id.orEmpty()
+    val notices = LocalNoticeQueue.current?.messages
+    val scope = rememberCoroutineScope()
+    fun archiveCurrent() {
+        if (model.archiveDigest(serverId, run)) {
+            scope.launch { notices?.showSnackbar(SavedNotice(ui(R.string.hovq_digest_archived))) }
+        }
+    }
     var openId by rememberSaveable(serverId, run, panel.language) { mutableStateOf("") }
     var openedUnread by rememberSaveable(serverId, run, panel.language) { mutableStateOf(false) }
     var archiveAfterReading by rememberSaveable(serverId, run, panel.language) { mutableStateOf(false) }
@@ -121,7 +129,7 @@ internal fun NewsScreen(
             confirmButton = {
                 TextButton(onClick = {
                     archiveAfterReading = false
-                    model.archiveDigest(run)
+                    archiveCurrent()
                 }) { Text(ui(R.string.archive_read_digest_accept)) }
             },
             dismissButton = {
@@ -372,7 +380,7 @@ internal fun NewsScreen(
                         { model.submit() },
                         {
                             bubble = false
-                            model.archiveDigest(run)
+                            archiveCurrent()
                         },
                         loaded && issue?.has("output_language") == false &&
                             issue.optJSONArray("languages")?.strings()?.contains(panel.preferredDigestLanguage()) == false,
@@ -768,7 +776,6 @@ internal fun ArchiveScreen(
                         .getOrDefault("")
                 }
         }
-    val theme = LocalHorizonPalette.current
     LazyColumn(
         Modifier.fillMaxSize().editorialSideBottomInsets(),
         state = rememberLazyListState(),
@@ -777,14 +784,7 @@ internal fun ArchiveScreen(
     ) {
         item("summary") {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    ui(
-                        if (panel.manuallyArchived.isEmpty()) R.string.archive_period
-                        else R.string.archive_period_with_manual,
-                        panel.collectionHours,
-                    ),
-                    color = theme.muted,
-                )
+                SettingNote(ui(R.string.hovq_archive_visibility, panel.collectionHours))
                 if (panel.connectionProblem.isNotBlank()) {
                     Text(
                         ui(
@@ -792,7 +792,7 @@ internal fun ArchiveScreen(
                             else R.string.editorial_cached
                         ),
                         style = MaterialTheme.typography.bodySmall,
-                        color = theme.warning,
+                        color = MaterialTheme.colorScheme.error,
                     )
                     OutlinedButton(onClick = { model.refresh() }, enabled = !panel.busy) {
                         Text(ui(R.string.ui_retry))

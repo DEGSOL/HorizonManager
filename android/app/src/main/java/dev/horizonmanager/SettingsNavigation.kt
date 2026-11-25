@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -15,15 +17,15 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 private fun SettingsSection(@StringRes title: Int, content: @Composable ColumnScope.() -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(ui(title), Modifier.padding(start = 4.dp), style = MaterialTheme.typography.titleMedium,
-            color = if (LocalLightGlass.current) LocalHorizonPalette.current.text else MaterialTheme.colorScheme.onSurfaceVariant)
+    Tile {
+        Text(ui(title), Modifier.padding(horizontal = 4.dp).semantics { heading() },
+            style = MaterialTheme.typography.titleSmall, color = ReadingGlass.text)
         content()
     }
 }
 
 @Composable
-internal fun SettingsHome(panel: Panel, open: (String) -> Unit, page: String) {
+internal fun SettingsHome(panel: Panel, model: ManagerModel, open: (String) -> Unit, page: String) {
     val configured = panel.config.has("config") && panel.schema.length() > 0
     fun rowPage(id: String): () -> Unit = { open(id) }
     when (page) {
@@ -38,17 +40,15 @@ internal fun SettingsHome(panel: Panel, open: (String) -> Unit, page: String) {
                     Text(it.host, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = .87f))
                 }
             }
-            CompositionLocalProvider(LocalLightGlass provides true) {
-                if (panel.ready) SettingsSection(R.string.setting_group_content) {
-                    GlassSettingRow(ui(R.string.archive_digests), ui(R.string.archive_digests_detail), open = rowPage("archive"))
-                    GlassSettingRow(ui(R.string.mr_news), ui(R.string.mr_news_detail), open = rowPage("news_settings"))
-                    GlassSettingRow(ui(R.string.editorial_ai_processing), ui(R.string.editorial_ai_settings_detail),
-                        enabled = configured, open = rowPage("ai_settings"))
-                }
-                SettingsSection(R.string.setting_group_application) {
-                    GlassSettingRow(ui(R.string.mr_interface), ui(R.string.hovq_icon), open = rowPage("interface"))
-                    GlassSettingRow(ui(R.string.ui_maintenance), ui(R.string.settings_journal_detail), open = rowPage("maintenance"))
-                }
+            if (panel.ready) SettingsSection(R.string.hovq_settings_feed_digest) {
+                GlassSettingRow(ui(R.string.archive_digests), ui(R.string.archive_digests_detail), open = rowPage("archive"))
+                GlassSettingRow(ui(R.string.mr_news), ui(R.string.mr_news_detail), open = rowPage("news_settings"))
+                GlassSettingRow(ui(R.string.editorial_ai_processing), ui(R.string.editorial_ai_settings_detail),
+                    enabled = configured, open = rowPage("ai_settings"))
+            }
+            SettingsSection(R.string.setting_group_application) {
+                GlassSettingRow(ui(R.string.mr_interface), ui(R.string.hovq_settings_interface_detail), open = rowPage("interface"))
+                GlassSettingRow(ui(R.string.ui_maintenance), ui(R.string.settings_maintenance_detail), open = rowPage("maintenance"))
             }
         }
         "news_settings" -> {
@@ -56,16 +56,29 @@ internal fun SettingsHome(panel: Panel, open: (String) -> Unit, page: String) {
                 GlassSettingRow(ui(R.string.sources), ui(R.string.sources_description), open = rowPage("sources"))
                 GlassSettingRow(ui(R.string.mr_images), ui(R.string.mr_images_detail), open = rowPage("images"))
             }
-            if (configured) SettingsSection(R.string.ui_digest) { DigestSettings(open) }
+            if (configured) SettingsSection(R.string.ui_digest) {
+                GlassSettingRow(ui(R.string.settings_digest_rules), ui(R.string.settings_digest_rules_detail), open = rowPage("digest"))
+                GlassSettingRow(ui(R.string.ui_schedule), ui(R.string.ui_days_intervals_and_time_zone),
+                    help = R.string.schedule_vps_hint, open = rowPage("schedule"))
+                val supportsLanguage = panel.status.has("digest_language")
+                val availableLanguages = panel.status.optJSONArray("digest_languages")?.strings() ?: legacyDigestLanguages
+                Choice(ui(R.string.digest_output_language), digestLanguages, panel.preferredDigestLanguage(), model::setDigestLanguage,
+                    ::digestLanguageLabel, enabled = supportsLanguage && !panel.busy, row = true,
+                    help = R.string.digest_language_detail, entryEnabled = { it in availableLanguages })
+                if (supportsLanguage && !availableLanguages.containsAll(digestLanguages)) {
+                    SettingNote(ui(R.string.hovq_language_upgrade))
+                }
+                GlassSettingRow(ui(R.string.settings_server_delivery), ui(R.string.hovq_settings_delivery_detail), open = rowPage("delivery"))
+            }
         }
         "interface" -> {
             SettingsSection(R.string.setting_group_reading) {
-                GlassSettingRow(ui(R.string.hovq_icon), ui(R.string.hovq_icon_detail), open = rowPage("icon"))
                 GlassSettingRow(ui(R.string.editorial_feed_behavior), ui(R.string.editorial_feed_behavior_detail), open = rowPage("reading"))
+                GlassSettingRow(ui(R.string.hovq_icon), ui(R.string.hovq_icon_detail), open = rowPage("icon"))
             }
             if (panel.ready) SettingsSection(R.string.setting_group_device) {
+                GlassSettingRow(ui(R.string.settings_notifications), ui(R.string.hovq_settings_device_alerts_detail), open = rowPage("alerts"))
                 GlassSettingRow(ui(R.string.editorial_local_data), ui(R.string.editorial_local_data_detail), open = rowPage("local"))
-                GlassSettingRow(ui(R.string.settings_notifications), ui(R.string.settings_notifications_detail), open = rowPage("alerts"))
             }
         }
     }
@@ -85,39 +98,18 @@ internal fun ImageSettings(panel: Panel, model: ManagerModel) {
 }
 
 @Composable
-internal fun DigestSettings(open: (String) -> Unit) {
-    GlassSettingRow(ui(R.string.settings_digest_rules), ui(R.string.settings_digest_rules_detail)) { open("digest") }
-    GlassSettingRow(ui(R.string.ui_schedule), ui(R.string.ui_days_intervals_and_time_zone),
-        help = R.string.schedule_vps_hint) { open("schedule") }
-}
-
-@Composable
 internal fun AiSettings(panel: Panel, model: ManagerModel, open: (String) -> Unit) {
     val mode = panel.status.optString("enrichment_mode")
-    val supportsLanguage = panel.status.has("digest_language")
     Tile {
         GlassSettingRow(ui(R.string.settings_ai_model), ui(R.string.ui_model_api_address_and_request_limits)) { open("ai") }
-        val availableLanguages = panel.status.optJSONArray("digest_languages")?.strings() ?: legacyDigestLanguages
-        Choice(ui(R.string.digest_output_language), digestLanguages, panel.preferredDigestLanguage(), { language ->
-            model.setDigestLanguage(language)
-        }, ::digestLanguageLabel, enabled = supportsLanguage && !panel.busy, row = true,
-            help = R.string.digest_language_detail, entryEnabled = { it in availableLanguages })
-        if (!availableLanguages.containsAll(digestLanguages)) {
-            Text(ui(R.string.hovq_language_upgrade), color = LocalHorizonPalette.current.muted,
-                style = MaterialTheme.typography.bodySmall)
-        }
+        GlassSettingRow(ui(R.string.ui_processing_profiles), ui(R.string.ui_prompts_scoring_criteria_and_output_blocks),
+            help = R.string.setting_help_profiles) { open("profiles") }
         Choice(ui(R.string.enrichment_mode), listOf("on_demand", "automatic"),
             mode.ifBlank { "on_demand" }, model::enrichmentMode, {
                 ui(if (it == "automatic") R.string.enrichment_automatic else R.string.enrichment_on_demand)
             }, enabled = mode.isNotBlank() && !panel.busy, row = true, help = R.string.setting_help_enrichment,
             menuDetail = R.string.hovq_enrichment_token_cost)
-        if (!supportsLanguage || mode.isBlank()) Text(ui(R.string.article_context_update), style = MaterialTheme.typography.bodySmall)
-    }
-    SettingsSection(R.string.ui_advanced_settings) {
-        GlassSettingRow(ui(R.string.ui_processing_profiles), ui(R.string.ui_prompts_scoring_criteria_and_output_blocks),
-            help = R.string.setting_help_profiles) { open("profiles") }
-        GlassSettingRow(ui(R.string.ui_secrets), ui(R.string.ui_ai_keys_and_integration_tokens),
-            help = R.string.setting_help_secrets) { open("secrets") }
+        if (mode.isBlank()) SettingNote(ui(R.string.article_context_update))
     }
 }
 
@@ -147,29 +139,37 @@ internal fun ServerConnectionStatus(panel: Panel, model: ManagerModel?) {
         panel.connectionPhase == ConnectionPhase.Connected -> R.string.editorial_connected
         else -> panel.connectionPhase.label()
     }
-    Column(Modifier.fillMaxWidth().connectionStatusGlass(panel).padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        Text(panel.server?.name ?: ui(R.string.ui_servers), style = MaterialTheme.typography.titleMedium, color = Color.White)
-        Text(ui(title), style = MaterialTheme.typography.labelLarge, color = Color.White)
-        if (panel.lastContact.isNotBlank()) Text(ui(R.string.editorial_last_contact, localTime(panel.lastContact)),
-            style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = .87f))
-        if (model != null && problem.isNotBlank()) {
-            Text(errorText(problem), style = MaterialTheme.typography.bodyMedium)
-            TextButton(onClick = {
-                if (panel.ready) model.refresh() else model.refreshInstallation(false)
-            }, enabled = !panel.busy) { Text(ui(R.string.ui_retry)) }
-        }
-        if (panel.connectionCancellable && model != null) {
-            TextButton(onClick = model::cancelConnection) { Text(ui(R.string.ui_cancel)) }
+    CompositionLocalProvider(LocalLightGlass provides false, LocalContentColor provides HorizonPalette.text) {
+        Column(Modifier.fillMaxWidth().connectionStatusGlass(panel).padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text(panel.server?.name ?: ui(R.string.ui_servers), style = MaterialTheme.typography.titleMedium, color = Color.White)
+            Text(ui(title), style = MaterialTheme.typography.labelLarge, color = Color.White)
+            if (panel.lastContact.isNotBlank()) Text(ui(R.string.editorial_last_contact, localTime(panel.lastContact)),
+                style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = .87f))
+            if (model != null && problem.isNotBlank()) {
+                Text(errorText(problem), style = MaterialTheme.typography.bodyMedium)
+                TextButton(onClick = {
+                    if (panel.ready) model.refresh() else model.refreshInstallation(false)
+                }, enabled = !panel.busy) { Text(ui(R.string.ui_retry)) }
+            }
+            if (panel.connectionCancellable && model != null) {
+                TextButton(onClick = model::cancelConnection) { Text(ui(R.string.ui_cancel)) }
+            }
         }
     }
 }
 
 @Composable
-internal fun ServerSettings(panel: Panel, model: ManagerModel, servers: () -> Unit,
+internal fun ServerSettings(panel: Panel, model: ManagerModel, servers: () -> Unit, secrets: () -> Unit,
                             confirm: (String, () -> Unit) -> Unit) {
     ServerConnectionStatus(panel, model)
-    GlassSettingRow(ui(R.string.ui_servers), ui(R.string.servers_description), open = servers)
+    SettingsSection(R.string.hovq_settings_server_access) {
+        GlassSettingRow(ui(R.string.ui_servers), ui(R.string.servers_description), open = servers)
+        if (panel.ready && panel.config.has("config") && panel.schema.length() > 0) {
+            GlassSettingRow(ui(R.string.ui_secrets), ui(R.string.ui_ai_keys_and_integration_tokens),
+                help = R.string.setting_help_secrets, open = secrets)
+        }
+    }
     val server = panel.server ?: return
     var attaching by remember(server.id) { mutableStateOf(false) }
     if (panel.connectionProblem in setOf("AUTH_REQUIRED", "API_401", "API_403")) {
@@ -187,7 +187,7 @@ internal fun ServerSettings(panel: Panel, model: ManagerModel, servers: () -> Un
 
 @Composable
 internal fun NotificationSettings(panel: Panel, model: ManagerModel, allowed: Boolean,
-                                  permission: () -> Unit, delivery: () -> Unit) {
+                                  permission: () -> Unit) {
     val server = panel.server ?: return
     val live by DigestDeliveryService.connected.collectAsStateWithLifecycle()
     Tile {
@@ -204,15 +204,12 @@ internal fun NotificationSettings(panel: Panel, model: ManagerModel, allowed: Bo
             if (allowed) {
                 Text(ui(if (server.id in live) R.string.hovq_listener_connected else R.string.hovq_polling_active),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = LocalHorizonPalette.current.muted)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
-                Text(ui(R.string.hovq_alerts_blocked), color = LocalHorizonPalette.current.warning)
+                SettingNote(ui(R.string.hovq_alerts_blocked), color = MaterialTheme.colorScheme.error)
                 TextButton(onClick = permission) { Text(ui(R.string.hovq_allow_notifications)) }
             }
         }
-    }
-    if (panel.config.length() > 0 && panel.schema.length() > 0) {
-        GlassSettingRow(ui(R.string.settings_server_delivery), ui(R.string.ui_email_and_webhook), open = delivery)
     }
 }
 
@@ -240,12 +237,10 @@ internal fun ServerMaintenance(panel: Panel, model: ManagerModel, open: (String)
         upgrade = false
         runTool(R.string.ui_update_vps_agent) { model.updateAgent(password) }
     }
-    Tile {
+    SettingsSection(R.string.hovq_settings_diagnostics_backup) {
         GlassSettingRow(ui(R.string.journal), ui(R.string.settings_journal_detail)) { open("journal") }
         GlassSettingRow(ui(R.string.settings_transfer), ui(R.string.hovq_transfer_detail)) { open("transfer") }
         if (panel.ready && panel.config.length() > 0 && panel.schema.length() > 0) {
-            GlassSettingRow(ui(R.string.ui_secrets), ui(R.string.ui_ai_keys_and_integration_tokens),
-                help = R.string.setting_help_secrets) { open("secrets") }
             GlassSettingRow(ui(R.string.ui_advanced_settings), ui(R.string.ui_extractors_and_display)) { open("advanced") }
         }
     }
@@ -253,7 +248,8 @@ internal fun ServerMaintenance(panel: Panel, model: ManagerModel, open: (String)
     Tile {
         Text(ui(R.string.settings_agent_tools), style = MaterialTheme.typography.titleMedium)
         val wash = rememberNoticeWashPhase()
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(5.dp)) {
             CompactSettingsButton(R.string.ui_check_configuration, !panel.busy,
                 runningTool == R.string.ui_check_configuration, wash) {
                 runTool(R.string.ui_check_configuration, model::check)
@@ -277,26 +273,22 @@ internal fun ServerMaintenance(panel: Panel, model: ManagerModel, open: (String)
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun TransferSettings(panel: Panel, backup: (Boolean) -> Unit, restore: (Boolean) -> Unit) {
     val connected = panel.ready && panel.config.has("revision")
     Tile {
         Text(ui(R.string.hovq_vps_backup), style = MaterialTheme.typography.titleMedium)
-        Text(ui(R.string.hovq_vps_backup_detail), color = LocalHorizonPalette.current.muted)
+        SettingNote(ui(R.string.hovq_vps_backup_detail))
         if (!connected) Text(ui(R.string.hovq_backup_connect_first), style = MaterialTheme.typography.bodySmall)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            TextButton(enabled = connected && !panel.busy, onClick = { backup(false) }) { Text(ui(R.string.hovq_export)) }
-            TextButton(enabled = connected && !panel.busy, onClick = { restore(false) }) { Text(ui(R.string.hovq_import)) }
-        }
+        val enabled = connected && !panel.busy
+        SettingsActionPair(R.string.hovq_export, R.string.hovq_import, enabled, enabled,
+            { backup(false) }, { restore(false) })
     }
     Tile {
         Text(ui(R.string.hovq_device_backup), style = MaterialTheme.typography.titleMedium)
-        Text(ui(R.string.hovq_device_backup_detail), color = LocalHorizonPalette.current.muted)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            TextButton(enabled = !panel.busy, onClick = { backup(true) }) { Text(ui(R.string.hovq_export)) }
-            TextButton(enabled = !panel.busy, onClick = { restore(true) }) { Text(ui(R.string.hovq_import)) }
-        }
+        SettingNote(ui(R.string.hovq_device_backup_detail))
+        SettingsActionPair(R.string.hovq_export, R.string.hovq_import, !panel.busy, !panel.busy,
+            { backup(true) }, { restore(true) })
     }
 }
 

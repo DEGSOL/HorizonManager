@@ -129,7 +129,7 @@ internal fun DigestRulesForm(panel: Panel, model: ManagerModel, base: JSONObject
             { id -> change("profile_order", JSONArray(order + id)) }, { names[it] ?: it }, row = true)
     }
     if (dirty) Tile {
-        Text(ui(R.string.editorial_unsaved), color = LocalHorizonPalette.current.warning)
+        SettingNote(ui(R.string.editorial_unsaved))
         Button(enabled = !panel.busy && correctHours && correctMaximum && validDefaultLimit && validRoutes && validOrder, onClick = {
             val updated = base.copyObject()
                 .put("collection", collection.copyObject().put("time_window_hours", hours.toInt()))
@@ -234,7 +234,7 @@ internal fun SecretsSettings(panel: Panel, model: ManagerModel, base: JSONObject
     Tile {
         SettingHeading(ui(R.string.secrets_title), R.string.setting_help_secrets)
         Text(ui(R.string.secrets_intro))
-        if (active.isNotBlank()) Text(ui(R.string.secrets_model_key, active), color = LocalHorizonPalette.current.muted)
+        if (active.isNotBlank()) Text(ui(R.string.secrets_model_key, active), color = MaterialTheme.colorScheme.onSurfaceVariant)
         Button(enabled = !panel.busy, onClick = {
             close()
             editing = ""
@@ -243,7 +243,7 @@ internal fun SecretsSettings(panel: Panel, model: ManagerModel, base: JSONObject
     }
     Tile {
         Text(ui(R.string.secrets_saved), style = MaterialTheme.typography.titleMedium)
-        if (saved.isEmpty()) Text(ui(R.string.secrets_empty), color = LocalHorizonPalette.current.muted)
+        if (saved.isEmpty()) Text(ui(R.string.secrets_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
         for (key in saved.sortedByDescending { it == active }) {
             GlassSettingRow(key, ui(if (key == active) R.string.secrets_current_model else R.string.secrets_saved_value),
                 enabled = !panel.busy) { close(); name = key; editing = key }

@@ -705,7 +705,8 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         val data = cache.digest(server, run, language).map { JSONObject(it.data) }
         if (data.isEmpty()) return false
         mutable.update {
-            if (it.server?.id != server) return@update it
+            if (it.server?.id != server || run in it.hiddenDigests ||
+                (run in it.manuallyArchived && archiveRun != run)) return@update it
             it.copy(selectedRun = run, language = language, markdown = data.first().optString("markdown"),
                 articles = data.flatMap { page -> page.getJSONArray("items").objects() }.distinctBy { card -> card.optString("id") },
                 total = data.first().optInt("total"))
@@ -838,6 +839,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             journalSync = System.currentTimeMillis()
         }
         mutable.update { panel ->
+            if (panel.server?.id != server.id) return@update panel
             panel.copy(archive = remote.archive, hasMoreDigests = remote.hasMore, collectionHours = hours,
                 syncedDigest = remote.digest?.optString("id") ?: panel.syncedDigest,
                 config = remote.config, schema = remote.schema,
@@ -913,14 +915,20 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         }
     }
 
-    fun archiveDigest(run: String) {
+    fun archiveDigest(serverId: String, run: String): Boolean {
         val panel = state.value
-        val server = panel.server ?: return
-        if (run in panel.manuallyArchived || panel.archive.none { it.optString("id") == run }) return
+        if (panel.server?.id != serverId || run.isBlank() || run in panel.manuallyArchived ||
+            run in panel.hiddenDigests || panel.archive.none { it.optString("id") == run }) return false
         val archived = panel.manuallyArchived + run
-        archiveOverrides.edit().putStringSet(server.id, archived).apply()
-        mutable.update { it.copy(manuallyArchived = archived) }
+        archiveOverrides.edit().putStringSet(serverId, archived).apply()
+        mutable.update { current ->
+            if (current.server?.id != serverId) current
+            else if (current.selectedRun == run && archiveRun != run) {
+                current.copy(manuallyArchived = archived, selectedRun = "", markdown = "", articles = emptyList(), total = 0)
+            } else current.copy(manuallyArchived = archived)
+        }
         if (state.value.feedIssue() != null) showFeed()
+        return true
     }
 
     fun openArchive(issue: JSONObject) {

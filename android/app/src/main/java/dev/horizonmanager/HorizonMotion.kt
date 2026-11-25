@@ -56,7 +56,7 @@ internal fun DialogMotion() {
 @Composable
 internal fun HorizonAlertDialog(onDismissRequest: () -> Unit, title: @Composable () -> Unit,
                                 text: @Composable () -> Unit, confirmButton: @Composable () -> Unit,
-                                dismissButton: (@Composable () -> Unit)? = null, light: Boolean = false) {
+                                dismissButton: (@Composable () -> Unit)? = null, light: Boolean = LocalSettingsGlass.current) {
     val shape = if (light) feedGlassShape else RoundedCornerShape(28.dp)
     val surface = if (light) Modifier.readingNavigationGlass(shape, menu = true)
         else Modifier.glassSurface(shape, backdrop = true, menu = true)

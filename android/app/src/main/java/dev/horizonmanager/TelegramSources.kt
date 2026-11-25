@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -43,7 +44,6 @@ internal fun <T> moveSource(items: List<T>, from: Int, to: Int): List<T> {
 @Composable
 internal fun TelegramSources(config: JSONObject, saved: JSONObject, root: JSONObject, channelSchema: JSONObject,
                              profiles: List<String>, busy: Boolean, change: (JSONObject) -> Unit, check: (Int?) -> Unit) {
-    val theme = LocalHorizonPalette.current
     val channels = config.optJSONArray("channels")?.objects().orEmpty()
     val savedChannels = saved.optJSONArray("channels")?.objects().orEmpty()
     var editing by remember { mutableIntStateOf(-2) }
@@ -53,18 +53,18 @@ internal fun TelegramSources(config: JSONObject, saved: JSONObject, root: JSONOb
         Column(Modifier.weight(1f)) {
             Text("Telegram", style = MaterialTheme.typography.titleMedium)
             Text(ui(R.string.editorial_channel_count, channels.size) + " · " +
-                ui(if (config.optBoolean("enabled")) R.string.ui_enabled else R.string.ui_off), color = theme.muted)
+                ui(if (config.optBoolean("enabled")) R.string.ui_enabled else R.string.ui_off), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(config.optBoolean("enabled"), onCheckedChange = { change(config.copyObject().put("enabled", it)) })
     }
-    Text(ui(R.string.editorial_public_channels), color = theme.muted, style = MaterialTheme.typography.bodySmall)
+    Text(ui(R.string.editorial_public_channels), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = { editing = -1 }) { Text(ui(R.string.editorial_add_channel)) }
         TextButton(onClick = { check(null) }, enabled = !busy && savedChannels.isNotEmpty()) {
             Text(ui(R.string.editorial_test_channels))
         }
     }
-    if (channels.isEmpty()) Text(ui(R.string.editorial_no_channels), color = theme.muted)
+    if (channels.isEmpty()) Text(ui(R.string.editorial_no_channels), color = MaterialTheme.colorScheme.onSurfaceVariant)
     channels.forEachIndexed { index, entry -> key(entry.optString("channel"), index) {
         val savedIndex = savedChannels.indexOfFirst { it.toString() == entry.toString() }
         TelegramRow(entry, index, channels.lastIndex, savedIndex >= 0 && !busy, { editing = index },
@@ -133,7 +133,6 @@ internal fun TelegramSources(config: JSONObject, saved: JSONObject, root: JSONOb
 private fun TelegramRow(entry: JSONObject, index: Int, lastIndex: Int, testEnabled: Boolean, edit: () -> Unit,
                         test: () -> Unit, toggle: () -> Unit, remove: () -> Unit, move: (Int) -> Unit) {
     val haptic = LocalHapticFeedback.current
-    val theme = LocalHorizonPalette.current
     val enabled = entry.optBoolean("enabled", true)
     var menu by remember { mutableStateOf(false) }
     var height by remember { mutableIntStateOf(1) }
@@ -161,12 +160,12 @@ private fun TelegramRow(entry: JSONObject, index: Int, lastIndex: Int, testEnabl
                     destination = (index + (distance / currentHeight.coerceAtLeast(1)).roundToInt()).coerceIn(0, currentLastIndex)
                 })
         }, contentAlignment = Alignment.Center) {
-            Text(if (dragging) "#${destination + 1}" else "⠿", color = if (dragging) theme.link else theme.muted, style = MaterialTheme.typography.titleLarge,
+            Text(if (dragging) "#${destination + 1}" else "⠿", color = if (dragging) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.editorialDescription(ui(R.string.editorial_drag_channel)))
         }
         Column(Modifier.weight(1f)) {
             Text(entry.optString("channel"), style = MaterialTheme.typography.titleMedium)
-            Text(display, color = if (enabled) theme.success else theme.muted, style = MaterialTheme.typography.labelMedium)
+            Text(display, color = if (enabled) Color(0xFF275639) else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
         }
         Box {
             GlassIconAction(Icons.Default.MoreVert, ui(R.string.editorial_article_actions)) { menu = true }

@@ -1,4 +1,4 @@
-# Hovq 0.6.3
+# Hovq 0.6.4
 
 [Русский](../../README.md) · [English](README.en.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Italiano](README.it.md) · [Español](README.es.md) · **日本語** · [한국어](README.ko.md) · [简体中文](README.zh.md) · [Қазақша](README.kk.md) · [Татарча](README.tt.md)
 
@@ -20,7 +20,7 @@ Hovq は、専用の VPS に [Horizon](https://github.com/Thysrael/Horizon) を�
 1. Android 8.0 以降に APK をインストールします。Ubuntu Server 24.04 LTS または Debian 12、systemd、SSH が動作し、OS のリポジトリ、GitHub、PyPI にアクセスできる VPS を用意します。インストーラーは、対応アーキテクチャ、最低 432 MiB の RAM、1.5 GiB の空き容量を確認します。収集や処理には追加のリソースが必要な場合があります。
 2. Hovq でサーバーを追加し、SSH パスワードまたは秘密鍵を指定して、VPS 事業者の管理画面でフィンガープリントを確認します。VPS の `127.0.0.1:18777` への SSH 転送を許可してください。インストールを確認し、必要なら sudo のパスワードを入力します。既存のエージェントにも接続できます。
 3. AI 設定でプロバイダー、モデル、API キーを設定します。OpenRouter と UnoRouter のモデル一覧はアプリで取得できます。ソースを追加し、処理プロファイルを選んで収集を開始します。
-4. フィードでダイジェストを開きます。ニュース設定でスケジュールを、AI 設定でダイジェストの言語を選択できます。インターフェースとダイジェストは上記のすべての言語に対応しています。
+4. フィードでダイジェストを開きます。ニュース設定でスケジュールとダイジェストの言語を選択できます。インターフェースとダイジェストは上記のすべての言語に対応しています。
 
 ## 通知とアップデート
 
@@ -41,4 +41,4 @@ cd android
 
 `HM_RELEASE_KEYSTORE`, `HM_RELEASE_KEY_ALIAS`, `HM_RELEASE_STORE_PASSWORD`, `HM_RELEASE_KEY_PASSWORD`
 
-[このリリースのアプリとエージェントのソース](https://github.com/DEGSOL/HorizonManager/tree/v0.6.3) · [アーキテクチャと API](https://github.com/DEGSOL/HorizonManager/blob/v0.6.3/docs/ARCHITECTURE.md) · [テスト](https://github.com/DEGSOL/HorizonManager/blob/v0.6.3/docs/TESTING.md)
+[このリリースのアプリとエージェントのソース](https://github.com/DEGSOL/HorizonManager/tree/v0.6.4) · [アーキテクチャと API](https://github.com/DEGSOL/HorizonManager/blob/v0.6.4/docs/ARCHITECTURE.md) · [テスト](https://github.com/DEGSOL/HorizonManager/blob/v0.6.4/docs/TESTING.md)

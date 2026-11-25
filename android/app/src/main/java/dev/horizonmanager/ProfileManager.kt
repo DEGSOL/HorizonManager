@@ -74,13 +74,13 @@ internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boo
                     Text(
                         ui(R.string.mr_default_profile),
                         style = MaterialTheme.typography.labelLarge,
-                        color = LocalHorizonPalette.current.link,
+                        color = MaterialTheme.colorScheme.primary,
                     )
                     Text(def.optString("name"), style = MaterialTheme.typography.headlineMedium)
                     Text(
                         summary,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = LocalHorizonPalette.current.muted,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             else GlassSettingRow(def.optString("name"), summary) { editing = id }
@@ -125,7 +125,7 @@ internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boo
             ) {
                 Text(ui(R.string.mr_set_default))
             }
-        else Text(ui(R.string.mr_default_profile), color = LocalHorizonPalette.current.link)
+        else Text(ui(R.string.mr_default_profile), color = MaterialTheme.colorScheme.primary)
         val allRules = settings.optJSONObject("profile_settings") ?: JSONObject()
         val rules = allRules.optJSONObject(editing) ?: JSONObject()
         fun rule(name: String, value: Any) {
@@ -142,7 +142,7 @@ internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boo
             if (threshold != null) {
                 Text(ui(R.string.profile_score_min_value, threshold))
                 Slider(threshold.toFloat(), { rule("threshold", it.toDouble()) }, valueRange = 0f..10f, steps = 19)
-            } else Text(ui(R.string.profile_score_off), color = LocalHorizonPalette.current.muted)
+            } else Text(ui(R.string.profile_score_off), color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(ui(R.string.ui_topic_deduplication), Modifier.weight(1f))
                 SettingHelp(ui(R.string.ui_topic_deduplication), R.string.profile_guide_duplicates_body)
@@ -240,7 +240,7 @@ internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boo
     }
     if (dirty)
         Tile {
-            Text(ui(R.string.editorial_unsaved), color = LocalHorizonPalette.current.warning)
+            SettingNote(ui(R.string.editorial_unsaved))
             Button(
                 enabled =
                     !panel.busy &&
@@ -280,7 +280,7 @@ private fun ProfileGuide() {
             R.string.profile_guide_verify to R.string.profile_guide_verify_body,
         )) {
             Text(ui(title), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 4.dp))
-            Text(ui(description), style = MaterialTheme.typography.bodyMedium, color = LocalHorizonPalette.current.muted)
+            Text(ui(description), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

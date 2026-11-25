@@ -50,7 +50,7 @@ internal fun Sources(panel: Panel, model: ManagerModel, dirtyChange: (Boolean) -
             }, ids, expandedByDefault = true)
         }
         Reveal(dirty) {
-            Text(ui(R.string.editorial_unsaved), color = LocalHorizonPalette.current.warning)
+            SettingNote(ui(R.string.editorial_unsaved))
             FlowRow {
                 Button(onClick = { model.saveConfig(config.copyObject().put("sources", working), profiles) },
                     enabled = !panel.busy) { Text(ui(R.string.ui_apply_source_settings)) }
@@ -126,10 +126,8 @@ internal fun HorizonOnVps(panel: Panel, model: ManagerModel, confirm: (String, (
             if (mem?.has("MemAvailable") == true && total > 0 && status.has("disk_free")) Text(ui(R.string.ui_ram_mib_free_disk_mib, (total - available) / 1_048_576, total / 1_048_576, status.optLong("disk_free") / 1_048_576))
             if (status.has("cpu") && status.optDouble("load").isFinite()) Text(ui(R.string.ui_cpu_1_minute_load_average, status.optInt("cpu"), status.optDouble("load")))
         }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { model.submit() }, enabled = active == null && !panel.busy) { Text(ui(R.string.ui_start_collection)) }
-            OutlinedButton(onClick = { model.refresh() }) { Text(ui(R.string.ui_check_status)) }
-        }
+        SettingsActionPair(R.string.ui_start_collection, R.string.ui_check_status, active == null && !panel.busy,
+            !panel.busy, { model.submit() }, { model.refresh() })
     }
     active?.let { job -> Tile {
         Text(phaseName(job.optString("phase")), style = MaterialTheme.typography.titleMedium)
@@ -180,7 +178,7 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, dirty
     if (page == "advanced") {
         AdvancedSettings(working, schema, ids) { name, value -> working = working.copyObject().put(name, value) }
         if (dirty) Tile {
-            Text(ui(R.string.editorial_unsaved), color = LocalHorizonPalette.current.warning)
+            SettingNote(ui(R.string.editorial_unsaved))
             Button(onClick = { model.saveConfig(working, storedProfiles) }, enabled = !panel.busy) {
                 Text(ui(R.string.ui_save_settings))
             }
@@ -197,7 +195,7 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, dirty
             }
         }
         Reveal(dirty) {
-            Text(ui(R.string.editorial_unsaved), color = LocalHorizonPalette.current.warning)
+            SettingNote(ui(R.string.editorial_unsaved))
             Button(onClick = { model.saveConfig(working, storedProfiles) }, enabled = !panel.busy) {
                 Text(ui(R.string.ui_save_settings))
             }

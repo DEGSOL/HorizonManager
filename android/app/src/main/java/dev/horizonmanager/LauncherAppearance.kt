@@ -56,7 +56,7 @@ internal enum class LauncherAppearance(val alias: String, @DrawableRes val previ
 @Composable
 internal fun IconSettings(selected: LauncherAppearance, change: (LauncherAppearance) -> Unit) {
     Tile {
-        Text(ui(R.string.hovq_icon_detail), color = LocalHorizonPalette.current.muted,
+        Text(ui(R.string.hovq_icon_detail), color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium)
         Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             LauncherAppearance.entries.forEach { item ->

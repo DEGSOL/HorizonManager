@@ -10,7 +10,7 @@ import java.time.Instant
 
 class DigestSectionsTest {
     @Test
-    fun feedShowsOnlyNewestAndArchiveUsesConfiguredCutoff() {
+    fun onlyNewestQualifiesForTheFeedAndPreviousIssuesAreInTheArchive() {
         val now = Instant.parse("2026-11-19T12:00:00Z")
         val recent = issue("newest", "2026-11-19T11:10:00Z")
         val boundary = issue("exact", "2026-11-19T06:00:00Z")
@@ -19,9 +19,9 @@ class DigestSectionsTest {
         val all = listOf(boundary, older, archived, recent)
         val short = splitDigests(all, 6, now)
         assertEquals(recent, short.feed)
-        assertEquals(listOf(archived, older), short.archive)
+        assertEquals(listOf(boundary, archived, older), short.archive)
         assertEquals(boundary, splitDigests(listOf(boundary), 6, now).feed)
-        assertEquals(listOf(older), splitDigests(all, 24, now).archive)
+        assertEquals(listOf(boundary, archived, older), splitDigests(all, 24, now).archive)
         assertNull(splitDigests(listOf(older), 24, now).feed)
     }
 
@@ -35,18 +35,22 @@ class DigestSectionsTest {
     }
 
     @Test
-    fun manuallyArchivedIssueNeverWinsTheFeedSelection() {
+    fun movingOrDeletingTheLatestDoesNotBringBackThePreviousIssue() {
         val now = Instant.parse("2026-11-19T12:00:00Z")
         val recent = issue("newest", "2026-11-19T11:10:00Z")
         val previous = issue("previous", "2026-11-19T10:00:00Z")
         val old = issue("old", "2026-11-18T11:00:00Z")
         val all = listOf(recent, previous, old)
         val first = splitDigests(all, 24, now, setOf("newest"))
-        assertEquals(previous, first.feed)
-        assertEquals(listOf(recent, old), first.archive)
-        val second = splitDigests(all, 24, now, setOf("newest", "previous"))
+        assertNull(first.feed)
+        assertEquals(all, first.archive)
+        val second = splitDigests(all, 24, now, setOf("newest"), hidden = setOf("newest"))
         assertNull(second.feed)
-        assertEquals(all, second.archive)
+        assertEquals(listOf(previous, old), second.archive)
+        val next = issue("next", "2026-11-19T11:59:00Z")
+        val after = splitDigests(all + next, 24, now, setOf("newest"))
+        assertEquals(next, after.feed)
+        assertEquals(all, after.archive)
     }
 
     @Test

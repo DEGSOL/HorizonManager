@@ -716,13 +716,16 @@ class FluidScreensTest {
         snapshot("10-digest-rules")
         back()
         back()
-        text(R.string.editorial_ai_processing).performClick()
+        text(R.string.mr_server).performClick()
         text(R.string.ui_secrets).performClick()
         text(R.string.secrets_intro).assertIsDisplayed()
         text(R.string.secrets_add).performClick()
         text(R.string.ui_new_value).performScrollTo().assertIsDisplayed()
         text(R.string.ui_cancel).performScrollTo().performClick()
         back()
+        text(R.string.ui_servers).assertExists()
+        back()
+        text(R.string.editorial_ai_processing).performClick()
         text(R.string.ui_processing_profiles).performClick()
         text(R.string.profile_guide_title).performClick()
         text(R.string.profile_guide_score_body).performScrollTo().assertIsDisplayed()
@@ -885,6 +888,23 @@ class FluidScreensTest {
     }
 
     @Test
+    fun movingTheCurrentDigestKeepsEarlierIssuesInTheArchive() {
+        val heading = loadIssue(articleCount = 4)
+        compose.onNodeWithText(heading).performClick()
+        compose.onNodeWithContentDescription(ui(R.string.editorial_digest_actions)).performClick()
+        text(R.string.archive_early).performClick()
+        text(R.string.prepare_digest_now).assertIsDisplayed()
+        text(R.string.hovq_digest_archived).assertExists()
+
+        val model = ViewModelProvider(compose.activity)[ManagerModel::class.java]
+        assertEquals(setOf("current"), model.state.value.manuallyArchived)
+        assertNull(model.state.value.feedIssue())
+        tab(R.string.settings)
+        text(R.string.archive_digests).performClick()
+        compose.onNodeWithText(ui(R.string.editorial_manually_archived), substring = true).assertIsDisplayed()
+    }
+
+    @Test
     fun realScreensAndBackStack() {
         val heading = loadIssue()
         compose.onNodeWithText(heading).assertExists()
@@ -956,22 +976,23 @@ class FluidScreensTest {
         tab(R.string.settings)
         snapshot("04-settings")
         text(R.string.editorial_ai_processing).performClick()
-        text(R.string.ui_secrets).performClick()
-        back()
+        text(R.string.ui_secrets).assertDoesNotExist()
         text(R.string.ui_processing_profiles).assertExists().performClick()
         text(R.string.mr_default_profile).assertExists()
         snapshot("05-profiles")
         back()
         back()
         text(R.string.ui_maintenance).performClick()
+        text(R.string.ui_secrets).assertDoesNotExist()
+        text(R.string.journal).assertExists()
+        back()
+        text(R.string.mr_server).performClick()
         text(R.string.ui_secrets).performClick()
         val backButton = compose.onNodeWithContentDescription(ui(R.string.ui_back))
         val secretsTitle = text(R.string.ui_secrets)
         assertTrue(backButton.getUnclippedBoundsInRoot().right <= secretsTitle.getUnclippedBoundsInRoot().left)
         backButton.performClick()
-        text(R.string.journal).assertExists()
-        back()
-        text(R.string.mr_server).performClick()
+        text(R.string.ui_secrets).assertExists()
         text(R.string.ui_servers).performClick()
         val serverName = "VPS · тестовый стенд"
         compose.onNodeWithContentDescription(ui(R.string.server_remove_named, serverName)).performClick()

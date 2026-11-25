@@ -15,4 +15,12 @@
     <string name="settings_journal_detail">Ошибки и история действий</string>
     <string name="settings_transfer">Резервные копии и перенос</string>
     <string name="settings_transfer_detail">Импорт, экспорт и восстановление настроек Horizon</string>
+    <string name="hovq_settings_feed_digest">Лента и дайджесты</string>
+    <string name="hovq_settings_server_access">Доступ к серверу</string>
+    <string name="hovq_settings_diagnostics_backup">Диагностика и данные</string>
+    <string name="hovq_settings_interface_detail">Чтение, значок приложения и уведомления</string>
+    <string name="hovq_settings_delivery_detail">Отправка выпусков с VPS</string>
+    <string name="hovq_settings_device_alerts_detail">Уведомления о новых выпусках на телефоне</string>
+    <string name="hovq_digest_archived">Дайджест перемещён в архив</string>
+    <string name="hovq_archive_visibility">Здесь хранятся предыдущие выпуски. Последний попадёт сюда через %1$d ч или сразу после ручного перемещения.</string>
 </resources>

@@ -15,4 +15,12 @@
     <string name="settings_journal_detail">Errors and activity history</string>
     <string name="settings_transfer">Backup and migration</string>
     <string name="settings_transfer_detail">Import, export and restore Horizon settings</string>
+    <string name="hovq_settings_feed_digest">Feed and digests</string>
+    <string name="hovq_settings_server_access">Server access</string>
+    <string name="hovq_settings_diagnostics_backup">Diagnostics and data</string>
+    <string name="hovq_settings_interface_detail">Reading, app icon and notifications</string>
+    <string name="hovq_settings_delivery_detail">Deliver digests from your VPS</string>
+    <string name="hovq_settings_device_alerts_detail">New digest alerts on this device</string>
+    <string name="hovq_digest_archived">Digest moved to archive</string>
+    <string name="hovq_archive_visibility">Previous digests are kept here. The latest joins them after %1$d h or as soon as you move it here.</string>
 </resources>

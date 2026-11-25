@@ -1,4 +1,4 @@
-# Hovq 0.6.3
+# Hovq 0.6.4
 
 [Русский](../../README.md) · [English](README.en.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Italiano](README.it.md) · **Español** · [日本語](README.ja.md) · [한국어](README.ko.md) · [简体中文](README.zh.md) · [Қазақша](README.kk.md) · [Татарча](README.tt.md)
 
@@ -20,13 +20,13 @@ Hovq es una aplicación para Android que permite instalar y administrar [Horizon
 1. Instala el APK en Android 8.0 o posterior. Prepara un VPS con Ubuntu Server 24.04 LTS o Debian 12, systemd, SSH y acceso a los repositorios del sistema, GitHub y PyPI. El instalador comprueba la arquitectura, un mínimo de 432 MiB de RAM y 1,5 GiB de espacio libre. La recopilación y el procesamiento pueden requerir más recursos.
 2. Añade el servidor en Hovq, introduce la contraseña SSH o elige una clave privada y verifica la huella en el panel del proveedor. SSH debe permitir el reenvío a `127.0.0.1:18777` en el VPS. Confirma la instalación e indica la contraseña de sudo si se solicita. También puedes conectar un agente existente sin reinstalarlo.
 3. Configura el proveedor de IA, el modelo y la clave API. Para OpenRouter y UnoRouter puedes cargar el catálogo de modelos en la aplicación. Añade una fuente, elige un perfil de procesamiento e inicia la recopilación.
-4. Abre el resumen en el feed. Elige la programación en los ajustes de noticias y el idioma del resumen en los ajustes de IA. La interfaz y los resúmenes admiten todos los idiomas enumerados arriba.
+4. Abre el resumen en el feed. Elige la programación y el idioma del resumen en los ajustes de noticias. La interfaz y los resúmenes admiten todos los idiomas enumerados arriba.
 
 ## Notificaciones y actualizaciones
 
 Activa las notificaciones en **Ajustes → Interfaz → Notificaciones** y autorízalas en Android. Hovq mantiene una conexión directa con el VPS por SSH o HTTPS configurado. Android muestra una notificación silenciosa del servicio durante la supervisión. Recibirás un aviso aparte cuando haya un resumen listo. Si se pierde la conexión, Hovq vuelve a conectarse y comprueba si hay una nueva edición.
 
-El APK se instala sobre Hovq 0.4.5–0.6.1 con el mismo certificado. Las versiones 0.4.4 y anteriores requieren una instalación limpia. Desde Hovq, actualiza el agente del VPS a 0.1.21. Detecta publicaciones sobre el mismo evento aunque la redacción difiera, incluso con el enriquecimiento bajo demanda. Se respeta el ajuste de deduplicación temática de cada perfil.
+El APK se instala sobre Hovq 0.4.5–0.6.3 con el mismo certificado. Las versiones 0.4.4 y anteriores requieren una instalación limpia. Desde Hovq, actualiza el agente del VPS a 0.1.21. Detecta publicaciones sobre el mismo evento aunque la redacción difiera, incluso con el enriquecimiento bajo demanda. Se respeta el ajuste de deduplicación temática de cada perfil.
 
 ## Compilar desde el código fuente
 
@@ -41,4 +41,4 @@ Para generar un APK firmado, configura
 
 `HM_RELEASE_KEYSTORE`, `HM_RELEASE_KEY_ALIAS`, `HM_RELEASE_STORE_PASSWORD`, `HM_RELEASE_KEY_PASSWORD`
 
-[Código de la aplicación y del agente de esta versión](https://github.com/DEGSOL/HorizonManager/tree/v0.6.3) · [Arquitectura y API](https://github.com/DEGSOL/HorizonManager/blob/v0.6.3/docs/ARCHITECTURE.md) · [Pruebas](https://github.com/DEGSOL/HorizonManager/blob/v0.6.3/docs/TESTING.md)
+[Código de la aplicación y del agente de esta versión](https://github.com/DEGSOL/HorizonManager/tree/v0.6.4) · [Arquitectura y API](https://github.com/DEGSOL/HorizonManager/blob/v0.6.4/docs/ARCHITECTURE.md) · [Pruebas](https://github.com/DEGSOL/HorizonManager/blob/v0.6.4/docs/TESTING.md)

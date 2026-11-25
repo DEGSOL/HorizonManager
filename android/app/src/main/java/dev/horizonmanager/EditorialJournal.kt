@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
@@ -83,7 +84,6 @@ internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model:
     var job by rememberSaveable { mutableStateOf("") }
     var detail by remember { mutableStateOf<JSONObject?>(null) }
     val context = LocalContext.current
-    val theme = LocalHorizonPalette.current
     val safeEvents = remember(panel.events) { panel.events.map(::diagnosticEvent) }
     val components = remember(safeEvents) { safeEvents.map { it.optString("component") }.filter(String::isNotBlank).distinct() }
     val levels = listOf("" to R.string.ui_all, "ERROR" to R.string.editorial_errors, "WARNING" to R.string.editorial_warnings,
@@ -140,13 +140,13 @@ internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model:
         }
         items(events) { row ->
             val importance = row.optString("level")
-            val color = when (importance) { "ERROR", "CRITICAL" -> theme.danger; "WARNING" -> theme.warning; else -> theme.muted }
+            val color = when (importance) { "ERROR", "CRITICAL" -> MaterialTheme.colorScheme.error; "WARNING" -> Color(0xFF614400); else -> MaterialTheme.colorScheme.onSurfaceVariant }
             val (title, explanation) = journalMessage(row)
             Tile(Modifier.clickable(role = Role.Button) { detail = row }) {
                 Text(listOf(journalLevel(importance), journalComponent(row.optString("component")), localTime(row.optString("time")))
                     .filter(String::isNotBlank).joinToString(" · "), style = MaterialTheme.typography.labelMedium, color = color)
                 Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                Text(explanation, color = theme.muted, style = MaterialTheme.typography.bodySmall,
+                Text(explanation, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall,
                     maxLines = 3, overflow = TextOverflow.Ellipsis)
             }
         }
@@ -159,13 +159,13 @@ internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model:
                 Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(7.dp)) {
                     Text(listOf(journalComponent(row.optString("component")), localTime(row.optString("time"))).joinToString(" · "),
-                        color = theme.muted, style = MaterialTheme.typography.labelMedium)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
                     Text(explanation)
                     val id = row.optString("job")
                     if (id.isNotBlank()) TextButton(onClick = { job = id; detail = null }) { Text(ui(R.string.ui_events_for_this_operation)) }
                     Text(ui(R.string.journal_technical), style = MaterialTheme.typography.labelLarge)
                     val technical = listOf(code, row.optString("detail"), id).filter(String::isNotBlank).joinToString("\n")
-                    if (technical.isNotBlank()) Text(technical, style = MaterialTheme.typography.bodySmall, color = theme.muted)
+                    if (technical.isNotBlank()) Text(technical, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }, confirmButton = {
                 Button(onClick = {

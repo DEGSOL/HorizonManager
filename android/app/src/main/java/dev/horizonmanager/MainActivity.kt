@@ -98,11 +98,13 @@ private const val FEED = 0
 private const val SETTINGS = 1
 private const val FAVORITES = 2
 
-internal fun pushSettingsRoute(current: String, next: String): String = when {
-    next.isEmpty() -> ""
-    current.substringAfterLast('/') == next -> current
-    current.isEmpty() -> next
-    else -> "$current/$next"
+internal fun settingsRoute(page: String): String = when (page) {
+    "sources", "images", "digest", "schedule", "delivery" -> "news_settings/$page"
+    "ai", "profiles" -> "ai_settings/$page"
+    "reading", "icon", "alerts", "local" -> "interface/$page"
+    "secrets" -> "server_settings/$page"
+    "journal", "transfer", "advanced" -> "maintenance/$page"
+    else -> page
 }
 
 private data class Screen(val page: String, val issueId: String = "") {
@@ -228,7 +230,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     fun openSettings(page: String) {
         if (tab != SETTINGS) previousTab = tab
         tab = SETTINGS
-        route = pushSettingsRoute(route, page)
+        route = settingsRoute(page)
     }
     LaunchedEffect(notificationServer) {
         if (notificationServer.isNotEmpty()) {
@@ -537,7 +539,6 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                 "advanced" -> ui(R.string.ui_advanced_settings)
                 "profiles" -> ui(R.string.ui_processing_profiles)
                 "digest" -> ui(R.string.settings_digest_rules)
-                "digest_settings" -> ui(R.string.ui_digest)
                 "reading" -> ui(R.string.editorial_feed_behavior)
                 "local" -> ui(R.string.editorial_local_data)
                 "ai" -> ui(R.string.settings_ai_model)
@@ -616,11 +617,10 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                                     }
                                     "setup" -> Setup(panel, model)
                                     "sources" -> Sources(panel, model) { if (configPage == screen.page) dirtyPage = it }
-                                    "server_settings" -> ServerSettings(panel, model, { manageServers = true }) {
+                                    "server_settings" -> ServerSettings(panel, model, { manageServers = true }, { openSettings("secrets") }) {
                                         description, action -> confirm = description to action
                                     }
-                                    "alerts" -> NotificationSettings(panel, model, notificationAllowed, ::requestNotifications,
-                                        { openSettings("delivery") })
+                                    "alerts" -> NotificationSettings(panel, model, notificationAllowed, ::requestNotifications)
                                     "maintenance" -> ServerMaintenance(panel, model, ::openSettings)
                                     "transfer" -> TransferSettings(panel,
                                         { device -> backupDialog = if (device) "device_export" else "vps_export" },
@@ -634,10 +634,9 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                                         localSave++
                                     }
                                     "local" -> LocalReadingData(panel)
-                                    "digest_settings" -> DigestSettings(::openSettings)
                                     "ai_settings" -> AiSettings(panel, model, ::openSettings)
                                     "settings", "news_settings", "interface" ->
-                                        SettingsHome(panel, ::openSettings, screen.page)
+                                        SettingsHome(panel, model, ::openSettings, screen.page)
                                     "images" -> ImageSettings(panel, model)
                                     else -> CompositionLocalProvider(LocalEditorBack provides editorBack) {
                                         SettingsForm(panel, model, screen.page) { if (configPage == screen.page) dirtyPage = it }

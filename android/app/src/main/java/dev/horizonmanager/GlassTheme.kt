@@ -33,6 +33,7 @@ import androidx.compose.material3.Shapes
 import androidx.compose.material3.Text
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +41,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -48,10 +50,13 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -116,7 +121,7 @@ internal fun HorizonTheme(content: @Composable () -> Unit) {
 
 @Composable
 internal fun Button(onClick: () -> Unit, enabled: Boolean = true, content: @Composable RowScope.() -> Unit) {
-    if (LocalSettingsGlass.current) SettingsAction(onClick, enabled, content)
+    if (LocalSettingsGlass.current) SettingsAction(onClick, enabled, content = content)
     else MaterialButton(onClick, enabled = enabled, content = content)
 }
 
@@ -140,12 +145,26 @@ internal fun CompactSettingsButton(title: Int, enabled: Boolean, selected: Boole
 }
 
 @Composable
-private fun SettingsAction(onClick: () -> Unit, enabled: Boolean, content: @Composable RowScope.() -> Unit) {
+private fun SettingsAction(onClick: () -> Unit, enabled: Boolean, modifier: Modifier = Modifier,
+                           content: @Composable RowScope.() -> Unit) {
+    val face = if (LocalLightGlass.current) Modifier.heightIn(min = 48.dp)
+        .glassSurface(feedGlassShape, lightNavigation = true, outlined = enabled)
+    else Modifier.settingsControlGlass(enabled)
     MaterialTextButton(
-        onClick, Modifier.settingsControlGlass(enabled), enabled = enabled, shape = feedGlassShape,
+        onClick, modifier.then(face), enabled = enabled, shape = feedGlassShape,
         colors = ButtonDefaults.textButtonColors(contentColor = ReadingGlass.text, disabledContentColor = ReadingGlass.muted),
         content = content,
     )
+}
+
+@Composable
+internal fun SettingsActionPair(first: Int, second: Int, firstEnabled: Boolean, secondEnabled: Boolean,
+                                onFirst: () -> Unit, onSecond: () -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        SettingsAction(onFirst, firstEnabled, Modifier.weight(1f)) { Text(ui(first), textAlign = TextAlign.Center) }
+        SettingsAction(onSecond, secondEnabled, Modifier.weight(1f)) { Text(ui(second), textAlign = TextAlign.Center) }
+    }
 }
 
 @Composable
@@ -167,7 +186,7 @@ internal fun FilterChip(
 @Composable
 internal fun TextButton(onClick: () -> Unit, enabled: Boolean = true, content: @Composable RowScope.() -> Unit) {
     if (LocalSettingsGlass.current) {
-        SettingsAction(onClick, enabled, content)
+        SettingsAction(onClick, enabled, content = content)
         return
     }
     val palette = LocalHorizonPalette.current
@@ -179,7 +198,7 @@ internal fun TextButton(onClick: () -> Unit, enabled: Boolean = true, content: @
 @Composable
 internal fun OutlinedButton(onClick: () -> Unit, enabled: Boolean = true, content: @Composable RowScope.() -> Unit) {
     if (LocalSettingsGlass.current) {
-        SettingsAction(onClick, enabled, content)
+        SettingsAction(onClick, enabled, content = content)
         return
     }
     val palette = LocalHorizonPalette.current
@@ -276,9 +295,12 @@ internal fun SettingsPage(
     val barHeight = readingBarHeight()
     var toolbarHeight by remember { mutableStateOf(barHeight) }
     Box(Modifier.fillMaxSize()) {
-        Box(Modifier.matchParentSize().recordScene(scene)) {
-            CompositionLocalProvider(LocalSettingsGlass provides true) {
-                content(statusInset + toolbarHeight + 16.dp)
+        Box(Modifier.matchParentSize().recordScene(scene).background(settingsBackdrop)) {
+            MaterialTheme(colorScheme = settingsColors) {
+                CompositionLocalProvider(LocalSettingsGlass provides true, LocalLightGlass provides true,
+                    LocalContentColor provides ReadingGlass.text, LocalMenuScene provides scene) {
+                    content(statusInset + toolbarHeight + 16.dp)
+                }
             }
         }
         CompositionLocalProvider(LocalGlassScene provides scene) {
@@ -288,20 +310,39 @@ internal fun SettingsPage(
                 .onSizeChanged { toolbarHeight = with(density) { it.height.toDp() } }
                 .readingNavigationGlass(feedGlassShape)
                 .pointerInput(Unit) { detectTapGestures {} }
-                .heightIn(min = barHeight).padding(start = if (back == null) 16.dp else 4.dp, end = 4.dp),
+                .heightIn(min = barHeight).padding(horizontal = 4.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 CompositionLocalProvider(LocalLightGlass provides true) {
-                    if (back != null) {
-                        GlassIconAction(Icons.AutoMirrored.Filled.ArrowBack, ui(R.string.ui_back), onClick = back)
+                    Box(Modifier.width(48.dp), contentAlignment = Alignment.Center) {
+                        if (back != null) {
+                            GlassIconAction(Icons.AutoMirrored.Filled.ArrowBack, ui(R.string.ui_back), onClick = back)
+                        }
                     }
-                    Text(heading, Modifier.weight(1f).padding(vertical = 5.dp), style = readingBarTitleStyle(),
-                        color = ReadingGlass.text)
-                    action?.invoke()
+                    Text(heading, Modifier.weight(1f).padding(horizontal = 2.dp, vertical = 8.dp).semantics { heading() },
+                        style = MaterialTheme.typography.headlineSmall, color = ReadingGlass.text,
+                        textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Box(Modifier.width(48.dp), contentAlignment = Alignment.Center) { action?.invoke() }
                 }
             }
         }
     }
 }
+
+private val settingsBackdrop = Brush.verticalGradient(listOf(Color(0xFFB0B0B0), Color(0xFF909090)))
+private val settingsColors = lightColorScheme(
+    primary = ReadingGlass.muted, onPrimary = Color.White,
+    primaryContainer = ReadingGlass.raised, onPrimaryContainer = ReadingGlass.text,
+    secondary = ReadingGlass.muted, onSecondary = Color.White,
+    secondaryContainer = ReadingGlass.base, onSecondaryContainer = ReadingGlass.text,
+    tertiary = ReadingGlass.muted, onTertiary = Color.White,
+    tertiaryContainer = ReadingGlass.base, onTertiaryContainer = ReadingGlass.text,
+    background = Color(0xFFA0A0A0), onBackground = ReadingGlass.text,
+    surface = ReadingGlass.base, onSurface = ReadingGlass.text, surfaceTint = Color.Transparent,
+    surfaceVariant = ReadingGlass.base, onSurfaceVariant = ReadingGlass.muted,
+    surfaceContainerLow = ReadingGlass.raised, surfaceContainer = ReadingGlass.base,
+    surfaceContainerHigh = Color(0xFFD4D4D4), surfaceContainerHighest = Color(0xFFCBCBCB),
+    outline = Color(0xFF666666), outlineVariant = Color(0xFF909090), error = Color(0xFF791B26),
+)
 
 @Composable
 internal fun Tile(modifier: Modifier = Modifier, accented: Boolean = false,
@@ -311,6 +352,7 @@ internal fun Tile(modifier: Modifier = Modifier, accented: Boolean = false,
     val palette = LocalHorizonPalette.current
     val face = if (accented) palette.elevated else palette.card
     val surface = when {
+        light && LocalSettingsGlass.current -> Modifier.readingNavigationGlass(shape)
         light -> Modifier.glassSurface(shape, lightNavigation = true)
         LocalSettingsGlass.current -> Modifier.glassSurface(shape, raised = accented)
         else -> Modifier.clip(shape).background(face)
@@ -325,9 +367,18 @@ internal fun Tile(modifier: Modifier = Modifier, accented: Boolean = false,
 
 @Composable
 internal fun Modifier.settingsItemSurface(highlighted: Boolean = false): Modifier {
+    if (LocalLightGlass.current && LocalSettingsGlass.current) {
+        return clip(feedGlassShape).background(ReadingGlass.raised.copy(alpha = if (highlighted) .95f else .48f))
+    }
     val palette = LocalHorizonPalette.current
     return clip(MaterialTheme.shapes.medium)
         .background(if (highlighted) palette.glassSelection else palette.elevated.copy(alpha = .58f))
+}
+
+@Composable
+internal fun SettingNote(text: String, color: Color = ReadingGlass.muted) {
+    Text(text, Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+        style = MaterialTheme.typography.bodySmall, color = color)
 }
 
 @Composable
@@ -367,7 +418,7 @@ internal fun SettingHelp(title: String, @StringRes description: Int) {
         title = { Text(title) },
         text = { Text(ui(description)) },
         confirmButton = { TextButton(onClick = { explaining = false }) { Text(ui(R.string.ui_close)) } },
-        light = LocalLightGlass.current,
+        light = LocalLightGlass.current || LocalSettingsGlass.current,
     )
 }
 

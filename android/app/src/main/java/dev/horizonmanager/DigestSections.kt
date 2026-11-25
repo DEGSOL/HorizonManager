@@ -16,16 +16,25 @@ internal fun splitDigests(issues: List<JSONObject>, windowHours: Int, now: Insta
                           manuallyArchived: Set<String> = emptySet(), hidden: Set<String> = emptySet()): DigestSections {
     val cutoff = now.minus(windowHours.coerceIn(1, 8760).toLong(), ChronoUnit.HOURS)
     val sorted = issues.mapNotNull { issue ->
-        if (issue.optString("id") in hidden) return@mapNotNull null
-        val timestamp = runCatching { Instant.parse(digestTime(issue)) }.getOrNull()
+        val timestamp = digestTimestamp(issue)
         timestamp?.let { it to issue }
     }.sortedByDescending { it.first }
-    val (archive, current) = sorted.partition { (ready, issue) ->
-        ready.isBefore(cutoff) || issue.optString("id") in manuallyArchived
+    val feed = sorted.firstOrNull()?.takeIf { (ready, issue) ->
+        val id = issue.optString("id")
+        !ready.isBefore(cutoff) && id !in manuallyArchived && id !in hidden
+    }?.second
+    val feedId = feed?.optString("id")
+    val archive = sorted.map { it.second }.filter { issue ->
+        val id = issue.optString("id")
+        id != feedId && id !in hidden
     }
-    return DigestSections(current.firstOrNull()?.second, archive.map { it.second })
+    return DigestSections(feed, archive)
 }
 
+private fun digestTimestamp(issue: JSONObject): Instant? =
+    (listOf(digestTime(issue), issue.optString("created"))).firstNotNullOfOrNull {
+        runCatching { Instant.parse(it) }.getOrNull()
+    }
 
 internal fun Panel.feedIssue(issues: List<JSONObject> = archive, hours: Int = collectionHours): JSONObject? =
     splitDigests(issues, hours, Instant.now(), manuallyArchived, hiddenDigests).feed
