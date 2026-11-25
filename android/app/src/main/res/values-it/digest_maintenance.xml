@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="schedule_interval_start">Ora della prima esecuzione</string>
+    <string name="schedule_interval_pick_start">Scegli un orario</string>
+    <string name="schedule_interval_update_agent">Aggiorna l’agente VPS per scegliere l’orario della prima esecuzione.</string>
+    <string name="archive_read_digest_title">Archiviare questa rassegna?</string>
+    <string name="archive_read_digest_detail">Hai letto tutti gli articoli di questa rassegna.</string>
+    <string name="archive_read_digest_accept">Sposta nell’archivio</string>
+    <string name="archive_read_digest_later">Non ora</string>
+    <string name="journal_headline_fallback_title">Riformulazione dei titoli</string>
+    <string name="journal_headline_fallback_count">L’IA non ha restituito un titolo adatto per %1$d articoli. È stato usato il testo originale.</string>
+    <string name="journal_duplicates_title">Notizie duplicate</string>
+    <string name="journal_duplicates_count">Notizie duplicate rimosse prima dell’arricchimento: %1$d.</string>
+    <string name="journal_duplicates_partial">Il controllo tematico aggiuntivo si è interrotto. I duplicati esatti sono stati rimossi.</string>
+</resources>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="schedule_interval_start">Zeit des ersten Starts</string>
+    <string name="schedule_interval_pick_start">Uhrzeit auswählen</string>
+    <string name="schedule_interval_update_agent">Aktualisiere den VPS-Agenten, um die erste Startzeit festzulegen.</string>
+    <string name="archive_read_digest_title">Diese Ausgabe archivieren?</string>
+    <string name="archive_read_digest_detail">Du hast alle Artikel in dieser Ausgabe gelesen.</string>
+    <string name="archive_read_digest_accept">Ins Archiv verschieben</string>
+    <string name="archive_read_digest_later">Jetzt nicht</string>
+    <string name="journal_headline_fallback_title">Überschriften umformulieren</string>
+    <string name="journal_headline_fallback_count">Die KI lieferte für %1$d Artikel keine passende Überschrift. Der Quelltext wurde verwendet.</string>
+    <string name="journal_duplicates_title">Doppelte Meldungen</string>
+    <string name="journal_duplicates_count">Vor der Anreicherung entfernte Dubletten: %1$d.</string>
+    <string name="journal_duplicates_partial">Die zusätzliche Themenprüfung wurde unterbrochen. Exakte Dubletten wurden entfernt.</string>
+</resources>

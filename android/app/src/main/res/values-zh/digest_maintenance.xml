@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="schedule_interval_start">首次运行时间</string>
+    <string name="schedule_interval_pick_start">选择时间</string>
+    <string name="schedule_interval_update_agent">请更新 VPS 代理以设置首次运行时间。</string>
+    <string name="archive_read_digest_title">归档这份摘要？</string>
+    <string name="archive_read_digest_detail">您已读完这份摘要中的所有文章。</string>
+    <string name="archive_read_digest_accept">移至归档</string>
+    <string name="archive_read_digest_later">暂不归档</string>
+    <string name="journal_headline_fallback_title">改写标题</string>
+    <string name="journal_headline_fallback_count">AI 未能为 %1$d 篇文章生成符合要求的标题，已使用来源文本。</string>
+    <string name="journal_duplicates_title">重复新闻</string>
+    <string name="journal_duplicates_count">内容扩充前移除的重复新闻：%1$d 条。</string>
+    <string name="journal_duplicates_partial">额外的主题检查已中断。完全重复的新闻已移除。</string>
+</resources>

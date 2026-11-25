@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="schedule_interval_start">Бірінші іске қосу уақыты</string>
+    <string name="schedule_interval_pick_start">Уақытты таңдау</string>
+    <string name="schedule_interval_update_agent">Бірінші іске қосу уақытын таңдау үшін VPS агентін жаңартыңыз.</string>
+    <string name="archive_read_digest_title">Осы дайджестті мұрағатқа жіберу керек пе?</string>
+    <string name="archive_read_digest_detail">Осы дайджесттегі барлық жаңалықты оқып шықтыңыз.</string>
+    <string name="archive_read_digest_accept">Мұрағатқа жіберу</string>
+    <string name="archive_read_digest_later">Қазір емес</string>
+    <string name="journal_headline_fallback_title">Тақырыптарды қайта жазу</string>
+    <string name="journal_headline_fallback_count">ЖИ %1$d мақалаға жарамды тақырып ұсынбады. Бастапқы мәтін пайдаланылды.</string>
+    <string name="journal_duplicates_title">Қайталанған жаңалықтар</string>
+    <string name="journal_duplicates_count">Толықтыру алдында жойылған қайталанған жаңалықтар саны: %1$d.</string>
+    <string name="journal_duplicates_partial">Қосымша тақырыптық тексеру үзілді. Дәлме-дәл қайталанған материалдар жойылды.</string>
+</resources>

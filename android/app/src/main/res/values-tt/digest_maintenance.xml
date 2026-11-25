@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="schedule_interval_start">Беренче эшләтү вакыты</string>
+    <string name="schedule_interval_pick_start">Вакытны сайлау</string>
+    <string name="schedule_interval_update_agent">Беренче эшләтү вакытын сайлау өчен VPS агентын яңартыгыз.</string>
+    <string name="archive_read_digest_title">Бу дайджестны архивка күчәрергәме?</string>
+    <string name="archive_read_digest_detail">Сез бу дайджесттагы барлык яңалыкларны укып чыктыгыз.</string>
+    <string name="archive_read_digest_accept">Архивка күчерү</string>
+    <string name="archive_read_digest_later">Хәзер түгел</string>
+    <string name="journal_headline_fallback_title">Исемнәрне яңадан язу</string>
+    <string name="journal_headline_fallback_count">Ясалма интеллект %1$d язма өчен яраклы исем тәкъдим итмәде. Чыганак тексты кулланылды.</string>
+    <string name="journal_duplicates_title">Кабатланган яңалыклар</string>
+    <string name="journal_duplicates_count">Тулыландыруга кадәр бетерелгән кабатланган яңалыклар саны: %1$d.</string>
+    <string name="journal_duplicates_partial">Өстәмә тематик тикшерү өзелде. Нәкъ кабатланган язмалар бетерелде.</string>
+</resources>

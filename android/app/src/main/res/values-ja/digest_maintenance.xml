@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="schedule_interval_start">初回実行時刻</string>
+    <string name="schedule_interval_pick_start">時刻を選択</string>
+    <string name="schedule_interval_update_agent">初回実行時刻を設定するには、VPSエージェントを更新してください。</string>
+    <string name="archive_read_digest_title">このダイジェストをアーカイブしますか？</string>
+    <string name="archive_read_digest_detail">このダイジェストの記事をすべて読みました。</string>
+    <string name="archive_read_digest_accept">アーカイブに移動</string>
+    <string name="archive_read_digest_later">今はしない</string>
+    <string name="journal_headline_fallback_title">見出しの書き換え</string>
+    <string name="journal_headline_fallback_count">%1$d件の記事でAIが有効な見出しを返さなかったため、元の文章を使用しました。</string>
+    <string name="journal_duplicates_title">重複したニュース</string>
+    <string name="journal_duplicates_count">情報の補足前に除外した重複記事：%1$d件</string>
+    <string name="journal_duplicates_partial">追加のトピック確認は中断されました。完全に一致する重複記事は除外しました。</string>
+</resources>

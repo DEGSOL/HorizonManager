@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="schedule_interval_start">Hora de la primera ejecución</string>
+    <string name="schedule_interval_pick_start">Elegir una hora</string>
+    <string name="schedule_interval_update_agent">Actualiza el agente del VPS para elegir la hora de la primera ejecución.</string>
+    <string name="archive_read_digest_title">¿Archivar este resumen?</string>
+    <string name="archive_read_digest_detail">Has leído todos los artículos de este resumen.</string>
+    <string name="archive_read_digest_accept">Mover al archivo</string>
+    <string name="archive_read_digest_later">Ahora no</string>
+    <string name="journal_headline_fallback_title">Reescritura de titulares</string>
+    <string name="journal_headline_fallback_count">La IA no devolvió un titular válido para %1$d artículos. Se usó el texto original.</string>
+    <string name="journal_duplicates_title">Noticias duplicadas</string>
+    <string name="journal_duplicates_count">Noticias duplicadas eliminadas antes del enriquecimiento: %1$d.</string>
+    <string name="journal_duplicates_partial">La comprobación temática adicional se interrumpió. Se eliminaron los duplicados exactos.</string>
+</resources>
