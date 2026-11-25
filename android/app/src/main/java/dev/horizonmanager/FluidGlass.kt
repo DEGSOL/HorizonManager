@@ -88,9 +88,9 @@ internal object ReadingGlass {
 private val readingBarBase = Color(0xFFBBBBBB)
 private val readingBarTop = Color(0xFFC4C4C4)
 
-internal fun Modifier.readingNavigationGlass(shape: Shape): Modifier = composed {
+internal fun Modifier.readingNavigationGlass(shape: Shape, menu: Boolean = false): Modifier = composed {
     // The gray tint keeps the bars close in tone over both dark and light covers.
-    glassMaterial(shape, backdropBlurAvailable, readingBarBase, readingBarTop, outlined = true, tintStrength = .82f)
+    glassMaterial(shape, backdropBlurAvailable, readingBarBase, readingBarTop, outlined = true, menu = menu, tintStrength = .82f)
 }
 
 internal const val statusGlassFadeFraction = .47f

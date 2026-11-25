@@ -261,12 +261,27 @@ internal fun NotificationSettings(panel: Panel, model: ManagerModel, permission:
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ServerMaintenance(panel: Panel, model: ManagerModel, open: (String) -> Unit) {
-    var restart by remember { mutableStateOf(false) }
-    var upgrade by remember { mutableStateOf(false) }
+    val serverId = panel.server?.id
+    var restart by remember(serverId) { mutableStateOf(false) }
+    var upgrade by remember(serverId) { mutableStateOf(false) }
+    var runningTool by remember(serverId) { mutableIntStateOf(0) }
+    LaunchedEffect(runningTool, panel.busy, panel.updatingAgent) {
+        if (!panel.busy && !panel.updatingAgent) runningTool = 0
+    }
+    fun runTool(title: Int, action: () -> Unit) {
+        runningTool = title
+        action()
+    }
     if (restart) PasswordDialog(ui(R.string.ui_restart_agent), ui(R.string.ui_the_current_job_may_be_interrupted),
-        close = { restart = false }) { password -> restart = false; model.restart(password) }
+        close = { restart = false }) { password ->
+        restart = false
+        runTool(R.string.ui_restart_agent) { model.restart(password) }
+    }
     if (upgrade) PasswordDialog(ui(R.string.ui_update_vps_agent), ui(R.string.ui_settings_and_the_archive_will_stay),
-        close = { upgrade = false }) { password -> upgrade = false; model.updateAgent(password) }
+        close = { upgrade = false }) { password ->
+        upgrade = false
+        runTool(R.string.ui_update_vps_agent) { model.updateAgent(password) }
+    }
     Tile {
         GlassSettingRow(ui(R.string.journal), ui(R.string.settings_journal_detail)) { open("journal") }
         GlassSettingRow(ui(R.string.settings_transfer), ui(R.string.hovq_transfer_detail)) { open("transfer") }
@@ -279,13 +294,23 @@ internal fun ServerMaintenance(panel: Panel, model: ManagerModel, open: (String)
     if (!panel.ready) return
     Tile {
         Text(ui(R.string.settings_agent_tools), style = MaterialTheme.typography.titleMedium)
+        val wash = rememberNoticeWashPhase()
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            CompactSettingsButton(R.string.ui_check_configuration, !panel.busy, model::check)
-            CompactSettingsButton(R.string.ui_check_horizon_version, !panel.busy, model::checkVersions)
-            CompactSettingsButton(R.string.ui_restart_agent, !panel.busy) { restart = true }
+            CompactSettingsButton(R.string.ui_check_configuration, !panel.busy,
+                runningTool == R.string.ui_check_configuration, wash) {
+                runTool(R.string.ui_check_configuration, model::check)
+            }
+            CompactSettingsButton(R.string.ui_check_horizon_version, !panel.busy,
+                runningTool == R.string.ui_check_horizon_version, wash) {
+                runTool(R.string.ui_check_horizon_version, model::checkVersions)
+            }
+            CompactSettingsButton(R.string.ui_restart_agent, !panel.busy,
+                restart || runningTool == R.string.ui_restart_agent, wash) { restart = true }
             if (agentUpdateAvailable(panel.status.optString("agent")) || panel.updatingAgent) {
-                CompactSettingsButton(R.string.ui_update_vps_agent, !panel.busy && !panel.updatingAgent &&
-                    panel.jobs.none { it.optString("state") in setOf("queued", "running") }) { upgrade = true }
+                val canUpdate = !panel.busy && !panel.updatingAgent &&
+                    panel.jobs.none { it.optString("state") in setOf("queued", "running") }
+                CompactSettingsButton(R.string.ui_update_vps_agent, canUpdate,
+                    upgrade || panel.updatingAgent || runningTool == R.string.ui_update_vps_agent, wash) { upgrade = true }
             }
         }
         Reveal(panel.updatingAgent) { DottedProgress(Modifier.fillMaxWidth()) }

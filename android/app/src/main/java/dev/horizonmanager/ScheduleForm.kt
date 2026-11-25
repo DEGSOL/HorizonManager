@@ -40,7 +40,7 @@ private fun targetTime(hour: Int, minute: Int): String =
 @Composable
 private fun ScheduleDayChip(title: Int, selected: Boolean, enabled: Boolean, wash: State<Float>, select: () -> Unit) {
     val shape = feedGlassShape
-    val surface = if (selected) Modifier.glassSurface(shape, outlined = false).savedNoticeWash(phase = wash)
+    val surface = if (selected) Modifier.glassSurface(shape, outlined = false).savedNoticeWash(NoticeWash.Connected, phase = wash)
         else Modifier.settingsControlGlass(enabled)
     Box(Modifier.heightIn(min = 48.dp).selectable(
         selected = selected, onClick = select, enabled = enabled, role = Role.Checkbox,

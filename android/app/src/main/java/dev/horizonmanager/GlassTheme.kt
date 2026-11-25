@@ -10,6 +10,8 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -123,10 +125,16 @@ internal fun Modifier.settingsControlGlass(enabled: Boolean = true): Modifier =
     else clip(feedGlassShape).background(Color(0xFFA0A0A0))
 
 @Composable
-internal fun CompactSettingsButton(title: Int, enabled: Boolean, onClick: () -> Unit) {
-    Box(Modifier.heightIn(min = 48.dp).clickable(enabled = enabled, role = Role.Button, onClick = onClick),
-        contentAlignment = Alignment.Center) {
-        Text(ui(title), Modifier.settingsControlGlass(enabled).padding(horizontal = 12.dp, vertical = 5.dp),
+internal fun CompactSettingsButton(title: Int, enabled: Boolean, selected: Boolean, wash: State<Float>,
+                                   onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val surface = Modifier.settingsControlGlass(enabled)
+        .then(if (selected || pressed) Modifier.savedNoticeWash(NoticeWash.Connected, phase = wash) else Modifier)
+    Box(Modifier.heightIn(min = 48.dp).clickable(interactionSource = interaction,
+        indication = androidx.compose.foundation.LocalIndication.current,
+        enabled = enabled, role = Role.Button, onClick = onClick), contentAlignment = Alignment.Center) {
+        Text(ui(title), surface.padding(horizontal = 12.dp, vertical = 5.dp),
             style = MaterialTheme.typography.labelLarge, color = if (enabled) ReadingGlass.text else ReadingGlass.muted)
     }
 }

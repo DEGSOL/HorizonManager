@@ -236,6 +236,8 @@ class FluidScreensTest {
         compose.onNodeWithText(ui(R.string.hovq_agent_update_offer, "0.1.10", BuildConfig.AGENT_VERSION))
             .assertIsDisplayed()
         text(R.string.hovq_update_now).assertIsEnabled()
+        text(R.string.hovq_later).assertIsEnabled()
+        snapshot("31-agent-update")
         text(R.string.hovq_later).performClick()
         compose.onNodeWithText(heading).assertIsDisplayed()
     }

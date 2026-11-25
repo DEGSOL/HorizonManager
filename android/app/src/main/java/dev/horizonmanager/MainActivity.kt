@@ -459,23 +459,13 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                 })
         } else if (showUpdateOffer) {
             fun dismissAgent() { dismissedAgentUpdates = dismissedAgentUpdates + updateKey }
-            HorizonAlertDialog(onDismissRequest = ::dismissAgent,
-                title = { Text(ui(R.string.ui_update_vps_agent)) },
-                text = {
-                    Text(ui(R.string.hovq_agent_update_offer, installedAgent, BuildConfig.AGENT_VERSION))
-                }, confirmButton = {
-                    Button(onClick = {
-                        dismissAgent()
-                        val privileges = panel.probe["privileges"]
-                        if (currentServer.user == "root" || privileges in listOf("root", "sudo"))
-                            model.updateAgent("")
-                        else requestUpdatePassword = true
-                    }) {
-                        Text(ui(R.string.hovq_update_now))
-                    }
-                }, dismissButton = {
-                    TextButton(onClick = ::dismissAgent) { Text(ui(R.string.hovq_later)) }
-                })
+            AgentUpdateOffer(installedAgent, dismiss = ::dismissAgent) {
+                dismissAgent()
+                val privileges = panel.probe["privileges"]
+                if (currentServer.user == "root" || privileges in listOf("root", "sudo"))
+                    model.updateAgent("")
+                else requestUpdatePassword = true
+            }
         } else if (requestUpdatePassword) {
             PasswordDialog(ui(R.string.ui_update_vps_agent), ui(R.string.hovq_update_sudo),
                 close = { requestUpdatePassword = false }) { password ->
