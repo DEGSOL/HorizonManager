@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="connection_ssh_available">SSH доступен, вход выполнен</string>
+    <string name="connection_checking_agent">Проверка агента Horizon</string>
+    <string name="connection_ssh_handshake">VPS принял TCP-соединение, но обмен данными SSH завершился ошибкой.</string>
+    <string name="connection_ssh_negotiation">Приложение и VPS не смогли согласовать безопасные алгоритмы SSH.</string>
+    <string name="connection_ssh_lost">VPS закрыл SSH-сессию. Повторите подключение.</string>
+    <string name="connection_ssh_command_timeout">VPS не завершил проверку по SSH за отведённое время.</string>
+    <string name="connection_network_unavailable">У телефона нет маршрута до VPS. Проверьте сеть.</string>
+    <string name="connection_agent_timeout">Агент Horizon не ответил вовремя.</string>
+    <string name="connection_agent_inactive">SSH доступен. Служба агента Horizon остановлена.</string>
+    <string name="connection_agent_tunnel">SSH доступен. VPS не смог переадресовать запрос агенту Horizon. Проверьте службу агента и переадресацию SSH.</string>
+    <string name="connection_agent_protocol">По указанному адресу нет ответа от совместимого API Horizon.</string>
+    <string name="connection_https_dns">Не удалось разрешить HTTPS-адрес агента Horizon.</string>
+    <string name="connection_agent_api_error">Агент Horizon вернул ошибку. Подробности есть в журнале.</string>
+</resources>

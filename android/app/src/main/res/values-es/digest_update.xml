@@ -1,0 +1,20 @@
+<resources>
+    <string name="hovq_headline_range">Longitud del titular</string>
+    <string name="hovq_headline_min">Mínimo de caracteres</string>
+    <string name="hovq_headline_max">Máximo de caracteres</string>
+    <string name="hovq_headline_help">Elige un intervalo de 1 a 240 caracteres para futuros resúmenes. Los espacios y signos de puntuación cuentan.</string>
+    <string name="hovq_headline_save">Guardar longitud del titular</string>
+    <string name="hovq_headline_upgrade">Actualiza el agente del VPS para cambiar la longitud de los titulares.</string>
+    <string name="hovq_digest_notifications">Notificaciones de nuevos resúmenes</string>
+    <string name="hovq_push_delivery_help">Hovq espera nuevos resúmenes en tu VPS. Android muestra una notificación silenciosa del servicio mientras la conexión directa está activa.</string>
+    <string name="hovq_notification_offer">Permite las notificaciones de Android para recibir avisos de nuevos resúmenes aunque Hovq esté cerrado.</string>
+    <string name="hovq_allow_notifications">Permitir notificaciones</string>
+    <string name="hovq_later">Más tarde</string>
+    <string name="hovq_agent_update_offer">Actualiza el agente Horizon del VPS de %1$s a %2$s para utilizar las funciones de esta versión de Hovq.</string>
+    <string name="hovq_update_now">Actualizar agente</string>
+    <string name="hovq_update_sudo">Contraseña de sudo, si es necesaria</string>
+    <string name="hovq_open_photo">Abrir imagen</string>
+    <string name="prepare_digest_now">Preparar el resumen ahora</string>
+    <string name="hovq_listener_title">Entrega directa de resúmenes</string>
+    <string name="hovq_listener_detail">Hovq espera nuevos resúmenes en tu VPS.</string>
+</resources>

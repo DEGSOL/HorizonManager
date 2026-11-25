@@ -7,6 +7,7 @@ import android.content.ClipboardManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.ui.graphics.graphicsLayer
 import kotlinx.coroutines.CancellationException
@@ -19,6 +20,8 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
@@ -28,6 +31,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -37,10 +41,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -72,23 +78,14 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         notificationServer = notificationTarget(intent)
-        enableEdgeToEdge()
+        enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
         if (Build.VERSION.SDK_INT >= 29) window.isNavigationBarContrastEnforced = false
-        val preferences = getSharedPreferences("appearance", MODE_PRIVATE)
         setContent {
-            var preset by remember { mutableStateOf(ThemePreset.fromId(preferences.getString("preset", null))) }
-            DisposableEffect(preferences) {
-                val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-                    if (key == "preset") preset = ThemePreset.fromId(preferences.getString("preset", null))
-                }
-                preferences.registerOnSharedPreferenceChangeListener(listener)
-                onDispose { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
-            }
-            HorizonTheme(preset) {
-                HovqLinks {
-                    Manager(viewModel(), notificationServer, { notificationServer = "" }, preset) {
-                        preset = it
-                        preferences.edit().putString("preset", it.id).apply()
+            HorizonTheme {
+                val notices = remember { NoticeQueue() }
+                CompositionLocalProvider(LocalNoticeQueue provides notices) {
+                    HovqLinks {
+                        Manager(viewModel(), notificationServer) { notificationServer = "" }
                     }
                 }
             }
@@ -109,32 +106,43 @@ internal fun pushSettingsRoute(current: String, next: String): String = when {
 
 private data class Screen(val page: String, val issueId: String = "") {
     val reading get() = page == "feed" || page == "archived"
+    val tabIndex get() = when (page) {
+        "feed" -> FEED
+        "settings" -> SETTINGS
+        "favorites" -> FAVORITES
+        else -> null
+    }
 }
 
 @Composable
 private fun mainTabs() = listOf(
     HorizonTab(R.string.feed, ImageVector.vectorResource(R.drawable.ic_nav_feed)),
     HorizonTab(R.string.settings, ImageVector.vectorResource(R.drawable.ic_nav_sliders)),
-    HorizonTab(R.string.favorites_title, ImageVector.vectorResource(R.drawable.ic_star_outline)),
+    HorizonTab(R.string.favorites_title, ImageVector.vectorResource(R.drawable.ic_bookmark_outline)),
 )
 
 @Composable
-private fun Manager(model: ManagerModel, notificationServer: String, consumed: () -> Unit,
-                    preset: ThemePreset, selectTheme: (ThemePreset) -> Unit) {
+private fun Manager(model: ManagerModel, notificationServer: String, consumed: () -> Unit) {
     val panel by model.state.collectAsStateWithLifecycle()
     val currentServer = panel.server
     val locale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var tab by rememberSaveable(currentServer?.id) { mutableIntStateOf(FEED) }
-    var manageServers by remember { mutableStateOf(false) }
-    var editServer by remember { mutableStateOf(false) }
-    var editVerification by remember { mutableStateOf("") }
+    var manageServers by rememberSaveable { mutableStateOf(false) }
+    var editingServerId by rememberSaveable { mutableStateOf("") }
+    val editedServer = panel.servers.find { it.id == editingServerId }
+    LaunchedEffect(panel.editedServer) {
+        if (panel.editedServer.isNotEmpty()) {
+            if (editingServerId == panel.editedServer) editingServerId = ""
+            model.clearServerEditResult()
+        }
+    }
     var route by rememberSaveable(currentServer?.id) { mutableStateOf("") }
     val configPage = route.substringAfterLast('/')
     var previousTab by rememberSaveable { mutableIntStateOf(FEED) }
-    var navVisible by remember(tab) { mutableStateOf(true) }
-    var overlay by remember(tab, currentServer?.id) { mutableStateOf(false) }
+    var navVisible by remember(tab, currentServer?.id) { mutableStateOf(true) }
+    var overlay by remember(tab, currentServer?.id) { mutableStateOf(ReadingOverlay.None) }
     val feedFilters = rememberSaveable(currentServer?.id, saver = NewsFilters.Saver) { NewsFilters() }
     val screenState = rememberSaveableStateHolder()
     val readingPrefs = remember(ctx) { ctx.getSharedPreferences("reading", android.content.Context.MODE_PRIVATE) }
@@ -147,17 +155,20 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         readingPrefs.registerOnSharedPreferenceChangeListener(listener)
         onDispose { readingPrefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
-    var savedNotice by remember { mutableStateOf(false) }
+    val notices = requireNotNull(LocalNoticeQueue.current).messages
     var localSave by remember { mutableIntStateOf(0) }
     val remoteSave by model.settingsSaved.collectAsStateWithLifecycle()
     var lastSave by remember { mutableIntStateOf(remoteSave) }
+    var lastLocalSave by remember { mutableIntStateOf(localSave) }
     LaunchedEffect(remoteSave, localSave) {
-        if (remoteSave == lastSave && localSave == 0) return@LaunchedEffect
+        if (remoteSave == lastSave && localSave == lastLocalSave) return@LaunchedEffect
         lastSave = remoteSave
+        lastLocalSave = localSave
         launcherIcon = LauncherAppearance.current(ctx)
-        savedNotice = true
-        delay(2800)
-        savedNotice = false
+        notices.showSnackbar(SavedNotice(ui(R.string.hovq_settings_saved)))
+    }
+    LaunchedEffect(model, notices) {
+        model.agentUpdated.collect { notices.showSnackbar(SavedNotice(ui(R.string.hovq_agent_update_success))) }
     }
     var archiveIssue by rememberSaveable(currentServer?.id) { mutableStateOf("") }
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current
@@ -188,12 +199,6 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
             if (!filters.explicitOrder) filters.order = defaultOrder
         }
     }
-    LaunchedEffect(editServer, panel.sshVerification) {
-        if (editServer && panel.sshVerification.isNotEmpty() && panel.sshVerification != editVerification) {
-            editServer = false
-            if (!panel.ready) tab = FEED
-        }
-    }
     LaunchedEffect(configPage, openedIssue?.optString("id"), currentServer?.id) {
         if (configPage == "archive" && openedIssue != null) {
             snapshotFlow { panel.busy }.first { !it }
@@ -212,7 +217,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
             archiveIssue = ""
             route = ""
             manageServers = false
-            editServer = false
+            editingServerId = ""
             model.openNotification(notificationServer)
             consumed()
         }
@@ -220,14 +225,62 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     var confirm by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
     var fileAction by rememberSaveable { mutableStateOf("") }
     var restoreFile by remember { mutableStateOf("") }
-    val errors = remember { SnackbarHostState() }
     LaunchedEffect(panel.userProblem) {
         val problem = panel.userProblem.takeIf(String::isNotEmpty) ?: return@LaunchedEffect
-        errors.showSnackbar(errorText(problem), duration = SnackbarDuration.Long)
+        notices.showSnackbar(errorText(problem), duration = SnackbarDuration.Long)
         model.consumeProblem(problem)
     }
     var backupDialog by remember { mutableStateOf("") }
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    var notificationOffer by rememberSaveable { mutableStateOf(true) }
+    var notificationAllowed by remember { mutableStateOf(DigestNotifications.deliveryAllowed(ctx)) }
+    var requestingAlerts by rememberSaveable { mutableStateOf(false) }
+    var enableDigestAfterPermission by rememberSaveable { mutableStateOf(false) }
+    val notificationPrefs = remember(ctx) { ctx.getSharedPreferences("notification_permission", android.content.Context.MODE_PRIVATE) }
+    val activity = androidx.activity.compose.LocalActivity.current
+    fun permissionReturned() {
+        notificationAllowed = DigestNotifications.deliveryAllowed(ctx)
+        if (!notificationAllowed) enableDigestAfterPermission = false
+        requestingAlerts = false
+    }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { permissionReturned() }
+    val notificationSettings = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        permissionReturned()
+    }
+    fun requestNotifications() {
+        if (DigestNotifications.deliveryAllowed(ctx)) return
+        requestingAlerts = true
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ctx.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED &&
+            (!notificationPrefs.getBoolean("requested", false) ||
+                activity?.shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS) == true)) {
+            notificationPrefs.edit().putBoolean("requested", true).apply()
+            permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            notificationSettings.launch(Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, ctx.packageName))
+        }
+    }
+    DisposableEffect(lifecycle, ctx) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                notificationAllowed = DigestNotifications.deliveryAllowed(ctx)
+                model.checkDigestNotifications()
+            }
+        }
+        lifecycle.lifecycle.addObserver(observer)
+        onDispose { lifecycle.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(notificationAllowed) {
+        model.checkDigestNotifications()
+    }
+    LaunchedEffect(enableDigestAfterPermission, notificationAllowed, currentServer, panel.ready, panel.busy) {
+        if (enableDigestAfterPermission && notificationAllowed && panel.ready && !panel.busy && currentServer != null) {
+            enableDigestAfterPermission = false
+            if (!currentServer.background) model.settings(currentServer.https, true)
+            else model.checkDigestNotifications()
+        }
+    }
+    var dismissedAgentUpdates by rememberSaveable { mutableStateOf(emptyList<String>()) }
     val output = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         val content = model.takeExportDocument()
         if (uri != null) scope.launch {
@@ -237,7 +290,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                     ctx.contentResolver.openOutputStream(uri, "wt")?.use { it.write(content.toByteArray()) } ?: error("output")
                 }.isSuccess
             }
-            if (!saved) errors.showSnackbar(ui(R.string.ui_could_not_write_the_file))
+            if (!saved) notices.showSnackbar(ui(R.string.ui_could_not_write_the_file))
         }
     }
     val input = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -256,7 +309,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
             } catch (error: kotlinx.coroutines.CancellationException) {
                 throw error
             } catch (_: Exception) {
-                errors.showSnackbar(ui(R.string.ui_the_file_is_damaged_too_large))
+                notices.showSnackbar(ui(R.string.ui_the_file_is_damaged_too_large))
             }
         }
     }
@@ -269,8 +322,13 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     }
     val running = panel.jobs.firstOrNull()?.optString("state") in setOf("running", "queued")
     val checkingInstall = panel.probe["install"] == "running" || panel.updatingAgent
-    val watchingFeed = panel.ready && tab == FEED && !manageServers && !editServer
+    val watchingFeed = panel.ready && tab == FEED && !manageServers
     val preparing = digestIsPreparing(panel.jobs)
+    LaunchedEffect(model, lifecycle) {
+        lifecycle.repeatAt(androidx.lifecycle.Lifecycle.State.RESUMED) {
+            model.networkAvailable.collect(model::networkChanged)
+        }
+    }
     LaunchedEffect(currentServer?.id, panel.ready, running, checkingInstall, watchingFeed, preparing, lifecycle, locale) {
         androidx.lifecycle.Lifecycle.State.RESUMED.let { minimum ->
             lifecycle.repeatAt(minimum) {
@@ -289,11 +347,17 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         }
     }
     var dirtyPage by remember(configPage, currentServer?.id) { mutableStateOf(false) }
-    val showingSetupSettings = !panel.ready && tab == SETTINGS && !editServer
+    val showingSetupSettings = !panel.ready && tab == SETTINGS
+    fun closeServerEditor() {
+        if (panel.connectionCancellable) model.cancelConnection()
+        else if (!panel.busy && panel.hostConfirmation == null) {
+            editingServerId = ""
+            model.clearServerEditResult()
+        }
+    }
     fun navigateBack() {
         when {
             manageServers -> manageServers = false
-            editServer -> editServer = false
             tab == SETTINGS && configPage == "archive" && archiveIssue.isNotEmpty() -> {
                 archiveIssue = ""
                 model.leaveArchive()
@@ -306,10 +370,14 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
 
     val editorBack = remember(configPage) { mutableStateOf<(() -> Unit)?>(null) }
     fun goBack() {
+        if (editedServer != null) {
+            closeServerEditor()
+            return
+        }
         editorBack.value?.let { it(); return }
         if (dirtyPage) confirm = ui(R.string.editorial_discard_prompt) to ::navigateBack else navigateBack()
     }
-    val canGoBack = manageServers || editServer || configPage.isNotEmpty() || showingSetupSettings
+    val canGoBack = editedServer != null || manageServers || configPage.isNotEmpty() || showingSetupSettings
     var backProgress by remember { mutableFloatStateOf(0f) }
     PredictiveBackHandler(enabled = canGoBack || tab != FEED) { events ->
         try {
@@ -319,44 +387,47 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     }
 
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
-    confirm?.let { (description, action) ->
-        HorizonAlertDialog(onDismissRequest = { confirm = null }, title = { Text(ui(R.string.ui_confirm_action)) },
-            text = { Text(description) }, confirmButton = {
-                Button(onClick = {
-                    confirm = null
-                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                    action()
-                }) { Text(ui(R.string.ui_confirm)) }
-            }, dismissButton = { TextButton(onClick = { confirm = null }) { Text(ui(R.string.ui_cancel)) } })
-    }
-    if (backupDialog.isNotEmpty()) {
-        val device = backupDialog.startsWith("device")
-        val restoring = backupDialog.endsWith("import")
-        PasswordDialog(
-            ui(if (restoring) R.string.hovq_import else R.string.hovq_export),
-            ui(when {
-                restoring && device -> R.string.hovq_device_restore_password
-                restoring -> R.string.hovq_vps_restore_password
-                else -> R.string.ui_enter_a_password_of_at_least
-            }),
-            minimum = if (restoring) 1 else 12,
-            maximum = 256,
-            close = { backupDialog = ""; restoreFile = "" },
-        ) { password ->
-            backupDialog = ""
-            val file = restoreFile
-            restoreFile = ""
-            when {
-                restoring && device -> model.restoreDevice(file, password)
-                restoring -> model.restore(file, password)
-                device -> model.exportDevice(password)
-                else -> model.export(password)
+    CompositionLocalProvider(LocalSettingsGlass provides (tab == SETTINGS)) {
+        confirm?.let { (description, action) ->
+            HorizonAlertDialog(onDismissRequest = { confirm = null }, title = { Text(ui(R.string.ui_confirm_action)) },
+                text = { Text(description) }, confirmButton = {
+                    Button(onClick = {
+                        confirm = null
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                        action()
+                    }) { Text(ui(R.string.ui_confirm)) }
+                }, dismissButton = { TextButton(onClick = { confirm = null }) { Text(ui(R.string.ui_cancel)) } })
+        }
+        if (backupDialog.isNotEmpty()) {
+            val device = backupDialog.startsWith("device")
+            val restoring = backupDialog.endsWith("import")
+            PasswordDialog(
+                ui(if (restoring) R.string.hovq_import else R.string.hovq_export),
+                ui(when {
+                    restoring && device -> R.string.hovq_device_restore_password
+                    restoring -> R.string.hovq_vps_restore_password
+                    else -> R.string.ui_enter_a_password_of_at_least
+                }),
+                minimum = if (restoring) 1 else 12,
+                maximum = 256,
+                close = { backupDialog = ""; restoreFile = "" },
+            ) { password ->
+                backupDialog = ""
+                val file = restoreFile
+                restoreFile = ""
+                when {
+                    restoring && device -> model.restoreDevice(file, password)
+                    restoring -> model.restore(file, password)
+                    device -> model.exportDevice(password)
+                    else -> model.export(password)
+                }
             }
         }
     }
 
-    val showTabs = panel.ready && !canGoBack && (tab != FEED || navVisible || overlay)
-    GlassLayout(tabs, tab, showTabs, unread = unread, dimmed = overlay, savedNotice = savedNotice, select = { chosen ->
+    val showTabs = panel.ready && !canGoBack && (tab != FEED || navVisible)
+    val direction = if (LocalLayoutDirection.current == LayoutDirection.Ltr) 1 else -1
+    fun selectTab(chosen: Int) {
         if (chosen != tab || configPage.isNotEmpty() || openedIssue != null) {
             previousTab = tab
             tab = chosen
@@ -364,23 +435,80 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
             archiveIssue = ""
             if (chosen == FEED) model.showFeed()
         }
-    }) {
-        val destination = when {
-            manageServers -> Screen("servers")
-            editServer -> Screen("ssh")
-            configPage == "archive" && openedIssue != null -> Screen("archived", archiveIssue)
-            configPage.isNotEmpty() -> Screen(configPage, route)
-            showingSetupSettings -> Screen("settings")
-            !panel.ready -> Screen("setup")
-            tab == FAVORITES -> Screen("favorites")
-            tab == SETTINGS -> Screen("settings")
-            else -> Screen("feed")
+    }
+    val promptsAllowed = confirm == null && backupDialog.isEmpty() && panel.hostConfirmation == null &&
+        overlay == ReadingOverlay.None && !requestingAlerts
+    val installedAgent = panel.status.optString("agent")
+    val updateKey = "${currentServer?.id}/$installedAgent"
+    var requestUpdatePassword by remember(updateKey) { mutableStateOf(false) }
+    val showPermissionOffer = promptsAllowed && notificationOffer && !notificationAllowed
+    val showUpdateOffer = promptsAllowed && !showPermissionOffer && !canGoBack && panel.ready &&
+        !panel.busy && !panel.updatingAgent && !enableDigestAfterPermission && currentServer != null &&
+        panel.jobs.none { it.optString("state") in setOf("running", "queued") } &&
+        agentUpdateAvailable(installedAgent) && updateKey !in dismissedAgentUpdates
+    val promptOpen = showPermissionOffer || showUpdateOffer || requestUpdatePassword
+    val swipeTabs = panel.ready && !canGoBack && overlay == ReadingOverlay.None && !promptOpen &&
+        (tab != FEED || !feedFilters.searchOpen && !feedFilters.optionsOpen)
+    val releaseDialogs: @Composable () -> Unit = {
+        if (showPermissionOffer) {
+            HorizonAlertDialog(onDismissRequest = { notificationOffer = false },
+                title = { Text(ui(R.string.hovq_digest_notifications)) },
+                text = { Text(ui(R.string.hovq_notification_offer)) },
+                confirmButton = {
+                    Button(onClick = {
+                        notificationOffer = false
+                        enableDigestAfterPermission = true
+                        requestNotifications()
+                    }) { Text(ui(R.string.hovq_allow_notifications)) }
+                }, dismissButton = {
+                    TextButton(onClick = { notificationOffer = false }) { Text(ui(R.string.hovq_later)) }
+                })
+        } else if (showUpdateOffer) {
+            fun dismissAgent() { dismissedAgentUpdates = dismissedAgentUpdates + updateKey }
+            AgentUpdateOffer(installedAgent, dismiss = ::dismissAgent) {
+                dismissAgent()
+                val privileges = panel.probe["privileges"]
+                if (currentServer.user == "root" || privileges in listOf("root", "sudo"))
+                    model.updateAgent("")
+                else requestUpdatePassword = true
+            }
+        } else if (requestUpdatePassword) {
+            PasswordDialog(ui(R.string.ui_update_vps_agent), ui(R.string.hovq_update_sudo),
+                close = { requestUpdatePassword = false }) { password ->
+                requestUpdatePassword = false
+                model.updateAgent(password)
+            }
         }
+    }
+    val destination = when {
+        editedServer != null -> Screen("server_editor", editedServer.id)
+        manageServers -> Screen("servers")
+        configPage == "archive" && openedIssue != null -> Screen("archived", archiveIssue)
+        configPage.isNotEmpty() -> Screen(configPage, route)
+        showingSetupSettings -> Screen("settings")
+        !panel.ready -> Screen("setup")
+        tab == FAVORITES -> Screen("favorites")
+        tab == SETTINGS -> Screen("settings")
+        else -> Screen("feed")
+    }
+    GlassLayout(tabs, tab, showTabs, unread = unread, overlay = overlay, statusGlassInContent = destination.reading,
+        select = ::selectTab, modal = releaseDialogs) {
+        val currentDestination by rememberUpdatedState(destination)
         AnimatedContent(destination,
-            modifier = Modifier.align(Alignment.TopCenter).graphicsLayer { scaleX = 1f - backProgress * .035f; scaleY = scaleX }.widthIn(max = 780.dp).fillMaxSize(),
+            modifier = Modifier.align(Alignment.TopCenter)
+                .graphicsLayer { scaleX = 1f - backProgress * .035f; scaleY = scaleX }
+                .widthIn(max = 780.dp).fillMaxSize().swipeBetweenTabs(swipeTabs, tab, tabs.size, ::selectTab),
             transitionSpec = {
-                (fadeIn(tween(220, delayMillis = 40)) + slideInVertically(tween(260)) { it / 45 }) togetherWith
-                    (fadeOut(tween(130)) + slideOutVertically(tween(160)) { -it / 65 })
+                val from = initialState.tabIndex
+                val to = targetState.tabIndex
+                if (from != null && to != null && from != to) {
+                    val side = if (to > from) direction else -direction
+                    (fadeIn(tween(200)) + slideInHorizontally(tween(230)) { side * it / 4 }) togetherWith
+                        (fadeOut(tween(160)) + slideOutHorizontally(tween(210)) { -side * it / 4 })
+                } else {
+                    (fadeIn(tween(220, delayMillis = 40)) + slideInVertically(tween(260)) { it / 45 }) togetherWith
+                        (fadeOut(tween(130)) + slideOutVertically(tween(160)) { -it / 65 })
+                }
             },
             label = "screen",
         ) { screen ->
@@ -390,9 +518,9 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
             val screenBack = screen.page !in setOf("feed", "favorites", "setup", "settings") ||
                 (screen.page == "settings" && showingSetupSettings)
             val heading = when (screen.page) {
+                "server_editor" -> ui(R.string.editorial_edit)
                 "servers" -> ui(R.string.ui_servers)
-                "theme" -> ui(R.string.theme)
-                "setup", "ssh" -> ui(R.string.app_name)
+                "setup" -> ui(R.string.app_name)
                 "settings" -> ui(R.string.settings)
                 "journal" -> ui(R.string.journal)
                 "news_settings" -> ui(R.string.mr_news)
@@ -400,11 +528,9 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                 "interface" -> ui(R.string.mr_interface)
                 "images" -> ui(R.string.mr_images)
                 "sources" -> ui(R.string.sources)
-                "control" -> ui(R.string.control)
                 "schedule" -> ui(R.string.ui_schedule)
                 "delivery" -> ui(R.string.settings_server_delivery)
                 "alerts" -> ui(R.string.settings_notifications)
-                "connection" -> ui(R.string.ui_connection)
                 "maintenance" -> ui(R.string.ui_maintenance)
                 "transfer" -> ui(R.string.settings_transfer)
                 "icon" -> ui(R.string.hovq_icon)
@@ -423,107 +549,106 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                 "feed" -> ui(R.string.feed)
                 else -> label(screen.page)
             }
-            val action: (@Composable () -> Unit)? = when {
-                screenBack -> ({ GlassToolbarButton(ui(R.string.ui_back), ::goBack) })
-                screen.page == "setup" -> ({ GlassToolbarButton(ui(R.string.settings)) { openSettings("") } })
-                else -> null
-            }
-            val toolbar: (@Composable () -> Unit)? = if (screen.reading) ({
-                NewsToolbar(filters, displayedIssue?.optString("id") == panel.selectedRun && panel.markdown.isNotEmpty())
+            val action: (@Composable () -> Unit)? = if (screen.page == "setup") ({
+                GlassIconAction(Icons.Default.Settings, ui(R.string.settings)) { openSettings("") }
             }) else null
-            val header: @Composable () -> Unit = { Header(heading, action, toolbar) }
             screenState.SaveableStateProvider("${currentServer?.id.orEmpty()}/${screen.page}/${screen.issueId}") {
                 when {
-                    screen.reading -> NewsScreen(panel, model, displayedIssue, filters, archived,
+                    screen.reading -> NewsScreen(panel, model, displayedIssue, filters, archived, promptOpen,
                         { openSettings("ai") }, { openSettings("sources") }, ::goBack,
-                        { navVisible = it }, { overlay = it })
-                    screen.page == "archive" -> ArchiveScreen(issues.archive, panel, model,
-                        { archiveIssue = it.getString("id") }, header)
-                    screen.page == "favorites" -> FavoritesScreen(model, panel.servers, header) { overlay = it }
-                    screen.page == "journal" -> Journal(panel, { description, run -> confirm = description to run }, model,
-                        { model.prepareExportDocument(it); output.launch("horizon-journal.json") }, header)
-                    else -> Column(Modifier.fillMaxSize().editorialInsets().verticalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        header()
-                        Reveal(panel.busy) { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+                        { if (screen == currentDestination) navVisible = it },
+                        { if (screen == currentDestination) overlay = it })
+                    screen.page == "favorites" -> FavoritesScreen(model, panel.servers, {
+                        Text(heading, Modifier.padding(top = 6.dp, bottom = 8.dp),
+                            style = MaterialTheme.typography.headlineLarge)
+                    }) {
+                        if (screen == currentDestination) overlay = it
+                    }
+                    else -> SettingsPage(heading, if (screenBack) ::goBack else null, action) { top ->
                         when (screen.page) {
-                            "servers" -> {
-                                panel.servers.forEach { server -> key(server.id) {
-                                    val endpoint = "${server.user} @ ${server.host} · ${server.port}"
-                                    val detail = if (server.id == currentServer?.id) "${ui(R.string.ui_selected)} · $endpoint" else endpoint
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Box(Modifier.weight(1f)) {
-                                            GlassSettingRow(server.name, detail, enabled = !panel.busy) {
-                                                model.select(server)
-                                                route = ""
-                                                archiveIssue = ""
-                                                tab = FEED
-                                                manageServers = false
+                            "archive" -> ArchiveScreen(issues.archive, panel, model, top) { archiveIssue = it.getString("id") }
+                            "journal" -> Journal(panel, { description, run -> confirm = description to run }, model,
+                                { model.prepareExportDocument(it); output.launch("horizon-journal.json") }, top)
+                            else -> Column(Modifier.fillMaxSize().editorialSideBottomInsets().verticalScroll(rememberScrollState())
+                                .padding(start = 16.dp, end = 16.dp, top = top, bottom = 10.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Reveal(panel.busy) { DottedProgress(Modifier.fillMaxWidth()) }
+                                when (screen.page) {
+                                    "server_editor" -> panel.servers.find { it.id == screen.issueId }?.let { server ->
+                                        SavedServerEditor(server, panel, model, ::closeServerEditor)
+                                    }
+                                    "servers" -> {
+                                        panel.servers.forEach { server -> key(server.id) {
+                                            val endpoint = "${server.user} @ ${server.host} · ${server.port}"
+                                            val detail = if (server.id == currentServer?.id) "${ui(R.string.ui_selected)} · $endpoint" else endpoint
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Box(Modifier.weight(1f)) {
+                                                    GlassSettingRow(server.name, detail, enabled = !panel.busy) {
+                                                        model.select(server)
+                                                        route = ""
+                                                        archiveIssue = ""
+                                                        tab = FEED
+                                                        manageServers = false
+                                                    }
+                                                }
+                                                GlassIconAction(Icons.Default.Edit, "${ui(R.string.editorial_edit)} ${server.name}",
+                                                    enabled = !panel.busy) {
+                                                    model.clearServerEditResult()
+                                                    editingServerId = server.id
+                                                }
+                                                GlassIconAction(Icons.Default.Delete, ui(R.string.server_remove_named, server.name),
+                                                    enabled = !panel.busy) {
+                                                    confirm = ui(R.string.server_remove_message, server.name) to { model.removeServer(server.id) }
+                                                }
                                             }
-                                        }
-                                        GlassIconAction(Icons.Default.Delete, ui(R.string.server_remove_named, server.name),
-                                            enabled = !panel.busy) {
-                                            confirm = ui(R.string.server_remove_message, server.name) to { model.removeServer(server.id) }
+                                        } }
+                                        Button(onClick = { model.add(); manageServers = false; tab = FEED }, enabled = !panel.busy) {
+                                            Text(ui(R.string.ui_add_server))
                                         }
                                     }
-                                } }
-                                Button(onClick = { model.add(); manageServers = false; tab = FEED }, enabled = !panel.busy) {
-                                    Text(ui(R.string.ui_add_server))
-                                }
-                            }
-                            "theme" -> ThemeSettings(preset) { choice ->
-                                if (preset != choice) { selectTheme(choice); localSave++ }
-                            }
-                            "icon" -> IconSettings(launcherIcon) { choice ->
-                                if (launcherIcon != choice) {
-                                    runCatching { choice.apply(ctx) }.onSuccess {
-                                        launcherIcon = choice
+                                    "icon" -> IconSettings(launcherIcon) { choice ->
+                                        if (launcherIcon != choice) {
+                                            runCatching { choice.apply(ctx) }.onSuccess {
+                                                launcherIcon = choice
+                                                localSave++
+                                            }.onFailure { scope.launch { notices.showSnackbar(ui(R.string.hovq_icon_error)) } }
+                                        }
+                                    }
+                                    "setup" -> Setup(panel, model)
+                                    "sources" -> Sources(panel, model) { if (configPage == screen.page) dirtyPage = it }
+                                    "server_settings" -> ServerSettings(panel, model, { manageServers = true }) {
+                                        description, action -> confirm = description to action
+                                    }
+                                    "alerts" -> NotificationSettings(panel, model, notificationAllowed, ::requestNotifications,
+                                        { openSettings("delivery") })
+                                    "maintenance" -> ServerMaintenance(panel, model, ::openSettings)
+                                    "transfer" -> TransferSettings(panel,
+                                        { device -> backupDialog = if (device) "device_export" else "vps_export" },
+                                        { device ->
+                                            fileAction = if (device) "device" else "vps"
+                                            input.launch(arrayOf("*/*"))
+                                        })
+                                    "reading" -> ReadingPreferences(defaultOrder) {
+                                        defaultOrder = it
+                                        readingPrefs.edit().putString("default_order", it.name).apply()
                                         localSave++
-                                    }.onFailure { scope.launch { errors.showSnackbar(ui(R.string.hovq_icon_error)) } }
+                                    }
+                                    "local" -> LocalReadingData(panel)
+                                    "digest_settings" -> DigestSettings(::openSettings)
+                                    "ai_settings" -> AiSettings(panel, model, ::openSettings)
+                                    "settings", "news_settings", "interface" ->
+                                        SettingsHome(panel, ::openSettings, screen.page)
+                                    "images" -> ImageSettings(panel, model)
+                                    else -> CompositionLocalProvider(LocalEditorBack provides editorBack) {
+                                        SettingsForm(panel, model, screen.page) { if (configPage == screen.page) dirtyPage = it }
+                                    }
                                 }
-                            }
-                            "setup", "ssh" -> Setup(panel, model, forceEdit = screen.page == "ssh")
-                            "sources" -> Sources(panel, model) { if (configPage == screen.page) dirtyPage = it }
-                            "control" -> Control(panel, model, { description, action -> confirm = description to action }, ::openSettings)
-                            "connection" -> ConnectionSettings(panel, model, { if (configPage == screen.page) dirtyPage = it }) {
-                                editVerification = panel.sshVerification
-                                editServer = true
-                            }
-                            "alerts" -> NotificationSettings(panel, model,
-                                { if (Build.VERSION.SDK_INT >= 33) permission.launch(Manifest.permission.POST_NOTIFICATIONS) },
-                                { openSettings("delivery") })
-                            "maintenance" -> ServerMaintenance(panel, model, ::openSettings)
-                            "transfer" -> TransferSettings(panel,
-                                { device -> backupDialog = if (device) "device_export" else "vps_export" },
-                                { device ->
-                                    fileAction = if (device) "device" else "vps"
-                                    input.launch(arrayOf("*/*"))
-                                })
-                            "reading" -> ReadingPreferences(defaultOrder) {
-                                defaultOrder = it
-                                readingPrefs.edit().putString("default_order", it.name).apply()
-                                localSave++
-                            }
-                            "local" -> LocalReadingData(panel)
-                            "digest_settings" -> DigestSettings(::openSettings)
-                            "ai_settings" -> AiSettings(panel, model, ::openSettings)
-                            "settings", "news_settings", "server_settings", "interface" ->
-                                SettingsHome(panel, preset, ::openSettings, screen.page) { manageServers = true }
-                            "images" -> ImageSettings(panel, model)
-                            else -> CompositionLocalProvider(LocalEditorBack provides editorBack) {
-                                SettingsForm(panel, model, screen.page) { if (configPage == screen.page) dirtyPage = it }
+                                Spacer(Modifier.height(if (showTabs) LocalNavigationClearance.current else 10.dp))
                             }
                         }
-                        Spacer(Modifier.height(if (showTabs) LocalNavigationClearance.current else 10.dp))
                     }
                 }
             }
-        }
-        SnackbarHost(errors, modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 8.dp)) { data ->
-            val theme = LocalHorizonPalette.current
-            Snackbar(data, containerColor = theme.panel(0.40f), contentColor = theme.text)
         }
     }
 }
@@ -532,24 +657,6 @@ private suspend fun androidx.lifecycle.LifecycleOwner.repeatAt(
     minimum: androidx.lifecycle.Lifecycle.State, block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit,
 ) = this.lifecycle.repeatOnLifecycle(minimum, block)
 
-@Composable
-private fun Header(heading: String, action: (@Composable () -> Unit)?, toolbar: (@Composable () -> Unit)?) {
-    BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 8.dp)) {
-        val minToolbarWidth = if (action == null) 118 else 208
-        val split = toolbar != null && maxWidth < (minToolbarWidth + 112 * LocalConfiguration.current.fontScale).dp
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(heading, style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.onBackground)
-                }
-                action?.invoke()
-                if (!split) toolbar?.invoke()
-            }
-            if (split) Box(Modifier.align(Alignment.End)) { toolbar?.invoke() }
-        }
-    }
-}
 
 @Composable
 internal fun PasswordDialog(title: String, detail: String, minimum: Int = 0, maximum: Int = Int.MAX_VALUE, close: () -> Unit, proceed: (String) -> Unit) {
@@ -564,50 +671,20 @@ internal fun PasswordDialog(title: String, detail: String, minimum: Int = 0, max
 }
 
 @Composable
-internal fun PasswordField(title: String, value: String, change: (String) -> Unit) {
-    OutlinedTextField(value, change, label = { Text(title) }, modifier = Modifier.fillMaxWidth(),
-        singleLine = true, colors = horizonFieldColors(), visualTransformation = PasswordVisualTransformation())
+internal fun PasswordField(title: String, value: String, enabled: Boolean = true, change: (String) -> Unit) {
+    OutlinedTextField(value, change, label = { Text(title) }, modifier = Modifier.fillMaxWidth(), enabled = enabled,
+        singleLine = true, colors = horizonFieldColors(), shape = horizonFieldShape(), visualTransformation = PasswordVisualTransformation())
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Setup(panel: Panel, model: ManagerModel, forceEdit: Boolean) {
-    val ctx = LocalContext.current
-    val scope = rememberCoroutineScope()
+private fun Setup(panel: Panel, model: ManagerModel) {
     val server = panel.server
     val probe = panel.probe
-    var name by remember { mutableStateOf(server?.name.orEmpty()) }
-    var host by remember { mutableStateOf(server?.host.orEmpty()) }
-    var port by remember { mutableStateOf(server?.port?.toString() ?: "22") }
-    var user by remember { mutableStateOf(server?.user ?: "root") }
-    var keyMode by remember { mutableStateOf(server?.keyMode ?: false) }
-    var credential by remember { mutableStateOf(server?.credential.orEmpty()) }
-    var passphrase by remember { mutableStateOf(server?.passphrase.orEmpty()) }
+    var draft by remember(server?.id) { mutableStateOf(server?.let(::ServerDraft) ?: ServerDraft()) }
     var approveInstall by remember { mutableStateOf(false) }
     var approveAttach by remember { mutableStateOf(false) }
-    var keyError by remember { mutableStateOf(false) }
-    val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) scope.launch {
-            credential = withContext(Dispatchers.IO) {
-                runCatching { ctx.contentResolver.openInputStream(uri)?.use { it.readBounded(65536).decodeToString() }.orEmpty() }
-                    .getOrDefault("")
-            }
-            keyError = credential.isEmpty()
-        }
-    }
-    panel.hostConfirmation?.let { key ->
-        HorizonAlertDialog(onDismissRequest = { model.confirmHost(false) },
-            title = { Text(if (key.previous.isBlank()) ui(R.string.ui_verify_the_vps_key) else ui(R.string.ui_the_vps_key_has_changed)) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(ui(R.string.ui_compare_the_fingerprint_with_the_one))
-                    if (key.previous.isNotBlank()) Text(ui(R.string.ui_previous, key.previous))
-                    Text(ui(R.string.ui_received, key.fingerprint), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            },
-            confirmButton = { Button(onClick = { model.confirmHost(true) }) { Text(ui(R.string.ui_fingerprint_matches)) } },
-            dismissButton = { TextButton(onClick = { model.confirmHost(false) }) { Text(ui(R.string.ui_cancel)) } })
-    }
+    ServerHostPrompt(panel.hostConfirmation, model::confirmHost)
     if (approveAttach) {
         PasswordDialog(ui(R.string.ui_connect_an_existing_agent),
             ui(R.string.ui_manager_will_retrieve_the_agent_key),
@@ -626,31 +703,23 @@ private fun Setup(panel: Panel, model: ManagerModel, forceEdit: Boolean) {
                 }, dismissButton = { TextButton(onClick = { approveInstall = false }) { Text(ui(R.string.ui_cancel)) } })
         }
     }
-    if (server == null || forceEdit || probe.isEmpty()) {
+    if (server == null || probe.isEmpty()) {
         Tile {
             Text(ui(R.string.ui_connect_to_your_vps), style = MaterialTheme.typography.titleLarge)
-            ValueField(ui(R.string.ui_server_name), name, { name = it })
-            ValueField(ui(R.string.ui_ip_address_or_domain), host, { host = it })
-            Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                Box(Modifier.weight(1f)) { ValueField(ui(R.string.ui_ssh_port), port, { port = it }, numeric = true) }
-                Box(Modifier.weight(2f)) { ValueField(ui(R.string.ui_ssh_user), user, { user = it }) }
-            }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(!keyMode, { keyMode = false; credential = ""; keyError = false }, { Text(ui(R.string.ui_password)) })
-                FilterChip(keyMode, { keyMode = true; credential = ""; keyError = false }, { Text(ui(R.string.ui_ssh_key)) })
-            }
-            Reveal(keyMode) {
-                OutlinedButton(onClick = { pick.launch(arrayOf("*/*")) }) {
-                    Text(if (credential.isNotEmpty()) ui(R.string.ui_replace_selected_key) else ui(R.string.ui_select_private_key))
-                }
-                if (keyError) Text(ui(R.string.ui_could_not_read_the_key_file), color = MaterialTheme.colorScheme.error)
-                PasswordField(ui(R.string.ui_key_passphrase_if_set), passphrase) { passphrase = it }
-            }
-            Reveal(!keyMode) { PasswordField(ui(R.string.ui_ssh_password), credential) { credential = it } }
+            ServerCredentialFields(draft, enabled = !panel.busy) { draft = it }
             val setupProblem = panel.problem.takeIf { it == "SERVER_FIELDS" || isConnectionFailure(it) }
+            val phase = panel.connectionPhase
+            if (phase != ConnectionPhase.Idle) Text(ui(phase.label()))
             if (setupProblem != null) Text(errorText(setupProblem), color = MaterialTheme.colorScheme.error)
-            Button(onClick = { model.connect(name, host, port, user, keyMode, credential, passphrase, server) },
-                enabled = !panel.busy && credential.isNotBlank()) { Text(ui(R.string.ui_connect)) }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { model.connect(draft, server) },
+                    enabled = !panel.busy && draft.credential.isNotBlank()) {
+                    Text(ui(if (setupProblem != null) R.string.ui_retry else R.string.ui_connect))
+                }
+                if (panel.connectionCancellable) TextButton(onClick = model::cancelConnection) {
+                    Text(ui(R.string.ui_cancel))
+                }
+            }
         }
     } else {
         Tile {
@@ -661,7 +730,9 @@ private fun Setup(panel: Panel, model: ManagerModel, forceEdit: Boolean) {
             Text("DNS GitHub ${if (probe["dns"] == "yes") ui(R.string.ui_available_990c71) else ui(R.string.ui_no_response)} · systemd ${if (probe["systemd"] == "yes") ui(R.string.ui_running) else ui(R.string.ui_not_found)}")
             probe["existing"]?.let { Text(ui(R.string.hovq_existing_horizon, it)) }
             if (probe["docker_horizon"] == "yes") Text(ui(R.string.ui_a_container_with_horizon_in_its))
-            probe["agent_problem"]?.let { Text(errorText(it), color = MaterialTheme.colorScheme.error) }
+            if (panel.connectionPhase != ConnectionPhase.Idle) Text(ui(panel.connectionPhase.label()))
+            val failure = panel.connectionProblem.ifBlank { probe["agent_problem"].orEmpty() }
+            if (failure.isNotBlank()) Text(errorText(failure), color = MaterialTheme.colorScheme.error)
         }
         val stages = linkedMapOf("preflight" to ui(R.string.ui_check_server), "packages" to ui(R.string.ui_prepare_packages),
             "files" to ui(R.string.ui_persistent_storage), "runtime" to ui(R.string.ui_download_horizon_and_dependencies),
@@ -679,7 +750,7 @@ private fun Setup(panel: Panel, model: ManagerModel, forceEdit: Boolean) {
                     else -> ui(R.string.ui_waiting)
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(title, Modifier.weight(1f)); Text(event) }
-                if (id == step && install == "running") LinearProgressIndicator(Modifier.fillMaxWidth())
+                if (id == step && install == "running") DottedProgress(Modifier.fillMaxWidth())
             }
             probe["operation"]?.let { Text(ui(R.string.ui_operation, it), style = MaterialTheme.typography.labelSmall) }
         }
@@ -698,6 +769,7 @@ private fun Setup(panel: Panel, model: ManagerModel, forceEdit: Boolean) {
                 Text(if (install == "failed") ui(R.string.ui_retry_installation) else ui(R.string.ui_install_horizon))
             }
             OutlinedButton(onClick = { model.refreshInstallation(false) }, enabled = !panel.busy) { Text(ui(R.string.ui_check_again)) }
+            if (panel.connectionCancellable) TextButton(onClick = model::cancelConnection) { Text(ui(R.string.ui_cancel)) }
         }
     }
 }
@@ -741,9 +813,20 @@ internal fun errorText(code: String) = when (code.substringBefore(" · ")) {
     "LOCALIZATION_PARTIAL" -> ui(R.string.journal_translation_partial)
     "CLASSIFIER_FALLBACK" -> ui(R.string.ui_the_classifier_used_the_fallback_profile)
     "SSH_CONNECT" -> ui(R.string.ui_could_not_connect_over_ssh_check)
+    "SSH_HANDSHAKE" -> ui(R.string.connection_ssh_handshake)
+    "SSH_NEGOTIATION" -> ui(R.string.connection_ssh_negotiation)
+    "SSH_SESSION_LOST" -> ui(R.string.connection_ssh_lost)
+    "SSH_COMMAND_TIMEOUT" -> ui(R.string.connection_ssh_command_timeout)
+    "NETWORK_UNAVAILABLE" -> ui(R.string.connection_network_unavailable)
+    "AGENT_TIMEOUT", "HTTPS_TIMEOUT" -> ui(R.string.connection_agent_timeout)
+    "AGENT_API_ERROR" -> ui(R.string.connection_agent_api_error)
+    "AGENT_INACTIVE" -> ui(R.string.connection_agent_inactive)
+    "AGENT_TUNNEL" -> ui(R.string.connection_agent_tunnel)
+    "AGENT_PROTOCOL" -> ui(R.string.connection_agent_protocol)
+    "HTTPS_DNS" -> ui(R.string.connection_https_dns)
     "SSH_COMMAND", "SUDO_REQUIRED" -> ui(R.string.ui_the_vps_could_not_run_the)
     "AGENT_UNREACHABLE" -> ui(R.string.ui_the_agent_did_not_respond_over)
-    "AUTH_REQUIRED" -> ui(R.string.ui_the_agent_rejected_the_access_key)
+    "AUTH_REQUIRED", "API_401", "API_403" -> ui(R.string.ui_the_agent_rejected_the_access_key)
     "UPSTREAM_CHECK_UNAVAILABLE" -> ui(R.string.ui_could_not_verify_the_version_on)
     "HTTPS_UNREACHABLE" -> ui(R.string.agent_https_unreachable)
     "TLS_INVALID" -> ui(R.string.ui_the_https_certificate_could_not_be)

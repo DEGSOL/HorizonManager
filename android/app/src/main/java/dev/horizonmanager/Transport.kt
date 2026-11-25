@@ -9,8 +9,15 @@ import com.jcraft.jsch.ChannelSftp
 import com.jcraft.jsch.HostKey
 import com.jcraft.jsch.HostKeyRepository
 import com.jcraft.jsch.JSch
+import com.jcraft.jsch.JSchAlgoNegoFailException
 import com.jcraft.jsch.Session
 import com.jcraft.jsch.UserInfo
+import com.jcraft.jsch.SocketFactory
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -21,12 +28,120 @@ import java.io.BufferedInputStream
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import java.io.IOException
+import java.net.ConnectException
+import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.NoRouteToHostException
+import java.net.Socket
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.security.MessageDigest
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 internal const val MAX_RESPONSE = 20 * 1024 * 1024
-internal class Problem(val code: String, val detail: String = "") : Exception(code)
+internal class Problem(val code: String, val detail: String = "", cause: Throwable? = null) : Exception(code, cause)
+
+internal fun Throwable.connectionTrace(): String = generateSequence(this) { it.cause }.take(5)
+    .joinToString(" ← ") { error ->
+        val frame = error.stackTrace.firstOrNull { it.className.startsWith("dev.horizonmanager.") ||
+            it.className.startsWith("com.jcraft.jsch.") || it.className.startsWith("okhttp3.") }
+        if (frame == null) error.javaClass.simpleName
+        else "${error.javaClass.simpleName} @ ${frame.className.substringAfterLast('.')}.${frame.methodName}:${frame.lineNumber}"
+    }
+
+private class TransportCancellation {
+    private val cancelled: () -> Unit = {}
+    private val current = AtomicReference<(() -> Unit)?>(null)
+
+    fun track(close: () -> Unit) {
+        while (true) {
+            val previous = current.get()
+            if (previous === cancelled) {
+                close()
+                throw java.io.InterruptedIOException()
+            }
+            if (current.compareAndSet(previous, close)) return
+        }
+    }
+
+    fun cancel() {
+        runCatching { current.getAndSet(cancelled)?.invoke() }
+    }
+}
+
+private val transportCancellation = ThreadLocal<TransportCancellation>()
+private val sshConnections = Array(16) { Mutex() }
+
+/** An operation owns its SSH session or HTTPS call until completion, including cancellation. */
+internal suspend fun <T> useTransport(sshServer: Server? = null, block: () -> T): T =
+    withContext(Dispatchers.IO) {
+        suspend fun run(): T = suspendCancellableCoroutine { continuation ->
+            if (!continuation.isActive) return@suspendCancellableCoroutine
+            val cancellation = TransportCancellation()
+            continuation.invokeOnCancellation { cancellation.cancel() }
+            transportCancellation.set(cancellation)
+            try {
+                continuation.resumeWith(runCatching(block))
+            } finally {
+                transportCancellation.remove()
+            }
+        }
+        if (sshServer == null) run()
+        else sshConnections[(sshServer.host.lowercase().hashCode() * 31 + sshServer.port).and(15)]
+            .withLock { run() }
+    }
+
+private const val SSH_CONNECT_TIMEOUT = 12_000
+private const val SSH_ADDRESS_TIMEOUT = 4_000
+
+private class SshSocketFactory(private val connected: () -> Unit) : SocketFactory {
+    override fun createSocket(host: String, port: Int): Socket {
+        val addresses = InetAddress.getAllByName(host).distinct()
+        val first = addresses.first()
+        val alternate = addresses.firstOrNull { it.javaClass != first.javaClass }
+        val ordered = (listOfNotNull(first, alternate) + addresses).distinct()
+        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(SSH_CONNECT_TIMEOUT.toLong())
+        var failure: IOException? = null
+        for (address in ordered) {
+            val remaining = TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime())
+            if (remaining <= 0) throw SocketTimeoutException()
+            val socket = Socket()
+            try {
+                transportCancellation.get()?.track(socket::close)
+                socket.connect(InetSocketAddress(address, port), minOf(remaining, SSH_ADDRESS_TIMEOUT.toLong()).toInt())
+                connected()
+                return socket
+            } catch (error: IOException) {
+                runCatching { socket.close() }
+                if (error is java.io.InterruptedIOException && error !is SocketTimeoutException) throw error
+                if (failure == null || error is SocketTimeoutException) failure = error
+            }
+        }
+        throw failure ?: UnknownHostException()
+    }
+
+    override fun getInputStream(socket: Socket) = socket.getInputStream()
+    override fun getOutputStream(socket: Socket) = socket.getOutputStream()
+}
+internal fun isConnectionFailure(problem: String): Boolean =
+    problem.substringBefore(" · ").let {
+        it.startsWith("SSH_") || it in setOf(
+            "NETWORK_UNAVAILABLE", "AGENT_UNREACHABLE", "AGENT_TIMEOUT", "AGENT_INACTIVE", "AGENT_TUNNEL",
+            "AGENT_PROTOCOL", "AGENT_API_ERROR", "HTTPS_UNREACHABLE", "HTTPS_DNS", "HTTPS_TIMEOUT", "TLS_INVALID",
+            "AUTH_REQUIRED", "API_401", "API_403",
+        )
+    }
+
+internal fun isTransientConnectionFailure(code: String): Boolean = code in setOf(
+    "SSH_CONNECT", "SSH_TIMEOUT", "SSH_REFUSED", "SSH_DNS", "SSH_SESSION_LOST",
+    "AGENT_UNREACHABLE", "AGENT_TIMEOUT", "AGENT_INACTIVE", "AGENT_API_ERROR", "HTTPS_UNREACHABLE", "HTTPS_TIMEOUT", "HTTPS_DNS",
+    "NETWORK_UNAVAILABLE",
+)
+
 internal class HostConfirmation(val fingerprint: String, val previous: String) : Exception()
 
 internal data class Server(
@@ -101,6 +216,8 @@ internal object Ssh {
         val repository = HostPin(server.pin)
         jsch.hostKeyRepository = repository
         val session = jsch.getSession(server.user, server.host, server.port)
+        var tcpConnected = false
+        session.setSocketFactory(SshSocketFactory { tcpConnected = true })
         session.setConfig("StrictHostKeyChecking", "yes")
         session.setConfig("PreferredAuthentications", if (server.keyMode) "publickey" else "password,keyboard-interactive")
         session.setConfig("NumberOfPasswordPrompts", "1")
@@ -110,15 +227,15 @@ internal object Ssh {
                 try {
                     jsch.addIdentity("horizon-user-key", server.credential.toByteArray(), null,
                         server.passphrase.takeIf { it.isNotEmpty() }?.toByteArray())
-                } catch (_: Exception) {
-                    throw Problem("SSH_KEY")
+                } catch (error: Exception) {
+                    throw Problem("SSH_KEY", cause = error)
                 }
             } else {
                 session.setPassword(server.credential)
             }
             session.setServerAliveInterval(10_000)
             session.setServerAliveCountMax(2)
-            session.connect(10_000)
+            session.connect(SSH_CONNECT_TIMEOUT)
             return session
         } catch (error: Exception) {
             session.disconnect()
@@ -126,16 +243,20 @@ internal object Ssh {
                 throw HostConfirmation(repository.received, server.pin)
             }
             if (error is Problem) throw error
+            val causes = generateSequence<Throwable>(error) { it.cause }.toList()
             val description = error.message.orEmpty()
             val code = when {
-                description.contains("Auth", true) -> "SSH_AUTH"
-                generateSequence<Throwable>(error) { it.cause }.any { it is java.net.UnknownHostException } -> "SSH_DNS"
-                generateSequence<Throwable>(error) { it.cause }.any { it is java.net.SocketTimeoutException } ||
-                    description.contains("timeout", true) -> "SSH_TIMEOUT"
-                description.contains("refused", true) -> "SSH_REFUSED"
+                causes.any { it is UnknownHostException } -> "SSH_DNS"
+                causes.any { it is SocketTimeoutException } || description.contains("timeout", true) -> "SSH_TIMEOUT"
+                causes.any { it is NoRouteToHostException } -> "NETWORK_UNAVAILABLE"
+                causes.any { it is ConnectException } && description.contains("refused", true) -> "SSH_REFUSED"
+                description.startsWith("Auth fail", true) || description.startsWith("Auth cancel", true) ||
+                    description.contains("too many authentication failures", true) -> "SSH_AUTH"
+                causes.any { it is JSchAlgoNegoFailException } -> "SSH_NEGOTIATION"
+                tcpConnected -> "SSH_HANDSHAKE"
                 else -> "SSH_CONNECT"
             }
-            throw Problem(code)
+            throw Problem(code, if (tcpConnected) "ssh" else "tcp/dns", error)
         }
     }
 
@@ -149,13 +270,22 @@ internal object Ssh {
         channel.setCommand(command)
         if (input != null) channel.setInputStream(ByteArrayInputStream(input))
         val stream = channel.inputStream
-        val timeout = deadlines.schedule({ channel.disconnect() }, 30, TimeUnit.SECONDS)
+        val expired = AtomicBoolean(false)
+        val timeout = deadlines.schedule({ expired.set(true); channel.disconnect() }, 30, TimeUnit.SECONDS)
         return try {
             channel.connect(10_000)
             val output = stream.readBounded(128 * 1024).decodeToString().trim()
-            repeat(30) { if (channel.exitStatus < 0 && !channel.isClosed) Thread.sleep(20) }
+            val exitDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
+            while (channel.exitStatus < 0 && !channel.isClosed && session.isConnected &&
+                !expired.get() && System.nanoTime() < exitDeadline) Thread.sleep(20)
+            if (expired.get()) throw Problem("SSH_COMMAND_TIMEOUT")
+            if (!session.isConnected) throw Problem("SSH_SESSION_LOST")
             if (channel.exitStatus != 0) throw Problem("SSH_COMMAND", channel.exitStatus.toString())
             output
+        } catch (error: Exception) {
+            if (error is Problem) throw error
+            if (expired.get()) throw Problem("SSH_COMMAND_TIMEOUT", cause = error)
+            throw Problem(if (session.isConnected) "SSH_COMMAND" else "SSH_SESSION_LOST", cause = error)
         } finally {
             timeout.cancel(false)
             channel.disconnect()
@@ -202,16 +332,23 @@ internal object Ssh {
     }
 
     fun http(session: Session, token: String, method: String, path: String, data: ByteArray): Pair<Int, String> {
-        val channel = session.openChannel("direct-tcpip") as ChannelDirectTCPIP
-        channel.setHost("127.0.0.1")
-        channel.setPort(18777)
-        channel.setOrgIPAddress("127.0.0.1")
-        channel.setOrgPort(0)
-        val input = BufferedInputStream(channel.inputStream)
-        val output = channel.outputStream
-        val timeout = deadlines.schedule({ channel.disconnect() }, 30, TimeUnit.SECONDS)
+        val channel = try {
+            session.openChannel("direct-tcpip") as ChannelDirectTCPIP
+        } catch (error: Exception) {
+            throw Problem("SSH_SESSION_LOST", cause = error)
+        }
+        val expired = AtomicBoolean(false)
+        val timeout = deadlines.schedule({ expired.set(true); channel.disconnect() }, 30, TimeUnit.SECONDS)
+        var forwarded = false
         return try {
+            channel.setHost("127.0.0.1")
+            channel.setPort(18777)
+            channel.setOrgIPAddress("127.0.0.1")
+            channel.setOrgPort(0)
+            val input = BufferedInputStream(channel.inputStream)
+            val output = channel.outputStream
             channel.connect(7_000)
+            forwarded = true
             output.write(("$method /v1/$path HTTP/1.0\r\nHost: 127.0.0.1:18777\r\n" +
                 "Authorization: Bearer $token\r\nContent-Type: application/json\r\n" +
                 "Content-Length: ${data.size}\r\nConnection: close\r\n\r\n").toByteArray())
@@ -237,10 +374,11 @@ internal object Ssh {
                 offset += count
             }
             status to result.decodeToString()
-        } catch (error: Problem) {
-            throw error
-        } catch (_: Exception) {
-            throw Problem("AGENT_UNREACHABLE")
+        } catch (error: Exception) {
+            if (expired.get()) throw Problem("AGENT_TIMEOUT", cause = error)
+            if (!session.isConnected) throw Problem("SSH_SESSION_LOST", cause = error)
+            if (error is Problem) throw error
+            throw Problem(if (forwarded) "AGENT_UNREACHABLE" else "AGENT_TUNNEL", cause = error)
         } finally {
             timeout.cancel(false)
             channel.disconnect()
@@ -249,12 +387,36 @@ internal object Ssh {
 }
 
 internal class AgentApi(private val server: Server, private val session: Session? = null) {
+    fun health(): JSONObject = identity("health")
+    fun status(): JSONObject = identity("status")
+
+    private fun identity(path: String): JSONObject {
+        val response = try {
+            get(path) as? JSONObject ?: throw Problem("AGENT_PROTOCOL")
+        } catch (error: Problem) {
+            if (isConnectionFailure(error.code)) throw error
+            throw Problem(if (error.code == "API_404") "AGENT_PROTOCOL" else "AGENT_API_ERROR", cause = error)
+        }
+        if (response.optInt("api") != 1 || (response.opt("agent") as? String).isNullOrBlank()) {
+            throw Problem("AGENT_PROTOCOL")
+        }
+        return response
+    }
+
     fun get(path: String) = request("GET", path)
+    fun digestNotificationMarker(after: String? = null): String {
+        val cursor = after?.takeIf { validDigestMarker(it) }
+        val path = if (cursor == null) "digest-notifications" else "digest-notifications?after=$cursor"
+        val result = request("GET", path, waitForDigest = cursor != null)
+        return (result as? JSONObject)?.opt("id")?.let { it as? String }?.takeIf(::validDigestMarker)
+            ?: throw Problem("AGENT_PROTOCOL")
+    }
+
     fun post(path: String, body: JSONObject = JSONObject()) = request("POST", path, body)
     fun put(path: String, body: JSONObject) = request("PUT", path, body)
     fun delete(path: String) = request("DELETE", path)
 
-    private fun request(method: String, path: String, value: JSONObject? = null): Any {
+    private fun request(method: String, path: String, value: JSONObject? = null, waitForDigest: Boolean = false): Any {
         check(Regex("[a-zA-Z0-9/_=&?.-]+").matches(path) && ".." !in path)
         val body = value?.toString()?.toByteArray() ?: ByteArray(0)
         val (status, data) = if (server.https.isNotEmpty()) {
@@ -264,13 +426,19 @@ internal class AgentApi(private val server: Server, private val session: Session
                 .method(method, if (value != null) body.toRequestBody("application/json".toMediaType()) else null)
                 .build()
             try {
-                httpClient.newCall(request).execute().use { response ->
+                val call = (if (waitForDigest) digestClient else httpClient).newCall(request)
+                transportCancellation.get()?.track(call::cancel)
+                call.execute().use { response ->
                     response.code to (response.body?.byteStream()?.readBounded(MAX_RESPONSE)?.decodeToString().orEmpty())
                 }
-            } catch (_: javax.net.ssl.SSLException) {
-                throw Problem("TLS_INVALID")
-            } catch (error: java.io.IOException) {
-                throw Problem("HTTPS_UNREACHABLE")
+            } catch (error: javax.net.ssl.SSLException) {
+                throw Problem("TLS_INVALID", cause = error)
+            } catch (error: SocketTimeoutException) {
+                throw Problem("HTTPS_TIMEOUT", cause = error)
+            } catch (error: UnknownHostException) {
+                throw Problem("HTTPS_DNS", cause = error)
+            } catch (error: IOException) {
+                throw Problem("HTTPS_UNREACHABLE", cause = error)
             }
         } else {
             Ssh.http(requireNotNull(session), server.token, method, path, body)
@@ -287,6 +455,8 @@ internal class AgentApi(private val server: Server, private val session: Session
     companion object {
         private val httpClient = OkHttpClient.Builder().callTimeout(35, TimeUnit.SECONDS)
             .followRedirects(false).followSslRedirects(false).build()
+
+        private val digestClient = httpClient.newBuilder().readTimeout(26, TimeUnit.SECONDS).build()
 
         fun validHttps(value: String): Boolean {
             if (value.isBlank()) return true

@@ -216,8 +216,6 @@
     <string name="ui_events_for_this_operation">この操作のイベント</string>
     <string name="ui_copy">コピー</string>
     <string name="ui_update_vps_agent">VPS エージェントを更新</string>
-    <string name="ui_push_notification_service">プッシュ通知サービス</string>
-    <string name="ui_install_ntfy_and_enable_unifiedpush_in">ntfy をインストールし、その設定で UnifiedPush を有効にしてください。</string>
     <string name="ui_model_api_address_and_request_limits">モデル、API アドレス、リクエスト制限</string>
     <string name="ui_prompts_scoring_criteria_and_output_blocks">プロンプト、評価基準、出力セクション</string>
     <string name="ui_email_and_webhook">メールと Webhook</string>
@@ -231,8 +229,6 @@
     <string name="ui_https_domain_optional">HTTPS ドメイン（任意）</string>
     <string name="ui_leave_blank_to_use_ssh_https">SSH を使う場合は空欄にします。HTTPS には有効な TLS 証明書付きリバースプロキシが必要です。</string>
     <string name="ui_background_news_checks">ニュースのバックグラウンド確認</string>
-    <string name="ui_connect_push_notifications">プッシュ通知を接続</string>
-    <string name="ui_disconnect_push_notifications">プッシュ通知を解除</string>
     <string name="ui_save_connection">接続設定を保存</string>
     <string name="ui_save_secret">シークレットを保存</string>
     <string name="ui_remove">削除</string>

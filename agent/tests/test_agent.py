@@ -34,15 +34,20 @@ class Fixture(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
-        if self.path != "/feed":
+        if self.path not in {"/feed", "/alternate-feed"}:
             self.send_error(404)
             return
         date = format_datetime(datetime.now(timezone.utc), usegmt=True)
+        title, story, item = (
+            ("Chipmaker starts selling its PocketStream handheld", "alternate-news", "alternate-id")
+            if self.path == "/alternate-feed" else
+            ("Fixture engineering article", "fixture-news", "fixture-id")
+        )
         data = f'''<?xml version="1.0"?>
         <rss version="2.0"><channel><title>Fixture</title><link>https://example.org/</link>
-        <description>Local integration test feed</description><item><title>Fixture engineering article</title>
-        <link>https://example.org/fixture-news</link><description>Fixture article content</description>
-        <guid>fixture-id</guid><pubDate>{date}</pubDate></item></channel></rss>'''.encode()
+        <description>Local integration test feed</description><item><title>{title}</title>
+        <link>https://example.org/{story}</link><description>Fixture article content</description>
+        <guid>{item}</guid><pubDate>{date}</pubDate></item></channel></rss>'''.encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/rss+xml")
         self.send_header("Content-Length", str(len(data)))
@@ -78,6 +83,11 @@ class Fixture(BaseHTTPRequestHandler):
             content = json.dumps({"title": title, "blocks": [
                 {"id": "summary", "title": "Summary", "content": article, "source_refs": []}
             ]})
+        elif "Find alternate reports of the same news event" in instructions:
+            self.server.duplicate_requests.append(json.loads(request["messages"][1]["content"]))
+            content = '{"duplicates": [[0, 1]]}'
+        elif "Identify groups of news items" in instructions:
+            content = '{"duplicates": []}'
         elif "brief summaries into" in instructions:
             self.server.translation_requests.append(instructions)
             texts = {
@@ -121,6 +131,7 @@ class AgentTests(unittest.TestCase):
     def setUp(self):
         self.fixture.classification_requests = []
         self.fixture.enrichment_requests = []
+        self.fixture.duplicate_requests = []
         self.fixture.translation_requests = []
         self.temp = TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -159,6 +170,42 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(self.client.post("/v1/jobs", content=b"x",
                                          headers={"Content-Length": "12000000"}).status_code, 413)
 
+    def test_notification_plan_tracks_schedule_and_unfinished_digest_jobs(self):
+        path = "/v1/digest-notification-plan"
+        self.assertEqual(self.client.get(path).json(), {"id": "", "next": None, "preparing_since": None})
+        scheduled = self.client.put("/v1/schedule", json={"mode": "interval", "hours": 6}).json()["next"]
+        run = uuid4().hex
+        with Store(self.root).db() as db:
+            Store.queue(db, run, "run", {})
+            db.execute("UPDATE jobs SET state='running' WHERE id=?", (run,))
+            started = db.execute("SELECT created FROM jobs WHERE id=?", (run,)).fetchone()[0]
+        self.assertEqual(self.client.get(path).json(), {"id": "", "next": scheduled, "preparing_since": started})
+        with Store(self.root).db() as db:
+            db.execute("UPDATE jobs SET result=? WHERE id=?", (json.dumps({"languages": ["ru"]}), run))
+        self.assertEqual(self.client.get(path).json(), {"id": run, "next": scheduled, "preparing_since": None})
+        self.assertEqual(self.client.get(path, headers={"Authorization": ""}).status_code, 401)
+
+    def test_live_digest_wakes_without_a_push_registration(self):
+        path = "/v1/digest-notifications"
+        self.assertTrue(self.client.get("/v1/health").json()["digest_notifications"])
+        first = self.client.get(path)
+        self.assertEqual(first.json(), {"id": ""})
+        self.assertEqual(first.headers["Cache-Control"], "no-store")
+        self.assertEqual(self.client.get(path, params={"after": "bad"}).status_code, 422)
+        self.assertEqual(self.client.get(path, headers={"Authorization": ""}).status_code, 401)
+        self.assertEqual(self.client.put("/v1/config", json=self.config()).status_code, 200)
+        run = uuid4()
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            waiting = pool.submit(self.client.get, path, params={"after": "", "wait": 18})
+            time.sleep(.15)
+            self.assertFalse(waiting.done())
+            self.assertLess(self.client.post("/v1/jobs", json={"id": str(run)}).status_code, 300)
+            self.assertEqual(waiting.result(15).json(), {"id": run.hex})
+        self.assertEqual(self.client.get(path, params={"after": "", "wait": 0}).json(), {"id": run.hex})
+        self.assertEqual(self.client.get(path, params={"after": run.hex, "wait": 1}).json(), {"id": run.hex})
+        with Store(self.root).db() as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM push_devices").fetchone()[0], 0)
+
     def test_invalid_classifier_response_retries_only_the_profile_selection(self):
         config = self.config(model="classify-with-retry")
         config["config"]["sources"]["rss"][0]["profile"] = ["tech-news", "tech-blog"]
@@ -185,15 +232,28 @@ class AgentTests(unittest.TestCase):
         self.assertFalse(self.client.get("/v1/status").json()["media_search"])
         self.assertTrue(self.client.put("/v1/media-search", json={"enabled": True}).json()["enabled"])
         self.assertEqual(self.client.put("/v1/digest-language", json={"language": "ru"}).json(), {"language": "ru"})
+        self.assertEqual(self.client.get("/v1/status").json()["headline_max_words"], 10)
+        self.assertEqual(self.client.get("/v1/status").json()["headline_range"], {"minimum": 3, "maximum": 60})
+        self.assertEqual(self.client.put("/v1/headline-length", json={"words": 31}).status_code, 422)
+        self.assertEqual(self.client.put("/v1/headline-length", json={"words": 16}).json(), {"words": 16})
+        self.assertEqual(self.client.get("/v1/status").json()["headline_range"], {"minimum": 3, "maximum": 96})
+        self.assertEqual(self.client.put("/v1/headline-range", json={"minimum": 8, "maximum": 3}).status_code, 422)
+        self.assertEqual(self.client.put("/v1/headline-range", json={"minimum": 0, "maximum": 8}).status_code, 422)
+        self.assertEqual(self.client.put("/v1/headline-range", json={"minimum": 3, "maximum": 241}).status_code, 422)
+        limits = {"minimum": 3, "maximum": 8}
+        self.assertEqual(self.client.put("/v1/headline-range", json=limits).json(), limits)
         self.assertEqual(before, self.client.get("/v1/config").json())
         backup = self.client.post("/v1/backup", json={"password": "long-password-for-tests"}).json()["archive"]
         self.client.put("/v1/media-search", json={"enabled": False})
         self.client.put("/v1/digest-language", json={"language": "en"})
+        self.client.put("/v1/headline-length", json={"words": 10})
         self.assertEqual(self.client.post("/v1/restore", json={"password": "long-password-for-tests",
                          "archive": backup, "revision": before["revision"]}).status_code, 200)
         status = self.client.get("/v1/status").json()
         self.assertTrue(status["media_search"])
         self.assertEqual(status["digest_language"], "ru")
+        self.assertEqual(status["headline_max_words"], 16)
+        self.assertEqual(status["headline_range"], limits)
 
     def test_digest_language_upgrade_keeps_old_choice_and_accepts_all_new_codes(self):
         import sqlite3
@@ -219,6 +279,7 @@ class AgentTests(unittest.TestCase):
     def test_generation_uses_one_new_language(self):
         self.assertEqual(self.client.put("/v1/config", json=self.config()).status_code, 200)
         self.assertEqual(self.client.put("/v1/digest-language", json={"language": "fr"}).status_code, 200)
+        self.assertEqual(self.client.put("/v1/headline-range", json={"minimum": 12, "maximum": 30}).status_code, 200)
         run = uuid4()
         self.assertLess(self.client.post("/v1/jobs", json={"id": str(run)}).status_code, 300)
         job = self.wait(run.hex)
@@ -226,9 +287,11 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(job["result"]["languages"], ["fr"])
         self.assertEqual(len(self.fixture.translation_requests), 1)
         self.assertIn("into French", self.fixture.translation_requests[0])
+        self.assertIn("12 to 30 characters", self.fixture.translation_requests[0])
         digest = self.client.get(f"/v1/digests/{run.hex}/fr").json()
         self.assertIn("Revue du jour Horizon", digest["markdown"])
         self.assertEqual(digest["items"][0]["title"], "Article technique de test")
+        self.assertEqual(digest["items"][0]["publisher"], "Working fixture")
 
     def test_config_atomic_and_backup_integrity(self):
         expected = self.config()
@@ -295,6 +358,24 @@ class AgentTests(unittest.TestCase):
         self.assertNotIn(SECRET, json.dumps(events))
         with Store(self.root).db() as db:
             self.assertEqual(db.execute("SELECT state FROM jobs WHERE id=?", (id.hex,)).fetchone()[0], "success")
+
+    def test_manually_enriched_digest_filters_same_event_before_publication(self):
+        config = self.config()
+        config["config"]["sources"]["rss"][1] = {
+            "name": "Alternate fixture", "url": self.url + "/alternate-feed", "profile": "tech-news",
+        }
+        self.assertEqual(self.client.put("/v1/config", json=config).status_code, 200)
+        self.assertEqual(self.client.put("/v1/digest-language", json={"language": "en"}).status_code, 200)
+        run = uuid4()
+        self.client.post("/v1/jobs", json={"id": str(run)})
+        job = self.wait(run.hex)
+        self.assertEqual(job["state"], "success", job)
+        self.assertEqual(job["result"]["kept"], 1)
+        self.assertEqual(job["result"]["enrichment_mode"], "on_demand")
+        self.assertEqual(len(self.client.get(f"/v1/digests/{run.hex}/en").json()["items"]), 1)
+        self.assertEqual(self.fixture.enrichment_requests, [])
+        self.assertEqual(len(self.fixture.duplicate_requests), 1)
+        self.assertEqual(len(self.fixture.duplicate_requests[0]), 2)
 
     def test_on_demand_selected_article_is_deduplicated_and_does_not_rebuild_digest(self):
         self.assertEqual(self.client.get("/v1/status").json()["enrichment_mode"], "on_demand")
@@ -425,11 +506,12 @@ class AgentTests(unittest.TestCase):
         (directory / "summary-ru.md").write_text("# Перевод недоступен")
         requests_before = len(self.fixture.translation_requests)
         result = self.client.get(f"/v1/digests/{run.hex}/ru").json()
-        self.assertEqual(result["content_version"], 2)
+        self.assertEqual(result["content_version"], 3)
         self.assertEqual(result["items"][0]["title"], raw[0]["title"])
         self.assertEqual(result["items"][0]["body"], raw[0]["content"])
         self.assertEqual(result["items"][0]["telegram_channel"], "mrizonNews")
         self.assertEqual(result["items"][0]["telegram_url"], "https://t.me/mrizonNews/123")
+        self.assertEqual(result["items"][0]["source_url"], "https://t.me/mrizonNews/123")
         self.assertNotIn("Перевод недоступен", result["markdown"])
         self.assertIn(raw[0]["title"], result["markdown"])
         self.assertEqual(len(self.fixture.translation_requests), requests_before)
@@ -447,6 +529,24 @@ class AgentTests(unittest.TestCase):
             download.assert_awaited_once()
         self.assertEqual(self.client.get(cover_path, headers={"Authorization": "Bearer wrong"}).status_code, 401)
         self.assertEqual(self.client.get(f"/v1/covers/{run.hex}/{key_for('not-in-this-digest')}").status_code, 404)
+
+    def test_digest_exposes_discussion_without_changing_external_url(self):
+        self.assertEqual(self.client.put("/v1/config", json=self.config()).status_code, 200)
+        run = uuid4()
+        self.client.post("/v1/jobs", json={"id": str(run)})
+        self.assertEqual(self.wait(run.hex)["state"], "success")
+        localized = self.root / "runs" / run.hex / "localized_items.json"
+        raw = json.loads(localized.read_text())
+        for source, thread in (
+            ("reddit", "https://www.reddit.com/r/android/comments/abc123/thread/"),
+            ("hackernews", "https://news.ycombinator.com/item?id=42"),
+        ):
+            external = "https://example.org/linked-story"
+            raw[0].update(source_type=source, url=external, metadata={"discussion_url": thread})
+            localized.write_text(json.dumps(raw))
+            result = self.client.get(f"/v1/digests/{run.hex}/en").json()
+            self.assertEqual(result["items"][0]["url"], external)
+            self.assertEqual(result["items"][0]["source_url"], thread)
 
     def test_ai_preflight_and_push_registration(self):
         response = self.client.post("/v1/jobs", json={"id": str(uuid4()), "kind": "ai"})
@@ -537,6 +637,21 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(self.fixture.enrichment_requests, [])
         self.assertFalse(any(event["code"] == "enrich" for event in self.client.get("/v1/events").json()))
         self.assertEqual(self.client.get("/v1/schedule").json()["spec"]["hours"], 2)
+
+    def test_interval_starts_at_selected_wall_time_and_keeps_cadence(self):
+        settings = {"mode": "interval", "hours": 7, "interval_start": "08:15", "zone": "Asia/Yekaterinburg"}
+        stamp = datetime(2026, 11, 25, 2, 0, tzinfo=timezone.utc).timestamp()
+        expected = datetime(2026, 11, 25, 3, 15, tzinfo=timezone.utc).timestamp()
+        with patch("horizon_manager.api.time.time", return_value=stamp):
+            result = self.client.put("/v1/schedule", json=settings).json()
+        self.assertEqual(result["next"], expected)
+        self.assertEqual(self.client.get("/v1/schedule").json()["spec"]["interval_start"], "08:15")
+        with patch("horizon_manager.api.time.time", return_value=expected + 20):
+            self.assertEqual(self.client.put("/v1/schedule", json=settings).json()["next"], expected)
+        schedule = Schedule.model_validate(settings)
+        self.assertEqual(next_run(schedule, expected + 20, previous=expected), expected + 7 * 3600)
+        self.assertEqual(next_run(schedule, expected + 7 * 3600 + 60, previous=expected), expected + 14 * 3600)
+        self.assertEqual(self.client.put("/v1/schedule", json={**settings, "interval_start": "24:00"}).status_code, 422)
 
     def test_restart_marks_inflight_without_resubmission(self):
         id = uuid4().hex

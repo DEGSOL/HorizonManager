@@ -3,43 +3,52 @@ package dev.horizonmanager
 import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import org.unifiedpush.android.connector.UnifiedPush
 
 @Composable
 private fun SettingsSection(@StringRes title: Int, content: @Composable ColumnScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(ui(title), Modifier.padding(start = 4.dp), style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Tile(content = content)
+            color = if (LocalLightGlass.current) LocalHorizonPalette.current.text else MaterialTheme.colorScheme.onSurfaceVariant)
+        content()
     }
 }
 
 @Composable
-internal fun SettingsHome(panel: Panel, preset: ThemePreset, open: (String) -> Unit, page: String, servers: () -> Unit) {
+internal fun SettingsHome(panel: Panel, open: (String) -> Unit, page: String) {
     val configured = panel.config.has("config") && panel.schema.length() > 0
     fun rowPage(id: String): () -> Unit = { open(id) }
     when (page) {
         "settings" -> {
-            Tile(Modifier.clickable(role=androidx.compose.ui.semantics.Role.Button,onClick=rowPage("server_settings")),accented=true) {
-                Text(ui(R.string.mr_server),style=MaterialTheme.typography.labelLarge,color=LocalHorizonPalette.current.link)
-                Text(panel.server?.name ?: ui(R.string.editorial_not_configured),style=MaterialTheme.typography.headlineSmall)
-                panel.server?.let { Text(it.host,style=MaterialTheme.typography.bodySmall,color=LocalHorizonPalette.current.muted) }
+            Column(Modifier.fillMaxWidth().connectionStatusGlass(panel)
+                .clickable(role = Role.Button, onClick = rowPage("server_settings"))
+                .padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text(ui(R.string.mr_server), style = MaterialTheme.typography.labelLarge, color = Color.White)
+                Text(panel.server?.name ?: ui(R.string.editorial_not_configured),
+                    style = MaterialTheme.typography.headlineSmall, color = Color.White)
+                panel.server?.let {
+                    Text(it.host, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = .87f))
+                }
             }
-            if (panel.ready) SettingsSection(R.string.setting_group_content) {
-                GlassSettingRow(ui(R.string.archive_digests), ui(R.string.archive_digests_detail), open = rowPage("archive"))
-                GlassSettingRow(ui(R.string.mr_news), ui(R.string.mr_news_detail), open = rowPage("news_settings"))
-                GlassSettingRow(ui(R.string.editorial_ai_processing), ui(R.string.editorial_ai_settings_detail),
-                    enabled = configured, open = rowPage("ai_settings"))
-            }
-            SettingsSection(R.string.setting_group_application) {
-                GlassSettingRow(ui(R.string.mr_interface), ui(preset.title), open = rowPage("interface"))
-                GlassSettingRow(ui(R.string.ui_maintenance), ui(R.string.settings_journal_detail), open = rowPage("maintenance"))
+            CompositionLocalProvider(LocalLightGlass provides true) {
+                if (panel.ready) SettingsSection(R.string.setting_group_content) {
+                    GlassSettingRow(ui(R.string.archive_digests), ui(R.string.archive_digests_detail), open = rowPage("archive"))
+                    GlassSettingRow(ui(R.string.mr_news), ui(R.string.mr_news_detail), open = rowPage("news_settings"))
+                    GlassSettingRow(ui(R.string.editorial_ai_processing), ui(R.string.editorial_ai_settings_detail),
+                        enabled = configured, open = rowPage("ai_settings"))
+                }
+                SettingsSection(R.string.setting_group_application) {
+                    GlassSettingRow(ui(R.string.mr_interface), ui(R.string.hovq_icon), open = rowPage("interface"))
+                    GlassSettingRow(ui(R.string.ui_maintenance), ui(R.string.settings_journal_detail), open = rowPage("maintenance"))
+                }
             }
         }
         "news_settings" -> {
@@ -49,19 +58,8 @@ internal fun SettingsHome(panel: Panel, preset: ThemePreset, open: (String) -> U
             }
             if (configured) SettingsSection(R.string.ui_digest) { DigestSettings(open) }
         }
-        "server_settings" -> {
-            ServerConnectionStatus(panel, model = null)
-            SettingsSection(R.string.ui_connection) {
-                GlassSettingRow(ui(R.string.ui_servers), ui(R.string.servers_description), open = servers)
-                if (panel.ready) {
-                    GlassSettingRow(ui(R.string.ui_connection), ui(R.string.settings_connection_detail), open = rowPage("connection"))
-                    GlassSettingRow(ui(R.string.control), ui(R.string.control_description), open = rowPage("control"))
-                }
-            }
-        }
         "interface" -> {
             SettingsSection(R.string.setting_group_reading) {
-                GlassSettingRow(ui(R.string.theme), ui(preset.title), open = rowPage("theme"))
                 GlassSettingRow(ui(R.string.hovq_icon), ui(R.string.hovq_icon_detail), open = rowPage("icon"))
                 GlassSettingRow(ui(R.string.editorial_feed_behavior), ui(R.string.editorial_feed_behavior_detail), open = rowPage("reading"))
             }
@@ -122,124 +120,93 @@ internal fun AiSettings(panel: Panel, model: ManagerModel, open: (String) -> Uni
     }
 }
 
-internal fun isConnectionFailure(problem: String): Boolean =
-    problem.startsWith("SSH_") || problem.startsWith("HTTPS_") || problem.startsWith("AGENT_") ||
-        problem.substringBefore(" · ") in setOf("AUTH_REQUIRED", "API_401", "API_403")
+internal fun ConnectionPhase.label(): Int = when (this) {
+    ConnectionPhase.Idle -> R.string.editorial_not_checked
+    ConnectionPhase.Connecting -> R.string.editorial_connecting
+    ConnectionPhase.SshAvailable -> R.string.connection_ssh_available
+    ConnectionPhase.CheckingAgent -> R.string.connection_checking_agent
+    ConnectionPhase.Connected -> R.string.editorial_connected
+}
+
+@Composable
+private fun Modifier.connectionStatusGlass(panel: Panel): Modifier {
+    val connected = panel.server != null && panel.ready &&
+        panel.connectionPhase == ConnectionPhase.Connected && panel.connectionProblem.isBlank()
+    return glassSurface(feedGlassShape).savedNoticeWash(if (connected) NoticeWash.Connected else NoticeWash.Disconnected)
+}
 
 @Composable
 internal fun ServerConnectionStatus(panel: Panel, model: ManagerModel?) {
-    val theme = LocalHorizonPalette.current
     val problem = panel.connectionProblem
-    val (title, color) = when {
-        panel.server == null -> R.string.editorial_not_configured to theme.muted
-        panel.syncing || panel.busy && panel.lastContact.isBlank() -> R.string.editorial_connecting to theme.muted
-        problem.substringBefore(" · ") in setOf("SSH_AUTH", "AUTH_REQUIRED", "API_401", "API_403") -> R.string.editorial_auth_error to theme.danger
-        problem.isNotBlank() -> R.string.editorial_unavailable to theme.danger
-        panel.lastContact.isNotBlank() -> R.string.editorial_connected to theme.success
-        else -> R.string.editorial_not_checked to theme.muted
+    val title = when {
+        panel.server == null -> R.string.editorial_not_configured
+        problem in setOf("SSH_AUTH", "AUTH_REQUIRED", "API_401", "API_403") ->
+            R.string.editorial_auth_error
+        problem.isNotBlank() -> R.string.editorial_unavailable
+        panel.connectionPhase == ConnectionPhase.Connected -> R.string.editorial_connected
+        else -> panel.connectionPhase.label()
     }
-    Tile {
-        Text(panel.server?.name ?: ui(R.string.ui_servers), style = MaterialTheme.typography.titleMedium)
-        Text(ui(title), style = MaterialTheme.typography.labelLarge, color = color)
+    Column(Modifier.fillMaxWidth().connectionStatusGlass(panel).padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Text(panel.server?.name ?: ui(R.string.ui_servers), style = MaterialTheme.typography.titleMedium, color = Color.White)
+        Text(ui(title), style = MaterialTheme.typography.labelLarge, color = Color.White)
         if (panel.lastContact.isNotBlank()) Text(ui(R.string.editorial_last_contact, localTime(panel.lastContact)),
-            style = MaterialTheme.typography.bodySmall, color = theme.muted)
-        if (problem.isNotBlank() && !panel.syncing && model != null) {
+            style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = .87f))
+        if (model != null && problem.isNotBlank()) {
             Text(errorText(problem), style = MaterialTheme.typography.bodyMedium)
-            TextButton(onClick = { model.refresh() }, enabled = !panel.busy) { Text(ui(R.string.ui_retry)) }
+            TextButton(onClick = {
+                if (panel.ready) model.refresh() else model.refreshInstallation(false)
+            }, enabled = !panel.busy) { Text(ui(R.string.ui_retry)) }
+        }
+        if (panel.connectionCancellable && model != null) {
+            TextButton(onClick = model::cancelConnection) { Text(ui(R.string.ui_cancel)) }
         }
     }
 }
 
 @Composable
-internal fun ConnectionSettings(panel: Panel, model: ManagerModel, dirtyChange: (Boolean) -> Unit, editSsh: () -> Unit) {
-    val server = panel.server ?: return
-    var url by remember(server.id, server.https) { mutableStateOf(server.https) }
-    val changed = url.trim() != server.https
-    val valid = AgentApi.validHttps(url.trim())
-    SideEffect { dirtyChange(changed) }
+internal fun ServerSettings(panel: Panel, model: ManagerModel, servers: () -> Unit,
+                            confirm: (String, () -> Unit) -> Unit) {
     ServerConnectionStatus(panel, model)
-    Tile {
-        val https = ui(R.string.ui_https_domain_optional)
-        OutlinedTextField(url, { url = it }, label = { Text(https) },
-            trailingIcon = { SettingHelp(https, R.string.ui_leave_blank_to_use_ssh_https) },
-            modifier = Modifier.fillMaxWidth(), singleLine = true, isError = changed && !valid,
-            supportingText = if (changed && !valid) ({ Text(errorText("HTTPS_URL")) }) else null,
-            colors = horizonFieldColors())
-        Reveal(changed) {
-            Text(ui(R.string.editorial_unsaved), color = LocalHorizonPalette.current.warning)
-            Button(onClick = { model.settings(url.trim(), server.background) },
-                enabled = !panel.busy && valid) { Text(ui(R.string.ui_save_connection)) }
+    GlassSettingRow(ui(R.string.ui_servers), ui(R.string.servers_description), open = servers)
+    val server = panel.server ?: return
+    var attaching by remember(server.id) { mutableStateOf(false) }
+    if (panel.connectionProblem in setOf("AUTH_REQUIRED", "API_401", "API_403")) {
+        OutlinedButton(onClick = { attaching = true }, enabled = !panel.busy) {
+            Text(ui(R.string.ui_connect_an_existing_agent))
         }
     }
-    GlassSettingRow(ui(R.string.ui_ssh_settings), "${server.user} @ ${server.host} · ${server.port}", enabled = !panel.busy && !changed, open = editSsh)
+    if (attaching) PasswordDialog(ui(R.string.ui_connect_an_existing_agent),
+        ui(R.string.ui_manager_will_retrieve_the_agent_key), close = { attaching = false }) { password ->
+        attaching = false
+        model.attachExisting(password)
+    }
+    if (panel.ready) HorizonOnVps(panel, model, confirm)
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun NotificationSettings(panel: Panel, model: ManagerModel, permission: () -> Unit, delivery: () -> Unit) {
+internal fun NotificationSettings(panel: Panel, model: ManagerModel, allowed: Boolean,
+                                  permission: () -> Unit, delivery: () -> Unit) {
     val server = panel.server ?: return
-    val context = LocalContext.current
-    val pushReady by remember(context, server.id) { DigestNotifications.observeRegistration(context, server.id) }
-        .collectAsState(initial = DigestNotifications.hasPush(context, server.id))
-    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    var allowed by remember { mutableStateOf(DigestNotifications.deliveryAllowed(context)) }
-    DisposableEffect(lifecycle, context) {
-        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                allowed = DigestNotifications.deliveryAllowed(context)
-            }
-        }
-        lifecycle.lifecycle.addObserver(observer)
-        onDispose { lifecycle.lifecycle.removeObserver(observer) }
-    }
-    var chooseDistributor by remember { mutableStateOf(false) }
-    if (chooseDistributor) {
-        val distributors = UnifiedPush.getDistributors(context)
-        HorizonAlertDialog(onDismissRequest = { chooseDistributor = false },
-            title = { Text(ui(R.string.ui_push_notification_service)) },
-            text = {
-                Column {
-                    if (distributors.isEmpty()) Text(ui(R.string.ui_install_ntfy_and_enable_unifiedpush_in))
-                    distributors.forEach { distributor ->
-                        val name = runCatching {
-                            context.packageManager.getApplicationLabel(context.packageManager.getApplicationInfo(distributor, 0)).toString()
-                        }.getOrDefault(distributor)
-                        TextButton(onClick = {
-                            chooseDistributor = false
-                            permission()
-                            DigestNotifications.register(context, distributor, server.id)
-                        }) { Text(name) }
-                    }
-                }
-            }, confirmButton = { TextButton(onClick = { chooseDistributor = false }) { Text(ui(R.string.ui_close)) } })
-    }
+    val live by DigestDeliveryService.connected.collectAsStateWithLifecycle()
     Tile {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(ui(R.string.ui_background_news_checks), Modifier.weight(1f))
-            SettingHelp(ui(R.string.ui_background_news_checks), R.string.hovq_polling_active)
-            Switch(server.background, enabled = !panel.busy, onCheckedChange = { checked ->
-                if (checked) permission()
+            Text(ui(R.string.hovq_digest_notifications), Modifier.weight(1f))
+            SettingHelp(ui(R.string.hovq_digest_notifications), R.string.hovq_push_delivery_help)
+            Switch(server.background, enabled = !panel.busy, inverted = true, onCheckedChange = { checked ->
                 model.settings(server.https, checked)
+                if (checked && !allowed) permission()
             })
         }
         Reveal(server.background) {
-            Text(ui(if (pushReady) R.string.hovq_push_active else R.string.hovq_polling_active),
-                style = MaterialTheme.typography.bodyMedium, color = LocalHorizonPalette.current.muted)
-            if (!allowed) Text(ui(R.string.hovq_alerts_blocked), color = LocalHorizonPalette.current.warning)
-            TextButton(onClick = {
-                val intent = android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                    .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
-                context.startActivity(intent)
-            }) { Text(ui(R.string.hovq_android_alert_settings)) }
-            FlowRow {
-                TextButton(onClick = { chooseDistributor = true }) { Text(ui(R.string.ui_connect_push_notifications)) }
-                if (pushReady || DigestNotifications.endpoint(context, server.id).isNotEmpty()) {
-                    TextButton(onClick = {
-                        DigestNotifications.unregister(context, server.id)
-                        DigestWorker.sync(context, server.id)
-                    }) { Text(ui(R.string.ui_disconnect_push_notifications)) }
-                }
+            if (allowed) {
+                Text(ui(if (server.id in live) R.string.hovq_listener_connected else R.string.hovq_polling_active),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = LocalHorizonPalette.current.muted)
+            } else {
+                Text(ui(R.string.hovq_alerts_blocked), color = LocalHorizonPalette.current.warning)
+                TextButton(onClick = permission) { Text(ui(R.string.hovq_allow_notifications)) }
             }
         }
     }
@@ -251,12 +218,27 @@ internal fun NotificationSettings(panel: Panel, model: ManagerModel, permission:
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ServerMaintenance(panel: Panel, model: ManagerModel, open: (String) -> Unit) {
-    var restart by remember { mutableStateOf(false) }
-    var upgrade by remember { mutableStateOf(false) }
+    val serverId = panel.server?.id
+    var restart by remember(serverId) { mutableStateOf(false) }
+    var upgrade by remember(serverId) { mutableStateOf(false) }
+    var runningTool by remember(serverId) { mutableIntStateOf(0) }
+    LaunchedEffect(runningTool, panel.busy, panel.updatingAgent) {
+        if (!panel.busy && !panel.updatingAgent) runningTool = 0
+    }
+    fun runTool(title: Int, action: () -> Unit) {
+        runningTool = title
+        action()
+    }
     if (restart) PasswordDialog(ui(R.string.ui_restart_agent), ui(R.string.ui_the_current_job_may_be_interrupted),
-        close = { restart = false }) { password -> restart = false; model.restart(password) }
+        close = { restart = false }) { password ->
+        restart = false
+        runTool(R.string.ui_restart_agent) { model.restart(password) }
+    }
     if (upgrade) PasswordDialog(ui(R.string.ui_update_vps_agent), ui(R.string.ui_settings_and_the_archive_will_stay),
-        close = { upgrade = false }) { password -> upgrade = false; model.updateAgent(password) }
+        close = { upgrade = false }) { password ->
+        upgrade = false
+        runTool(R.string.ui_update_vps_agent) { model.updateAgent(password) }
+    }
     Tile {
         GlassSettingRow(ui(R.string.journal), ui(R.string.settings_journal_detail)) { open("journal") }
         GlassSettingRow(ui(R.string.settings_transfer), ui(R.string.hovq_transfer_detail)) { open("transfer") }
@@ -269,16 +251,26 @@ internal fun ServerMaintenance(panel: Panel, model: ManagerModel, open: (String)
     if (!panel.ready) return
     Tile {
         Text(ui(R.string.settings_agent_tools), style = MaterialTheme.typography.titleMedium)
-        FlowRow {
-            TextButton(onClick = model::check, enabled = !panel.busy) { Text(ui(R.string.ui_check_configuration)) }
-            TextButton(onClick = model::checkVersions, enabled = !panel.busy) { Text(ui(R.string.ui_check_horizon_version)) }
-            TextButton(onClick = { restart = true }, enabled = !panel.busy) { Text(ui(R.string.ui_restart_agent)) }
+        val wash = rememberNoticeWashPhase()
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            CompactSettingsButton(R.string.ui_check_configuration, !panel.busy,
+                runningTool == R.string.ui_check_configuration, wash) {
+                runTool(R.string.ui_check_configuration, model::check)
+            }
+            CompactSettingsButton(R.string.ui_check_horizon_version, !panel.busy,
+                runningTool == R.string.ui_check_horizon_version, wash) {
+                runTool(R.string.ui_check_horizon_version, model::checkVersions)
+            }
+            CompactSettingsButton(R.string.ui_restart_agent, !panel.busy,
+                restart || runningTool == R.string.ui_restart_agent, wash) { restart = true }
             if (agentUpdateAvailable(panel.status.optString("agent")) || panel.updatingAgent) {
-                TextButton(onClick = { upgrade = true }, enabled = !panel.busy && !panel.updatingAgent &&
-                    panel.jobs.none { it.optString("state") in setOf("queued", "running") }) { Text(ui(R.string.ui_update_vps_agent)) }
+                val canUpdate = !panel.busy && !panel.updatingAgent &&
+                    panel.jobs.none { it.optString("state") in setOf("queued", "running") }
+                CompactSettingsButton(R.string.ui_update_vps_agent, canUpdate,
+                    upgrade || panel.updatingAgent || runningTool == R.string.ui_update_vps_agent, wash) { upgrade = true }
             }
         }
-        Reveal(panel.updatingAgent) { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+        Reveal(panel.updatingAgent) { DottedProgress(Modifier.fillMaxWidth()) }
         val result = panel.maintenanceResult
         Reveal(result.isNotEmpty()) { Text(result, style = MaterialTheme.typography.bodyMedium) }
     }

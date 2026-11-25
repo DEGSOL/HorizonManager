@@ -40,24 +40,22 @@ internal class Vault(context: Context) {
         }
     }
 
-    private fun read(slot: String, bound: Boolean = false): String? {
+    private fun read(slot: String): String? {
         val encoded = storage.getString(slot, null) ?: return null
         val data = Base64.decode(encoded, Base64.NO_WRAP)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply {
             init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, data.copyOfRange(0, 12)))
-            if (bound) updateAAD(slot.toByteArray())
         }
         return cipher.doFinal(data.copyOfRange(12, data.size)).decodeToString()
     }
 
-    private fun write(slot: String, value: String?, bound: Boolean = false) {
+    private fun write(slot: String, value: String?) {
         val editor = storage.edit()
         if (value == null) {
             editor.remove(slot)
         } else {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply {
                 init(Cipher.ENCRYPT_MODE, key())
-                if (bound) updateAAD(slot.toByteArray())
             }
             val ciphertext = cipher.iv + cipher.doFinal(value.toByteArray())
             editor.putString(slot, Base64.encodeToString(ciphertext, Base64.NO_WRAP))
@@ -72,12 +70,6 @@ internal class Vault(context: Context) {
 
     fun save(profiles: List<Server>) = synchronized(LOCK) {
         write("servers", JSONArray(profiles.map { it.json() }).toString())
-    }
-
-    fun pushSecret(server: String): String? = synchronized(LOCK) { read("push:$server", bound = true) }
-
-    fun savePushSecret(server: String, value: String) = synchronized(LOCK) {
-        write("push:$server", value, bound = true)
     }
 
     fun removePushSecret(server: String) = synchronized(LOCK) { write("push:$server", null) }

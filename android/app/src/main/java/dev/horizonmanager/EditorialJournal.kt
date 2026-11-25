@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import org.json.JSONArray
 import org.json.JSONObject
@@ -32,11 +33,20 @@ private val sourceResult = Regex(".* · ([0-9]{1,9})(?: · (AUTH|RATE_LIMIT|HTTP
 private val contextResult = Regex("[0-9]{1,9} ms(?: · [A-Z][A-Z0-9_]{1,79})?")
 private val safeException = setOf("TimeoutError", "ConnectionError", "ValueError", "RuntimeError", "OSError", "HTTPError")
 
+private val traceFrame = Regex("(?:Problem|HostConfirmation|[A-Z][A-Za-z0-9]{0,60}(?:Exception|Error))(?: @ [A-Za-z0-9_.$-]{1,110}:-?[0-9]{1,5})?")
+
+private fun isPublicConnectionTrace(value: String): Boolean {
+    if (value.length !in 1..780) return false
+    val frames = value.removePrefix("background · ").removePrefix("tcp/dns · ").removePrefix("ssh · ").split(" ← ")
+    return frames.size in 1..5 && frames.all(traceFrame::matches)
+}
+
 internal fun diagnosticEvent(row: JSONObject): JSONObject {
     val code = row.optString("code").substringBefore(" · ")
         .takeIf { it in phases || publicCode.matches(it) }.orEmpty()
     val raw = row.optString("detail")
     val detail = when {
+        row.optString("component") == "android" && isConnectionFailure(code) -> raw.takeIf(::isPublicConnectionTrace)
         code.startsWith("INSTALL_") -> raw.takeIf(exitStatus::matches)
         code.startsWith("SOURCE_") -> sourceResult.matchEntire(raw)?.groupValues?.drop(1)?.filter(String::isNotBlank)?.joinToString(" · ")
         code == "JOB_QUEUED" -> raw.takeIf { it in setOf("run", "ai", "source", "localize", "article_context") }
@@ -65,7 +75,7 @@ internal fun matchesEventLevel(filter: String, level: String) =
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model: ManagerModel, export: (String) -> Unit,
-                     header: @Composable () -> Unit) {
+                     top: Dp) {
     var level by rememberSaveable { mutableStateOf("") }
     var component by rememberSaveable { mutableStateOf("") }
     var period by rememberSaveable { mutableStateOf("all") }
@@ -95,9 +105,9 @@ internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model:
                     })
         }
     }
-    LazyColumn(Modifier.fillMaxSize().editorialInsets(), state = rememberLazyListState(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        item("heading") { header() }
+    LazyColumn(Modifier.fillMaxSize().editorialSideBottomInsets(), state = rememberLazyListState(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = top, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item("filters") {
             Tile {
                 SettingHeading(ui(R.string.journal_activity_title), R.string.journal_activity_help)
@@ -124,7 +134,7 @@ internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model:
                         confirm(ui(R.string.ui_delete_downloaded_journal_entries_and_vps), model::clearEvents)
                     }) { Text(ui(R.string.ui_clear)) }
                 }
-                if (panel.syncing) LinearProgressIndicator(Modifier.fillMaxWidth())
+                if (panel.syncing) DottedProgress(Modifier.fillMaxWidth())
                 if (events.isEmpty() && !panel.syncing) Text(ui(R.string.ui_no_entries_match_these_filters))
             }
         }
@@ -153,7 +163,6 @@ internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model:
                     Text(explanation)
                     val id = row.optString("job")
                     if (id.isNotBlank()) TextButton(onClick = { job = id; detail = null }) { Text(ui(R.string.ui_events_for_this_operation)) }
-                    HorizontalDivider()
                     Text(ui(R.string.journal_technical), style = MaterialTheme.typography.labelLarge)
                     val technical = listOf(code, row.optString("detail"), id).filter(String::isNotBlank).joinToString("\n")
                     if (technical.isNotBlank()) Text(technical, style = MaterialTheme.typography.bodySmall, color = theme.muted)

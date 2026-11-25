@@ -231,8 +231,6 @@
     <string name="ui_copy">"Copy"</string>
     <string name="ui_update_vps_agent">"Update VPS agent"</string>
     <string name="ui_settings_and_the_archive_will_stay">"Settings and the archive will stay on the VPS. Enter a separate sudo password if required."</string>
-    <string name="ui_push_notification_service">"Push notification service"</string>
-    <string name="ui_install_ntfy_and_enable_unifiedpush_in">"Install ntfy and enable UnifiedPush in its settings."</string>
     <string name="ui_model_api_address_and_request_limits">"Model, API address and request limits"</string>
     <string name="ui_prompts_scoring_criteria_and_output_blocks">"Prompts, scoring criteria and output blocks"</string>
     <string name="ui_email_and_webhook">"Email and webhook"</string>
@@ -246,9 +244,7 @@
     <string name="ui_https_domain_optional">"HTTPS domain (optional)"</string>
     <string name="ui_leave_blank_to_use_ssh_https">"Leave blank to use SSH. HTTPS requires a configured reverse proxy with a valid TLS certificate."</string>
     <string name="ui_background_news_checks">"Background news checks"</string>
-    <string name="ui_connect_push_notifications">"Connect push notifications"</string>
     <string name="ui_push_notifications_connected">"Push notifications connected"</string>
-    <string name="ui_disconnect_push_notifications">"Disconnect push notifications"</string>
     <string name="ui_save_connection">"Save connection"</string>
     <string name="ui_ssh_settings">"SSH settings"</string>
     <string name="ui_journal">"Journal"</string>

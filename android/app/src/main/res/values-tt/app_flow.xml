@@ -216,8 +216,6 @@
     <string name="ui_events_for_this_operation">Бу гамәл вакыйгалары</string>
     <string name="ui_copy">Күчерү</string>
     <string name="ui_update_vps_agent">VPS агентын яңарту</string>
-    <string name="ui_push_notification_service">Push белдерү хезмәте</string>
-    <string name="ui_install_ntfy_and_enable_unifiedpush_in">ntfy урнаштырыгыз һәм аның көйләүләрендә UnifiedPush кушыгыз.</string>
     <string name="ui_model_api_address_and_request_limits">Модель, API адресы һәм сорау чикләре</string>
     <string name="ui_prompts_scoring_criteria_and_output_blocks">Күрсәтмәләр, бәяләү шартлары һәм нәтиҗә бүлекләре</string>
     <string name="ui_email_and_webhook">Почта һәм вебхук</string>
@@ -231,8 +229,6 @@
     <string name="ui_https_domain_optional">HTTPS домены (мәҗбүри түгел)</string>
     <string name="ui_leave_blank_to_use_ssh_https">SSH өчен буш калдырыгыз. HTTPS өчен гамәлдәге TLS сертификаты булган кире прокси кирәк.</string>
     <string name="ui_background_news_checks">Яңалыкларны фонда тикшерү</string>
-    <string name="ui_connect_push_notifications">Push белдерүләрен тоташтыру</string>
-    <string name="ui_disconnect_push_notifications">Push белдерүләрен өзү</string>
     <string name="ui_save_connection">Тоташуны саклау</string>
     <string name="ui_save_secret">Серне саклау</string>
     <string name="ui_remove">Алып ташлау</string>

@@ -1,0 +1,20 @@
+<resources>
+    <string name="hovq_headline_range">Башисем озынлыгы</string>
+    <string name="hovq_headline_min">Иң аз тамга саны</string>
+    <string name="hovq_headline_max">Иң күп тамга саны</string>
+    <string name="hovq_headline_help">Яңа чыгарылышлар өчен 1–240 тамга аралыгын сайлагыз. Буш урыннар һәм тыныш билгеләре санала.</string>
+    <string name="hovq_headline_save">Башисем озынлыгын саклау</string>
+    <string name="hovq_headline_upgrade">Башисем озынлыгын үзгәртү өчен VPS агентын яңартыгыз.</string>
+    <string name="hovq_digest_notifications">Яңа дайджестлар турында хәбәрләр</string>
+    <string name="hovq_push_delivery_help">Hovq VPS серверыгызда яңа чыгарылышларны көтә. Туры тоташу вакытында Android тавышсыз хезмәт белдерүен күрсәтә.</string>
+    <string name="hovq_notification_offer">Hovq ябык булганда да яңа дайджестлар турында белү өчен Android хәбәрләрен рөхсәт итегез.</string>
+    <string name="hovq_allow_notifications">Хәбәрләрне рөхсәт итү</string>
+    <string name="hovq_later">Соңрак</string>
+    <string name="hovq_agent_update_offer">Hovq-ның бу версиясе мөмкинлекләрен куллану өчен VPS-та Horizon агентын %1$s версиясеннән %2$s версиясенә яңартыгыз.</string>
+    <string name="hovq_update_now">Агентны яңарту</string>
+    <string name="hovq_update_sudo">Кирәк булса, sudo серсүзе</string>
+    <string name="hovq_open_photo">Рәсемне ачу</string>
+    <string name="prepare_digest_now">Дайджестны хәзер әзерләү</string>
+    <string name="hovq_listener_title">Дайджестларны туры китерү</string>
+    <string name="hovq_listener_detail">Hovq VPS серверыгызда яңа чыгарылышларны көтә.</string>
+</resources>

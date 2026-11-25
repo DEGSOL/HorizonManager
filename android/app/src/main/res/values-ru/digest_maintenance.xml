@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="schedule_interval_start">Время первого запуска</string>
+    <string name="schedule_interval_pick_start">Выбрать время</string>
+    <string name="schedule_interval_update_agent">Обновите агент на VPS, чтобы выбрать время первого запуска.</string>
+    <string name="archive_read_digest_title">Отправить дайджест в архив?</string>
+    <string name="archive_read_digest_detail">Все новости в этом дайджесте прочитаны.</string>
+    <string name="archive_read_digest_accept">Отправить в архив</string>
+    <string name="archive_read_digest_later">Не сейчас</string>
+    <string name="journal_headline_fallback_title">Перефразирование заголовков</string>
+    <string name="journal_headline_fallback_count">ИИ не предложил подходящий заголовок для %1$d материалов. Использован исходный текст.</string>
+    <string name="journal_duplicates_title">Дубликаты новостей</string>
+    <string name="journal_duplicates_count">Удалено дубликатов перед обогащением: %1$d.</string>
+    <string name="journal_duplicates_partial">Дополнительная тематическая проверка прервалась. Точные дубликаты удалены.</string>
+</resources>

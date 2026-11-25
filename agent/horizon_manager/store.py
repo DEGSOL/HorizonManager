@@ -5,7 +5,7 @@ from pathlib import Path
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
-from .configuration import DIGEST_LANGUAGES, builtin_profiles, initial_config
+from .configuration import DEFAULT_HEADLINE_RANGE, DEFAULT_HEADLINE_WORDS, DIGEST_LANGUAGES, builtin_profiles, initial_config
 
 
 def utc():
@@ -48,6 +48,11 @@ class Store:
                 CREATE TABLE IF NOT EXISTS push_outbox (
                     run TEXT NOT NULL, device TEXT NOT NULL, created INTEGER NOT NULL,
                     next INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(run,device));
+                CREATE TABLE IF NOT EXISTS headline_options (
+                    id INTEGER PRIMARY KEY CHECK(id=1), words INTEGER NOT NULL CHECK(words BETWEEN 2 AND 30));
+                CREATE TABLE IF NOT EXISTS headline_ranges (
+                    id INTEGER PRIMARY KEY CHECK(id=1), minimum INTEGER NOT NULL CHECK(minimum >= 1),
+                    maximum INTEGER NOT NULL CHECK(maximum BETWEEN minimum AND 240));
                 CREATE TABLE IF NOT EXISTS media_options (id INTEGER PRIMARY KEY CHECK(id=1), enabled INTEGER NOT NULL);
                 CREATE TABLE IF NOT EXISTS schedule (
                     id INTEGER PRIMARY KEY CHECK (id=1), spec TEXT NOT NULL, next REAL);
@@ -100,6 +105,29 @@ class Store:
     @staticmethod
     def set_enrichment_mode(db, mode):
         db.execute("INSERT OR REPLACE INTO enrichment_options VALUES (1, ?)", (mode,))
+
+    @staticmethod
+    def headline_words(db):
+        row = db.execute("SELECT words FROM headline_options WHERE id=1").fetchone()
+        return row[0] if row else DEFAULT_HEADLINE_WORDS
+
+    @staticmethod
+    def set_headline_words(db, words):
+        db.execute("INSERT OR REPLACE INTO headline_options VALUES (1, ?)", (words,))
+
+    @staticmethod
+    def headline_range(db):
+        row = db.execute("SELECT minimum, maximum FROM headline_ranges WHERE id=1").fetchone()
+        if row:
+            return tuple(row)
+        legacy = db.execute("SELECT words FROM headline_options WHERE id=1").fetchone()
+        if legacy:
+            return DEFAULT_HEADLINE_RANGE[0], legacy[0] * 6
+        return DEFAULT_HEADLINE_RANGE
+
+    @staticmethod
+    def set_headline_range(db, minimum, maximum):
+        db.execute("INSERT OR REPLACE INTO headline_ranges VALUES (1, ?, ?)", (minimum, maximum))
 
     @staticmethod
     def digest_language(db):

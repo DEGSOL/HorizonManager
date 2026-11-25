@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="schedule_interval_start">Heure du premier lancement</string>
+    <string name="schedule_interval_pick_start">Choisir une heure</string>
+    <string name="schedule_interval_update_agent">Mettez à jour l’agent VPS pour choisir l’heure du premier lancement.</string>
+    <string name="archive_read_digest_title">Archiver cette revue ?</string>
+    <string name="archive_read_digest_detail">Vous avez lu tous les articles de cette revue.</string>
+    <string name="archive_read_digest_accept">Archiver</string>
+    <string name="archive_read_digest_later">Pas maintenant</string>
+    <string name="journal_headline_fallback_title">Reformulation des titres</string>
+    <string name="journal_headline_fallback_count">L’IA n’a proposé aucun titre utilisable pour %1$d articles. Le texte source a été utilisé.</string>
+    <string name="journal_duplicates_title">Actualités en double</string>
+    <string name="journal_duplicates_count">Doublons supprimés avant enrichissement : %1$d.</string>
+    <string name="journal_duplicates_partial">La vérification thématique supplémentaire a été interrompue. Les doublons exacts ont été supprimés.</string>
+</resources>

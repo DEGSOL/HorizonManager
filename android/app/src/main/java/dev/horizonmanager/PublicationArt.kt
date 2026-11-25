@@ -8,17 +8,23 @@ import android.os.SystemClock
 import android.util.AtomicFile
 import android.util.LruCache
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.scale
-import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -65,7 +71,12 @@ internal fun publicPhotoAddress(address: InetAddress): Boolean {
         !(b[0] == 32 && (b[1] == 2 || b[1] == 1 && (b[2] == 0 || b[2] == 13 && b[3] == 184)))
 }
 
-internal data class Cover(val image: ImageBitmap, val soft: ImageBitmap, val brightness: Float)
+internal data class Cover(
+    val image: ImageBitmap,
+    val soft: ImageBitmap,
+    val brightness: Float,
+    val luminance: CoverLuminance,
+)
 
 internal fun artworkKey(server: String, article: JSONObject) =
     contextHash(server + "\u0000" + articleField(article, "id").ifBlank { articleField(article, "url") })
@@ -104,6 +115,7 @@ internal class ArtworkCache(context: Context) {
     private val recentMisses = LruCache<String, Long>(2048)
     private val locks = Array(32) { Mutex() }
     private val slots = Semaphore(3)
+    private val cachedDecodes = Semaphore(2)
 
     fun peek(id: String): Cover? = memory.get(id)
 
@@ -253,7 +265,8 @@ internal class ArtworkCache(context: Context) {
             locks[Math.floorMod(id.hashCode(), locks.size)].withLock {
                 peek(id)?.let { return@withLock it }
                 if (prefetch && file.baseFile.isFile) return@withLock null
-                readCover(file)?.let { return@withLock it.also { cover -> memory.put(id, cover) } }
+                cachedDecodes.withPermit { readCover(file) }
+                    ?.let { return@withLock it.also { cover -> memory.put(id, cover) } }
                 val page = articleField(article, "url")
                 val provided = article.optJSONObject("media")?.let { articleField(it, "url") }.orEmpty()
                 val miss = id + "|" + provided + "|" + (relay != null)
@@ -337,7 +350,7 @@ internal fun decodeCover(bytes: ByteArray): Cover? {
         light += (.213 * r + .715 * g + .072 * b) / n / 255
     }
     val soft = Bitmap.createBitmap(output, w, h, Bitmap.Config.ARGB_8888)
-    return Cover(source.asImageBitmap(), soft.asImageBitmap(), (light / (w * h)).toFloat())
+    return Cover(source.asImageBitmap(), soft.asImageBitmap(), (light / (w * h)).toFloat(), CoverLuminance(w, h, input))
 }
 
 @Composable
@@ -352,14 +365,16 @@ internal fun artwork(server: String, article: JSONObject, relay: (suspend () -> 
     }
 }
 
-private fun DrawScope.crop(image: ImageBitmap, frameHeight: Float = size.height) {
-    val scale = max(size.width / image.width, frameHeight / image.height)
+internal fun DrawScope.drawCoverImage(image: ImageBitmap, frame: Size = size, fit: Boolean = false) {
+    val sx = frame.width / image.width
+    val sy = frame.height / image.height
+    val scale = if (fit) min(sx, sy) else max(sx, sy)
     val w = max(1, (image.width * scale).roundToInt())
     val h = max(1, (image.height * scale).roundToInt())
     drawImage(
         image,
         dstOffset =
-            IntOffset(((size.width - w) / 2).roundToInt(), ((frameHeight - h) / 2).roundToInt()),
+            IntOffset(((frame.width - w) / 2).roundToInt(), ((frame.height - h) / 2).roundToInt()),
         dstSize = IntSize(w, h),
         filterQuality = FilterQuality.Medium,
     )
@@ -402,7 +417,7 @@ private fun DrawScope.drawTilePhoto(cover: Cover, photoBottom: Float, fadeStart:
     val bounds = androidx.compose.ui.geometry.Rect(0f, 0f, size.width, photoBottom)
     drawContext.canvas.saveLayer(bounds, Paint())
     clipRect(bottom = photoBottom) {
-        crop(cover.image, frameHeight = photoBottom)
+        drawCoverImage(cover.image, Size(size.width, photoBottom))
         drawRect(
             Brush.verticalGradient(listOf(Color.Black, Color.Transparent), fadeStart, photoBottom),
             size = androidx.compose.ui.geometry.Size(size.width, photoBottom),
@@ -417,18 +432,21 @@ internal fun PublicationCover(
     cover: Cover?,
     seed: String,
     modifier: Modifier = Modifier,
-    textHeight: Float = 0f,
     photoHeight: Dp? = null,
+    openPhoto: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val layer = rememberGraphicsLayer()
-    val scene = remember(layer) { GlassScene(layer) }
-    Box(modifier) {
-        val background = Modifier.matchParentSize()
-        CoverSurface(cover, seed,
-            if (Build.VERSION.SDK_INT >= 31) background.recordScene(scene) else background,
-            textHeight = textHeight, photoHeight = photoHeight)
-        CompositionLocalProvider(LocalGlassScene provides scene) { content() }
+    val placement = remember { CoverPlacement() }
+    val height = with(LocalDensity.current) { photoHeight?.toPx() }
+    val surface = remember(cover, height) { CoverActionSurface(placement, cover, height) }
+    val photoTap = if (cover != null && openPhoto != null) {
+        val label = ui(R.string.hovq_open_photo)
+        Modifier.clickable(interactionSource = null, indication = null, role = Role.Button,
+            onClickLabel = label, onClick = openPhoto).semantics { contentDescription = label }
+    } else Modifier
+    Box(modifier.onPlaced { placement.coordinates = it }.then(photoTap)) {
+        CoverSurface(cover, seed, Modifier.matchParentSize(), photoHeight)
+        CompositionLocalProvider(LocalCoverActionSurface provides surface, content = { content() })
     }
 }
 
@@ -437,7 +455,6 @@ internal fun CoverSurface(
     cover: Cover?,
     seed: String,
     modifier: Modifier,
-    textHeight: Float = 0f,
     photoHeight: Dp? = null,
 ) {
     val palette = LocalHorizonPalette.current
@@ -452,10 +469,9 @@ internal fun CoverSurface(
                 )
                 .get(Math.floorMod(seed.hashCode(), 5))
         val photoBottom = photoHeight?.toPx()?.let { min(it, size.height) }
-        val start = if (photoBottom == null) (size.height - textHeight - 24.dp.toPx()).coerceAtLeast(0f)
-            else (photoBottom - 34.dp.toPx()).coerceAtLeast(0f)
+        val start = photoBottom?.let { (it - 34.dp.toPx()).coerceAtLeast(0f) } ?: 0f
         if (cover != null) {
-            if (photoBottom == null) crop(cover.image) else drawTilePhoto(cover, photoBottom, start)
+            if (photoBottom == null) drawCoverImage(cover.image) else drawTilePhoto(cover, photoBottom, start)
         } else {
             drawRect(
                 Brush.linearGradient(listOf(tone, palette.surface, lerp(tone, palette.tint, .3f)))
@@ -475,25 +491,7 @@ internal fun CoverSurface(
                 center,
             )
         }
-        if (cover != null && photoBottom == null) {
-            val paint = Paint()
-            drawContext.canvas.saveLayer(
-                androidx.compose.ui.geometry.Rect(0f, start, size.width, size.height),
-                paint,
-            )
-            clipRect(top = start) {
-                crop(cover.soft)
-                drawRect(
-                    Brush.verticalGradient(
-                        listOf(Color.Transparent, Color.Black),
-                        startY = start,
-                        endY = start + 26.dp.toPx(),
-                    ),
-                    blendMode = BlendMode.DstIn,
-                )
-            }
-            drawContext.canvas.restore()
-        }
+        if (cover != null && photoBottom == null) return@Canvas
         val brightness = cover?.brightness ?: .4f
         val shadeAt = photoBottom?.let { ((it - start) / (size.height - start)).coerceIn(0f, 1f) } ?: .5f
         val shade = if (photoBottom == null) .35f + brightness * .42f else .48f + brightness * .30f

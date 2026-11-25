@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="schedule_interval_start">첫 실행 시간</string>
+    <string name="schedule_interval_pick_start">시간 선택</string>
+    <string name="schedule_interval_update_agent">첫 실행 시간을 설정하려면 VPS 에이전트를 업데이트하세요.</string>
+    <string name="archive_read_digest_title">이 다이제스트를 보관할까요?</string>
+    <string name="archive_read_digest_detail">이 다이제스트의 모든 기사를 읽었습니다.</string>
+    <string name="archive_read_digest_accept">보관함으로 이동</string>
+    <string name="archive_read_digest_later">나중에</string>
+    <string name="journal_headline_fallback_title">제목 다시 쓰기</string>
+    <string name="journal_headline_fallback_count">AI가 기사 %1$d건에 적합한 제목을 반환하지 않아 원문을 사용했습니다.</string>
+    <string name="journal_duplicates_title">중복 뉴스</string>
+    <string name="journal_duplicates_count">보강 전에 제거한 중복 기사: %1$d건</string>
+    <string name="journal_duplicates_partial">추가 주제 검사가 중단되었습니다. 정확히 일치하는 중복 기사는 제거했습니다.</string>
+</resources>

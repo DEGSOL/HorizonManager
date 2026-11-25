@@ -7,24 +7,27 @@ import android.os.Build
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 
-internal enum class LauncherAppearance(val alias: String, @DrawableRes val preview: Int, @StringRes val title: Int) {
-    Light("LauncherLight", R.drawable.hovq_art_light, R.string.hovq_icon_light),
-    Dark("LauncherDark", R.drawable.hovq_art_dark, R.string.hovq_icon_dark);
+internal enum class LauncherAppearance(val alias: String, @DrawableRes val preview: Int, @StringRes val title: Int, val background: Color) {
+    Light("LauncherLight", R.drawable.hovq_mark_black, R.string.hovq_icon_light, Color.White),
+    Dark("LauncherDark", R.drawable.hovq_mark_white, R.string.hovq_icon_dark, Color.Black);
 
     fun component(context: Context) = ComponentName(context.packageName, "${MainActivity::class.java.name.substringBeforeLast('.')}.$alias")
 
@@ -55,14 +58,16 @@ internal fun IconSettings(selected: LauncherAppearance, change: (LauncherAppeara
     Tile {
         Text(ui(R.string.hovq_icon_detail), color = LocalHorizonPalette.current.muted,
             style = MaterialTheme.typography.bodyMedium)
-        Column(Modifier.selectableGroup()) {
+        Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             LauncherAppearance.entries.forEach { item ->
-                Row(Modifier.fillMaxWidth().selectable(selected == item, role = Role.RadioButton, onClick = { change(item) })
-                    .padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically,
+                Row(Modifier.fillMaxWidth().settingsControlGlass()
+                    .selectable(selected == item, role = Role.RadioButton, onClick = { change(item) })
+                    .padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Image(painterResource(item.preview), null, Modifier.size(44.dp).clip(RoundedCornerShape(11.dp)))
-                    Text(ui(item.title), Modifier.weight(1f))
-                    RadioButton(selected == item, onClick = null)
+                    Image(painterResource(item.preview), null, Modifier.size(44.dp).clip(RoundedCornerShape(11.dp)).background(item.background))
+                    Text(ui(item.title), Modifier.weight(1f), color = ReadingGlass.text)
+                    RadioButton(selected == item, onClick = null,
+                        colors = RadioButtonDefaults.colors(selectedColor = ReadingGlass.text, unselectedColor = ReadingGlass.muted))
                 }
             }
         }

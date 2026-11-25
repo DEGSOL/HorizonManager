@@ -1,0 +1,20 @@
+<resources>
+    <string name="hovq_headline_range">标题长度</string>
+    <string name="hovq_headline_min">最少字符数</string>
+    <string name="hovq_headline_max">最多字符数</string>
+    <string name="hovq_headline_help">为今后的摘要设置 1 至 240 个字符的范围。空格和标点也计入。</string>
+    <string name="hovq_headline_save">保存标题长度</string>
+    <string name="hovq_headline_upgrade">更新 VPS 上的代理后即可更改标题长度。</string>
+    <string name="hovq_digest_notifications">新摘要通知</string>
+    <string name="hovq_push_delivery_help">Hovq 等待 VPS 上的新摘要。直连期间，Android 会显示静音服务通知。</string>
+    <string name="hovq_notification_offer">允许 Android 通知，以便在关闭 Hovq 后仍可收到新摘要提醒。</string>
+    <string name="hovq_allow_notifications">允许通知</string>
+    <string name="hovq_later">稍后</string>
+    <string name="hovq_agent_update_offer">将 VPS 上的 Horizon 代理从 %1$s 更新到 %2$s，以使用此版本 Hovq 的功能。</string>
+    <string name="hovq_update_now">更新代理</string>
+    <string name="hovq_update_sudo">sudo 密码（如有需要）</string>
+    <string name="hovq_open_photo">打开图片</string>
+    <string name="prepare_digest_now">立即生成摘要</string>
+    <string name="hovq_listener_title">摘要直连推送</string>
+    <string name="hovq_listener_detail">Hovq 正在等待 VPS 上的新摘要。</string>
+</resources>

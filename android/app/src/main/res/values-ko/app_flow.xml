@@ -216,8 +216,6 @@
     <string name="ui_events_for_this_operation">이 작업의 이벤트</string>
     <string name="ui_copy">복사</string>
     <string name="ui_update_vps_agent">VPS 에이전트 업데이트</string>
-    <string name="ui_push_notification_service">푸시 알림 서비스</string>
-    <string name="ui_install_ntfy_and_enable_unifiedpush_in">ntfy를 설치하고 설정에서 UnifiedPush를 켜세요.</string>
     <string name="ui_model_api_address_and_request_limits">모델, API 주소 및 요청 한도</string>
     <string name="ui_prompts_scoring_criteria_and_output_blocks">프롬프트, 평가 기준 및 출력 섹션</string>
     <string name="ui_email_and_webhook">이메일 및 웹훅</string>
@@ -231,8 +229,6 @@
     <string name="ui_https_domain_optional">HTTPS 도메인(선택 사항)</string>
     <string name="ui_leave_blank_to_use_ssh_https">SSH를 사용하려면 비워 두세요. HTTPS에는 유효한 TLS 인증서가 있는 리버스 프록시가 필요합니다.</string>
     <string name="ui_background_news_checks">백그라운드 뉴스 확인</string>
-    <string name="ui_connect_push_notifications">푸시 알림 연결</string>
-    <string name="ui_disconnect_push_notifications">푸시 알림 연결 해제</string>
     <string name="ui_save_connection">연결 저장</string>
     <string name="ui_save_secret">비밀 정보 저장</string>
     <string name="ui_remove">제거</string>

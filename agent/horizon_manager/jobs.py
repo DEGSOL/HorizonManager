@@ -40,7 +40,7 @@ def claim(store, article=False):
         schedule = db.execute("SELECT spec,next FROM schedule WHERE id=1").fetchone()
         if not article and schedule["next"] is not None and schedule["next"] <= now:
             spec = Schedule.model_validate_json(schedule["spec"])
-            db.execute("UPDATE schedule SET next=? WHERE id=1", (next_run(spec, now),))
+            db.execute("UPDATE schedule SET next=? WHERE id=1", (next_run(spec, now, previous=schedule["next"]),))
             if db.execute(f"SELECT 1 FROM jobs WHERE {PIPELINE_ACTIVE}").fetchone():
                 Store.event(db, "SCHEDULE_SKIPPED_ACTIVE", "WARNING", "scheduler")
             else:
@@ -54,6 +54,7 @@ def claim(store, article=False):
 
 
 def consume(store, job, event):
+    digest_ready = False
     with store.db() as db:
         kind = event["kind"]
         if kind == "phase":
@@ -61,7 +62,7 @@ def consume(store, job, event):
             Store.event(db, event["phase"], component="horizon", job=job, detail=event["detail"])
         elif kind == "result":
             data = event["data"]
-            digest_ready = data.get("languages") and not data.get("localized_run")
+            digest_ready = bool(data.get("languages")) and not data.get("localized_run")
             if digest_ready:
                 data = {**data, "ready_at": utc()}
                 enqueue_digest(db, job)
@@ -78,6 +79,8 @@ def consume(store, job, event):
                         "WARNING" if "failure" in status else "INFO", "horizon", job,
                         f"{name} · {event['count']} · {event['reason']}".rstrip(" ·"))
 
+    return digest_ready
+
 
 async def terminate(process):
     if process.returncode is not None:
@@ -92,7 +95,7 @@ async def terminate(process):
         await process.wait()
 
 
-async def execute(store, row, settings, enrichment_mode, digest_language):
+async def execute(store, row, settings, enrichment_mode, digest_language, on_digest=None):
     job = row["id"]
     article = row["kind"] == "article_context"
     start = time.monotonic()
@@ -127,8 +130,10 @@ async def execute(store, row, settings, enrichment_mode, digest_language):
         )
         with store.db() as db:
             search = store.media_search(db)
+            headline_range = store.headline_range(db)
         process.stdin.write(json.dumps({"media_search": search, "enrichment_mode": enrichment_mode, "language": digest_language,
-                                        "settings": settings, "kind": row["kind"], "params": params}).encode())
+                                        "headline_range": headline_range, "settings": settings,
+                                        "kind": row["kind"], "params": params}).encode())
         await process.stdin.drain()
         process.stdin.close()
         deadline = time.monotonic() + {"ai": 95, "source": 180, "run": 7200, "localize": 7200,
@@ -154,7 +159,8 @@ async def execute(store, row, settings, enrichment_mode, digest_language):
             event = json.loads(raw)
             if event["kind"] == "log" and event["level"] == "ERROR":
                 failure = event["code"]
-            consume(store, job, event)
+            if consume(store, job, event) and on_digest is not None:
+                await on_digest()
             line = asyncio.create_task(process.stdout.readline())
     except asyncio.CancelledError:
         state = "interrupted"
@@ -183,12 +189,12 @@ async def execute(store, row, settings, enrichment_mode, digest_language):
                             f"{int((time.monotonic() - start) * 1000)} ms" + (f" · {reason}" if reason else ""))
 
 
-async def loop(store, article=False):
+async def loop(store, article=False, on_digest=None):
     while True:
         try:
             claimed = claim(store, article=article)
             if claimed:
-                await execute(store, *claimed)
+                await execute(store, *claimed, on_digest=on_digest)
         except (OSError, ValueError):
             with store.db() as db:
                 Store.event(db, "SCHEDULER_ERROR", "ERROR", "scheduler")

@@ -18,7 +18,8 @@ from src.models import Config
 
 from .article_context import context_artifacts, find_item, read_json
 from .classification import score_with_retry
-from .configuration import only_source, write_profiles
+from .configuration import DEFAULT_HEADLINE_RANGE, only_source, write_profiles
+from .digest_duplicates import digest_duplicates
 from .localized_digest import atomic_text, complete_artifacts, save_localized
 
 STATE = Path(os.environ["HM_STATE"])
@@ -166,6 +167,7 @@ async def main(payload, job):
     cfg = data / "config.json"
     if kind == "source":
         config = only_source(config, params["source"], params.get("bucket"), params.get("index"))
+    headline_range = payload.get("headline_range", DEFAULT_HEADLINE_RANGE)
     if kind in {"run", "localize"}:
         config = {**config, "ai": {**config["ai"], "languages": [language]}}
     cfg.write_text(json.dumps(config, ensure_ascii=False), encoding="utf-8")
@@ -194,7 +196,7 @@ async def main(payload, job):
                 missing = not (path / f"summary-{language}.md").is_file()
                 if missing:
                     context, _, _ = service._build_context(**common, sources=None)
-                    if await complete_artifacts(items, language, context.config.ai):
+                    if await complete_artifacts(items, language, context.config.ai, headline_range=headline_range):
                         # Keep the existing legacy edition intact and let the user retry.
                         raise ValueError("LOCALIZATION_INVALID")
                     await save_localized(path, items, [language], checked_raw=meta.get("raw_count", len(items)),
@@ -219,7 +221,19 @@ async def main(payload, job):
             scored = await score_with_retry(service, job, **common)
             phase("filter")
             filtered = await service.filter_items(job, **common)
-            kept = filtered["kept"]
+            context, _, _ = service._build_context(**common, sources=None)
+            items = dicts_to_items(service.run_store.load_items(job, "filtered"))
+            if len(items) > 1:
+                service._bind_chatgpt_account(context, job)
+            orchestrator = service._orchestrator(context)
+            if len(items) > 1:
+                items = await digest_duplicates(items, orchestrator, lambda code: send("log", level="WARNING", code=code))
+            kept = len(items)
+            removed = filtered["kept"] - kept
+            if removed:
+                service.run_store.save_items(job, "filtered", items_to_dicts(items))
+                service.run_store.update_meta(job, {"filtered_count": kept})
+                send("log", level="INFO", code="DIGEST_DUPLICATES_REMOVED", detail=str(removed))
             stage = "filtered"
             enriched_count = 0
             mode = payload.get("enrichment_mode", "on_demand")
@@ -232,12 +246,12 @@ async def main(payload, job):
                     stage = "enriched"
                     enriched_count = enriched["enriched"]
             phase("generate")
-            context, _, _ = service._build_context(**common, sources=None)
-            orchestrator = service._orchestrator(context)
             today = datetime.now(timezone.utc).date().isoformat()
-            items = dicts_to_items(service.run_store.load_items(job, stage))
+            if stage == "enriched":
+                items = dicts_to_items(service.run_store.load_items(job, stage))
             unavailable = await complete_artifacts(
                 items, language, context.config.ai,
+                headline_range=headline_range,
                 report=lambda code, count: send(
                     "log", level="INFO" if code == "LOCALIZATION_RECOVERED" else "WARNING",
                     code=code, detail=str(count)),

@@ -19,9 +19,9 @@
     <string name="hovq_vps_restore_password">Inserisci la password del backup Horizon. L’importazione sostituisce impostazioni e pianificazione sul VPS attivo.</string>
     <string name="hovq_digest_channel">Nuove rassegne</string>
     <string name="hovq_digest_channel_detail">Avvisi quando Horizon completa una nuova edizione.</string>
-    <string name="hovq_push_active">Push attivo. Hovq controlla il VPS occasionalmente come riserva.</string>
-    <string name="hovq_polling_active">Controllo ogni 15 minuti quando Android lo permette. Attiva il push per ricevere avvisi più rapidi.</string>
+    <string name="hovq_polling_active">Hovq cerca nuovi riepiloghi in background quando la connessione diretta non è disponibile.</string>
     <string name="hovq_alerts_blocked">Le notifiche sono disattivate in Android.</string>
-    <string name="hovq_android_alert_settings">Impostazioni notifiche Android</string>
     <string name="hovq_existing_horizon">Horizon rilevato in %1$s.</string>
+    <string name="hovq_agent_update_success">Agente aggiornato</string>
+    <string name="hovq_listener_connected">La connessione continua al VPS è attiva.</string>
 </resources>

@@ -13,7 +13,7 @@
     <string name="router_upgrade_required">Update the VPS agent to load models with the key saved on your server.</string>
     <string name="agent_https_unreachable">The VPS agent did not respond over HTTPS.</string>
     <string name="favorites_title">Favorites</string>
-    <string name="favorites_empty">Articles you mark with a star will appear here.</string>
+    <string name="favorites_empty">Articles you bookmark will appear here.</string>
     <string name="archive_digests">Digest archive</string>
     <string name="archive_digests_detail">Open past digests on this server.</string>
     <string name="archive_issue_actions">Digest actions</string>

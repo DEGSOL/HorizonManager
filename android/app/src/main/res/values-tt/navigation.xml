@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="favorites_title">Сайланмалар</string>
+    <string name="favorites_empty">Кыстыргыч белән билгеләнгән мәкаләләр монда күренәчәк.</string>
+    <string name="archive_digests">Дайджестлар архивы</string>
+    <string name="archive_digests_detail">Бу сервердагы элекке дайджестларны ачу.</string>
+    <string name="archive_issue_actions">Дайджест гамәлләре</string>
+    <string name="archive_remove_device">Бу җайланмадан бетерү</string>
+    <string name="archive_remove_detail">%1$s көнге дайджест бу җайланма архивыннан бетереләчәк. VPSтагы күчермә һәм сайланган мәкаләләр сакланачак.</string>
+    <string name="browser_actions">Браузер гамәлләре</string>
+    <string name="browser_open_external">Тышкы браузерда ачу</string>
+    <string name="browser_no_handler">Бу сылтаманы ача торган кушымта юк.</string>
+    <string name="nav_unread">Укылмаганнар: %1$d</string>
+</resources>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="favorites_title">お気に入り</string>
+    <string name="favorites_empty">ブックマークを付けた記事がここに表示されます。</string>
+    <string name="archive_digests">ダイジェストのアーカイブ</string>
+    <string name="archive_digests_detail">このサーバーの過去のダイジェストを開きます。</string>
+    <string name="archive_issue_actions">ダイジェストの操作</string>
+    <string name="archive_remove_device">この端末から削除</string>
+    <string name="archive_remove_detail">%1$s のダイジェストは、この端末のアーカイブから削除されます。VPS 上のコピーとお気に入りの記事は残ります。</string>
+    <string name="browser_actions">ブラウザーの操作</string>
+    <string name="browser_open_external">外部ブラウザーで開く</string>
+    <string name="browser_no_handler">このリンクを開けるアプリがありません。</string>
+    <string name="nav_unread">未読：%1$d</string>
+</resources>

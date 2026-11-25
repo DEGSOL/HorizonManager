@@ -96,6 +96,11 @@ internal fun journalMessage(row: JSONObject): Pair<String, String> {
         "DIGEST_LANGUAGE_CHANGED" -> ui(R.string.digest_output_language) to ui(R.string.digest_language_detail)
         "ENRICHMENT_MODE_CHANGED" -> ui(R.string.enrichment_mode) to ui(R.string.setting_help_enrichment)
         "ENRICHMENT_FAILED" -> ui(R.string.article_context_heading) to ui(R.string.journal_enrich_failed)
+        "HEADLINE_REWRITE_FALLBACK" -> ui(R.string.journal_headline_fallback_title) to
+            ui(R.string.journal_headline_fallback_count, detail.toIntOrNull() ?: 0)
+        "DIGEST_DUPLICATES_REMOVED" -> ui(R.string.journal_duplicates_title) to
+            ui(R.string.journal_duplicates_count, detail.toIntOrNull() ?: 0)
+        "DEDUPE_PARTIAL" -> ui(R.string.journal_duplicates_title) to ui(R.string.journal_duplicates_partial)
         "LOCALIZATION_RECOVERED" -> errorText(code) to ui(R.string.journal_localization_recovered)
         "BACKUP_EXPORTED", "BACKUP_RESTORED" -> ui(R.string.ui_backup) to ui(
             if (code == "BACKUP_EXPORTED") R.string.journal_backup_exported else R.string.journal_backup_restored)

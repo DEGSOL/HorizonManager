@@ -1,0 +1,20 @@
+<resources>
+    <string name="hovq_headline_range">Lunghezza del titolo</string>
+    <string name="hovq_headline_min">Minimo di caratteri</string>
+    <string name="hovq_headline_max">Massimo di caratteri</string>
+    <string name="hovq_headline_help">Scegli un intervallo da 1 a 240 caratteri per le prossime rassegne. Spazi e punteggiatura contano.</string>
+    <string name="hovq_headline_save">Salva la lunghezza dei titoli</string>
+    <string name="hovq_headline_upgrade">Aggiorna l’agente sul VPS per modificare la lunghezza dei titoli.</string>
+    <string name="hovq_digest_notifications">Notifiche per le nuove rassegne</string>
+    <string name="hovq_push_delivery_help">Hovq attende nuovi riepiloghi sul VPS. Android mostra una notifica silenziosa del servizio quando la connessione diretta è attiva.</string>
+    <string name="hovq_notification_offer">Consenti le notifiche Android per ricevere avvisi sulle nuove rassegne anche quando Hovq è chiuso.</string>
+    <string name="hovq_allow_notifications">Consenti notifiche</string>
+    <string name="hovq_later">Più tardi</string>
+    <string name="hovq_agent_update_offer">Aggiorna l’agente Horizon sul VPS dalla versione %1$s alla %2$s per usare le funzioni di questa versione di Hovq.</string>
+    <string name="hovq_update_now">Aggiorna agente</string>
+    <string name="hovq_update_sudo">Password di sudo, se necessaria</string>
+    <string name="hovq_open_photo">Apri immagine</string>
+    <string name="prepare_digest_now">Prepara la rassegna ora</string>
+    <string name="hovq_listener_title">Consegna diretta dei riepiloghi</string>
+    <string name="hovq_listener_detail">Hovq attende nuovi riepiloghi sul VPS.</string>
+</resources>

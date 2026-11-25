@@ -18,16 +18,17 @@ from uuid import UUID, uuid4
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from src.mcp.horizon_adapter import dicts_to_items
 from src.models import SOURCE_REGISTRY
 from src.processing.content import split_content
 
 from . import VERSION, backup, jobs, push, router_catalog
 from .article_context import find_item, key_for, localized_context, previous_context, read_json
-from .configuration import DIGEST_LANGUAGES, DigestLanguageCode, ai_missing, schema, secret_name_allowed, validate
+from .configuration import (DIGEST_LANGUAGES, MAX_HEADLINE_CHARACTERS, MAX_HEADLINE_WORDS, MIN_HEADLINE_WORDS,
+                            DigestLanguageCode, ai_missing, schema, secret_name_allowed, validate)
 from .localized_digest import LocalizedSummarizer, restore_original_cards
-from .media import relay_cover
+from .media import relay_cover, web_url
 from .scheduler import Schedule, next_run
 from .store import Store, utc
 
@@ -66,6 +67,26 @@ class MediaSearch(Body):
 
 class EnrichmentMode(Body):
     mode: Literal["on_demand", "automatic"]
+
+
+class HeadlineLength(Body):
+    words: int = Field(strict=True, ge=MIN_HEADLINE_WORDS, le=MAX_HEADLINE_WORDS)
+
+
+class HeadlineRange(Body):
+    minimum: int = Field(strict=True, ge=1, le=MAX_HEADLINE_CHARACTERS)
+    maximum: int = Field(strict=True, ge=1, le=MAX_HEADLINE_CHARACTERS)
+
+    @model_validator(mode="after")
+    def ordered(self):
+        if self.minimum > self.maximum:
+            raise ValueError("minimum exceeds maximum")
+        return self
+
+
+def headline_range(db):
+    minimum, maximum = Store.headline_range(db)
+    return {"minimum": minimum, "maximum": maximum}
 
 
 class DigestLanguage(Body):
@@ -117,6 +138,11 @@ def create_app(root, token):
     installer_lock = threading.Lock()
     installer_stamp = None
     cover_slots = asyncio.Semaphore(4)
+    digest_changed = asyncio.Condition()
+
+    async def digest_ready():
+        async with digest_changed:
+            digest_changed.notify_all()
 
     def sync_installer_events():
         nonlocal installer_stamp
@@ -132,7 +158,7 @@ def create_app(root, token):
     async def lifespan(app):
         sync_installer_events()
         jobs.recovery(store)
-        tasks = [asyncio.create_task(jobs.loop(store)), asyncio.create_task(jobs.loop(store, article=True)),
+        tasks = [asyncio.create_task(jobs.loop(store, on_digest=digest_ready)), asyncio.create_task(jobs.loop(store, article=True)),
                  asyncio.create_task(push.loop(store))]
         try:
             yield
@@ -170,7 +196,7 @@ def create_app(root, token):
     @app.get("/v1/health")
     def health():
         return {"api": 1, "agent": VERSION, "horizon": REVISION,
-                "runtime": "systemd/venv", "openbb": importlib.util.find_spec("openbb") is not None}
+                "runtime": "systemd/venv", "digest_notifications": True, "openbb": importlib.util.find_spec("openbb") is not None}
 
     @app.get("/v1/upstream")
     def upstream():
@@ -205,8 +231,9 @@ def create_app(root, token):
             next_at = db.execute("SELECT next FROM schedule WHERE id=1").fetchone()[0]
             language, chosen = store.digest_language(db)
             return {**health(), "digest_language": language, "digest_language_chosen": chosen,
-                    "digest_languages": DIGEST_LANGUAGES, "disk_free": disk.free, "disk_total": disk.total,
-                    "media_search": store.media_search(db), "cover_relay": True, "enrichment_mode": store.enrichment_mode(db),
+                    "digest_languages": DIGEST_LANGUAGES, "headline_max_words": store.headline_words(db),
+                    "headline_range": headline_range(db), "disk_free": disk.free, "disk_total": disk.total,
+                    "media_search": store.media_search(db), "cover_relay": True, "article_source_links": True, "enrichment_mode": store.enrichment_mode(db),
                     "load": os.getloadavg()[0], "cpu": os.cpu_count(), "memory": mem, "next": next_at}
 
     @app.put("/v1/media-search")
@@ -223,6 +250,21 @@ def create_app(root, token):
             Store.set_enrichment_mode(db, body.mode)
             Store.event(db, "ENRICHMENT_MODE_CHANGED", detail=body.mode)
             return {"mode": store.enrichment_mode(db)}
+
+    @app.put("/v1/headline-length")
+    def set_headline_length(body: HeadlineLength):
+        with store.db() as db:
+            Store.set_headline_words(db, body.words)
+            db.execute("DELETE FROM headline_ranges WHERE id=1")
+            Store.event(db, "HEADLINE_LENGTH_CHANGED")
+            return {"words": store.headline_words(db)}
+
+    @app.put("/v1/headline-range")
+    def set_headline_range(body: HeadlineRange):
+        with store.db() as db:
+            Store.set_headline_range(db, body.minimum, body.maximum)
+            Store.event(db, "HEADLINE_LENGTH_CHANGED")
+            return headline_range(db)
 
     @app.put("/v1/digest-language")
     def set_digest_language(body: DigestLanguage):
@@ -397,8 +439,16 @@ def create_app(root, token):
 
     @app.put("/v1/schedule")
     def put_schedule(body: Schedule):
-        upcoming = next_run(body, time.time())
         with store.db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT spec,next FROM schedule WHERE id=1").fetchone()
+            current = Schedule.model_validate_json(row["spec"])
+            if (body.mode == current.mode == "interval" and body.interval_start is not None
+                    and (body.hours, body.interval_start, body.zone) ==
+                    (current.hours, current.interval_start, current.zone) and row["next"] is not None):
+                upcoming = row["next"]
+            else:
+                upcoming = next_run(body, time.time())
             db.execute("UPDATE schedule SET spec=?,next=? WHERE id=1", (body.model_dump_json(), upcoming))
             Store.event(db, "SCHEDULE_SAVED", component="scheduler")
         return {"spec": body.model_dump(), "next": upcoming}
@@ -459,12 +509,39 @@ def create_app(root, token):
             fail(404, "DIGEST_UNKNOWN")
         return info
 
+    def latest_digest_id(db):
+        row = db.execute("""SELECT id FROM jobs WHERE kind='run'
+            AND json_array_length(result, '$.languages') > 0 ORDER BY rowid DESC LIMIT 1""").fetchone()
+        return row["id"] if row else ""
+
     @app.get("/v1/digest-marker")
     def digest_marker():
         with store.db() as db:
-            row = db.execute("""SELECT id FROM jobs WHERE kind='run'
-                AND json_array_length(result, '$.languages') > 0 ORDER BY rowid DESC LIMIT 1""").fetchone()
-        return {"id": row["id"] if row else ""}
+            return {"id": latest_digest_id(db)}
+
+    @app.get("/v1/digest-notification-plan")
+    def digest_notification_plan():
+        with store.db() as db:
+            upcoming = db.execute("SELECT next FROM schedule WHERE id=1").fetchone()[0]
+            since = db.execute(f"""SELECT min(created) FROM jobs
+                WHERE kind='run' AND {jobs.ACTIVE} AND result IS NULL""").fetchone()[0]
+            content = {"id": latest_digest_id(db), "next": upcoming, "preparing_since": since}
+        return JSONResponse(content, headers={"Cache-Control": "no-store"})
+
+    @app.get("/v1/digest-notifications")
+    async def digest_notifications(
+        after: str | None = Query(default=None, max_length=46, pattern=r"^(?:[a-f0-9]{32}|run-\d{8}T\d{6}Z-[a-f0-9]{8})?$"),
+        wait: int = Query(default=20, ge=0, le=20),
+    ):
+        async with digest_changed:
+            marker = digest_marker()
+            if after is not None and marker["id"] == after:
+                with suppress(TimeoutError):
+                    async with asyncio.timeout(wait):
+                        while marker["id"] == after:
+                            await digest_changed.wait()
+                            marker = digest_marker()
+            return JSONResponse(marker, headers={"Cache-Control": "no-store"})
 
     @app.put("/v1/push/{device}")
     def put_push(device: UUID, body: PushDevice):
@@ -602,10 +679,18 @@ def create_app(root, token):
             primary = next((block.get("content", "") for block in blocks if block.get("primary")), "")
             original = split_content(item.get("content")).main
             body = primary or original or analysis.get("summary", "")
+            publisher = next((name.strip() for name in (
+                metadata.get("source_name"), metadata.get("feed_name"), metadata.get("subreddit"),
+                metadata.get("repo"), metadata.get("domain"), item.get("author"),
+            ) if isinstance(name, str) and name.strip()), "")
+            source = item["source_type"]
+            permalink = web_url(metadata.get("msg_url" if source == "telegram" else "discussion_url"))
             cards.append({
                 "id": item["id"], "title": artifact.get("title") or item["title"], "url": item["url"],
                 **({"media": media.get(item["id"], {})} if media is not None else {}),
-                "source": item["source_type"], "time": item["published_at"],
+                "source": source, "time": item["published_at"],
+                **({"source_url": permalink} if permalink else {}),
+                **({"publisher": publisher} if publisher else {}),
                 "category": metadata.get("category"),
                 **({"telegram_url": metadata["msg_url"]} if metadata.get("msg_url") else {}),
                 **({"telegram_channel": metadata.get("channel") or item.get("author")}
@@ -619,7 +704,7 @@ def create_app(root, token):
                 "blocks": blocks[:30], "citations": artifact.get("sources", [])[:50],
             })
         return {"id": run, "language": language, "markdown": markdown, "items": cards, "total": len(items),
-                "content_version": 2}
+                "content_version": 3}
 
     @app.post("/v1/backup")
     def export(body: Password):
@@ -629,10 +714,13 @@ def create_app(root, token):
             media_search = store.media_search(db)
             enrichment_mode = store.enrichment_mode(db)
             language, chosen = store.digest_language(db)
+            headline_words = store.headline_words(db)
+            characters = headline_range(db)
             Store.event(db, "BACKUP_EXPORTED")
         return {"archive": backup.pack({"horizon": REVISION, "settings": settings, "schedule": schedule,
                                         "media_search": media_search, "enrichment_mode": enrichment_mode,
-                                        "digest_language": language, "digest_language_chosen": chosen}, body.password)}
+                                        "digest_language": language, "digest_language_chosen": chosen,
+                                        "headline_max_words": headline_words, "headline_range": characters}, body.password)}
 
     @app.post("/v1/restore")
     def restore(body: ImportBackup):
@@ -641,6 +729,8 @@ def create_app(root, token):
             if payload["horizon"] != REVISION:
                 fail(422, "BACKUP_VERSION")
             updated = payload["settings"]
+            headline_words = HeadlineLength(words=payload["headline_max_words"]).words if "headline_max_words" in payload else None
+            characters = HeadlineRange.model_validate(payload["headline_range"]) if "headline_range" in payload else None
             for name, value in updated["secrets"].items():
                 if not secret_name_allowed(name) or not isinstance(value, str) or not 1 <= len(value) <= 8192 or "\0" in value:
                     fail(422, "SECRET_VALUE_INVALID")
@@ -666,6 +756,12 @@ def create_app(root, token):
                 db.execute("DELETE FROM digest_options WHERE id=1")
             elif payload.get("digest_language") in DIGEST_LANGUAGES:
                 Store.set_digest_language(db, payload["digest_language"])
+            if headline_words is not None:
+                Store.set_headline_words(db, headline_words)
+                if characters is None:
+                    db.execute("DELETE FROM headline_ranges WHERE id=1")
+            if characters is not None:
+                Store.set_headline_range(db, characters.minimum, characters.maximum)
             Store.event(db, "BACKUP_RESTORED")
             return public(store.settings(db))
 

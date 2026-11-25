@@ -22,12 +22,12 @@ internal fun SettingsExpandable(title: Int, description: Int, content: @Composab
 
 @Composable
 private fun CountField(title: Int, value: String, update: (String) -> Unit, valid: Boolean,
-                       hint: Int, help: Int? = null) {
+                       hint: Int? = null, help: Int? = null) {
     OutlinedTextField(value, { update(it.filter(Char::isDigit).take(9)) }, modifier = Modifier.fillMaxWidth(),
         label = { Text(ui(title)) }, singleLine = true, isError = !valid,
-        supportingText = { Text(ui(hint)) },
+        supportingText = if (hint == null) null else ({ Text(ui(hint)) }),
         trailingIcon = if (help == null) null else ({ SettingHelp(ui(title), help) }),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), colors = horizonFieldColors())
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), colors = horizonFieldColors(), shape = horizonFieldShape())
 }
 
 @Composable
@@ -36,6 +36,17 @@ internal fun DigestRulesForm(panel: Panel, model: ManagerModel, base: JSONObject
     val original = base.optJSONObject("digest") ?: JSONObject()
     val collection = base.optJSONObject("collection") ?: JSONObject()
     val revision = panel.config.optInt("revision")
+    val savedHeadline = panel.status.optJSONObject("headline_range")
+    val savedMinimum = savedHeadline?.optString("minimum").orEmpty()
+    val savedMaximum = savedHeadline?.optString("maximum").orEmpty()
+    val serverId = panel.server?.id
+    var headlineMinimum by rememberSaveable(serverId, savedMinimum, savedMaximum) { mutableStateOf(savedMinimum) }
+    var headlineMaximum by rememberSaveable(serverId, savedMinimum, savedMaximum) { mutableStateOf(savedMaximum) }
+    val headlineDirty = savedHeadline != null && (headlineMinimum != savedMinimum || headlineMaximum != savedMaximum)
+    val minimumCharacters = headlineMinimum.toIntOrNull()
+    val maximumCharacters = headlineMaximum.toIntOrNull()
+    val validMinimum = minimumCharacters != null && minimumCharacters in 1..240
+    val validMaximum = maximumCharacters != null && minimumCharacters != null && maximumCharacters in minimumCharacters..240
     var hours by rememberSaveable(revision) { mutableStateOf(collection.optInt("time_window_hours", 24).toString()) }
     var maximum by rememberSaveable(revision) { mutableStateOf(articleField(original, "max_items")) }
     var draft by rememberSaveable(revision) { mutableStateOf(original.toString()) }
@@ -55,7 +66,7 @@ internal fun DigestRulesForm(panel: Panel, model: ManagerModel, base: JSONObject
     val validOrder = order.distinct().size == order.size && order.all(ids::contains)
     val dirty = hours != collection.optInt("time_window_hours", 24).toString() ||
         maximum != articleField(original, "max_items") || draft != original.toString()
-    SideEffect { dirtyChange(dirty) }
+    SideEffect { dirtyChange(dirty || headlineDirty) }
     fun change(name: String, value: Any) { draft = digest.copyObject().put(name, value).toString() }
 
     Tile {
@@ -64,6 +75,24 @@ internal fun DigestRulesForm(panel: Panel, model: ManagerModel, base: JSONObject
             R.string.digest_window_hint, R.string.setting_help_collection)
         CountField(R.string.ui_maximum_items, maximum, { maximum = it }, correctMaximum,
             R.string.digest_max_hint, R.string.setting_help_issue_limit)
+    }
+    Tile {
+        Text(ui(R.string.hovq_headline_range), style = MaterialTheme.typography.titleMedium)
+        if (savedHeadline == null) {
+            Text(ui(R.string.hovq_headline_upgrade), style = MaterialTheme.typography.bodySmall)
+        } else {
+            Text(ui(R.string.hovq_headline_help), style = MaterialTheme.typography.bodySmall)
+            CountField(R.string.hovq_headline_min, headlineMinimum, { headlineMinimum = it }, validMinimum)
+            CountField(R.string.hovq_headline_max, headlineMaximum, { headlineMaximum = it }, validMaximum)
+            if (headlineDirty) {
+                Button(enabled = !panel.busy && validMinimum && validMaximum, onClick = {
+                    if (minimumCharacters != null && maximumCharacters != null)
+                        model.setHeadlineRange(minimumCharacters, maximumCharacters)
+                }) {
+                    Text(ui(R.string.hovq_headline_save))
+                }
+            }
+        }
     }
     SettingsExpandable(R.string.digest_groups_title, R.string.digest_groups_summary) {
         Choice(ui(R.string.ui_grouping), listOf("category", "profile"), groupBy, { change("group_by", it) }, {
@@ -129,7 +158,6 @@ private fun QuotaGroups(groups: JSONObject, groupBy: String, profiles: Map<Strin
         var categories by rememberSaveable { mutableStateOf(original?.optJSONArray("categories")?.strings()?.joinToString("\n").orEmpty()) }
         val members = categories.lineSequence().map(String::trim).filter(String::isNotEmpty).distinct().toList()
         val validLimit = (limit.toIntOrNull() ?: 0) > 0
-        HorizontalDivider()
         Text(ui(if (original != null) R.string.digest_groups_title else R.string.digest_group_add),
             style = MaterialTheme.typography.titleSmall)
         ValueField(ui(R.string.ui_name), name, { name = it })

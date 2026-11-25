@@ -1,4 +1,4 @@
-# Hovq 0.5.5
+# Hovq 0.5.6
 
 [Русский](../../README.md) · [English](README.en.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Italiano](README.it.md) · [Español](README.es.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · **简体中文** · [Қазақша](README.kk.md) · [Татарча](README.tt.md)
 
@@ -15,6 +15,8 @@ Hovq 是一款 Android 应用，用于在自己的 VPS 上安装和管理 [Horiz
 
 ## 安装与生成首期摘要
 
+**安装只需一台运行 Ubuntu Server 24.04 LTS 或 Debian 12、可通过 SSH 访问的自有 VPS。** 从 Hovq 连接并确认安装，应用会自动安装 Horizon、配套代理和所需依赖。
+
 1. 在 Android 8.0 或更新版本上安装 APK。准备运行 Ubuntu Server 24.04 LTS 或 Debian 12 的 VPS，支持 systemd 和 SSH，并能访问系统软件源、GitHub 和 PyPI。安装程序会检查架构、至少 432 MiB 的内存和 1.5 GiB 的可用磁盘空间。收集和处理可能需要更多资源。
 2. 在 Hovq 中添加服务器，输入 SSH 密码或选择私钥，并在服务商控制台核对指纹。SSH 必须允许转发到 VPS 上的 `127.0.0.1:18777`。确认安装，必要时输入 sudo 密码。也可以直接连接已安装的代理。
 3. 在 AI 设置中指定提供商、模型和 API 密钥。OpenRouter 和 UnoRouter 的模型目录可在应用中加载。添加来源、选择处理配置，然后开始收集。
@@ -22,9 +24,9 @@ Hovq 是一款 Android 应用，用于在自己的 VPS 上安装和管理 [Horiz
 
 ## 通知与更新
 
-在 **设置 → 界面 → 通知** 中开启新摘要通知，并允许 Android 发送通知。Hovq 会在计划运行时间附近和摘要生成期间通过 SSH 或 HTTPS 短暂连接 VPS。摘要完成后才会显示通知。应用不会运行常驻服务。Android 可能推迟后台检查，尤其是在设备深度休眠时。
+在 **设置 → 界面 → 通知** 中开启新摘要通知，并在 Android 中授权。Hovq 通过 SSH 或已配置的 HTTPS 与 VPS 保持直接连接。监控期间 Android 会显示静默的服务通知，摘要完成时另行通知。连接断开后，Hovq 会重新连接并检查是否有新一期摘要。
 
-APK 可覆盖安装证书相同的 Hovq 0.4.5–0.5.4。0.4.4 及更早版本需要全新安装。在已有的 VPS 上通过 Hovq 将代理更新至 0.1.17，即可用一次请求检查计划和摘要状态。
+APK 可覆盖安装证书相同的 Hovq 0.4.5–0.5.5。0.4.4 及更早版本需要全新安装。已连接的 VPS 可在 Hovq 中将代理更新到 0.1.18。即使采用按需补充模式，应用也会识别措辞不同却报道同一事件的文章。各配置的主题去重设置仍然生效。
 
 ## 从源码构建
 
@@ -39,4 +41,4 @@ cd android
 
 `HM_RELEASE_KEYSTORE`, `HM_RELEASE_KEY_ALIAS`, `HM_RELEASE_STORE_PASSWORD`, `HM_RELEASE_KEY_PASSWORD`
 
-[此版本的应用与代理源码](https://github.com/DEGSOL/HorizonManager/tree/v0.5.5) · [架构和 API](https://github.com/DEGSOL/HorizonManager/blob/v0.5.5/docs/ARCHITECTURE.md) · [测试](https://github.com/DEGSOL/HorizonManager/blob/v0.5.5/docs/TESTING.md)
+[此版本的应用与代理源码](https://github.com/DEGSOL/HorizonManager/tree/v0.5.6) · [架构和 API](https://github.com/DEGSOL/HorizonManager/blob/v0.5.6/docs/ARCHITECTURE.md) · [测试](https://github.com/DEGSOL/HorizonManager/blob/v0.5.6/docs/TESTING.md)

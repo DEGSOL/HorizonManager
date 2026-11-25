@@ -1,4 +1,4 @@
-# Hovq 0.5.5
+# Hovq 0.5.6
 
 [Русский](../../README.md) · [English](README.en.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · **Italiano** · [Español](README.es.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [简体中文](README.zh.md) · [Қазақша](README.kk.md) · [Татарча](README.tt.md)
 
@@ -15,6 +15,8 @@ Hovq è un’app Android per installare e gestire [Horizon](https://github.com/T
 
 ## Installazione e prima rassegna
 
+**Per l’installazione basta un VPS personale con Ubuntu Server 24.04 LTS o Debian 12 e accesso SSH.** Collegati da Hovq e conferma. L’app installa automaticamente Horizon, il suo agente e le dipendenze necessarie.
+
 1. Installa l’APK su Android 8.0 o successivo. Prepara un VPS con Ubuntu Server 24.04 LTS o Debian 12, systemd, SSH e accesso ai repository del sistema operativo, GitHub e PyPI. L’installatore verifica l’architettura, almeno 432 MiB di RAM e 1,5 GiB di spazio libero. La raccolta e l’elaborazione possono richiedere più risorse.
 2. Aggiungi il server in Hovq, inserisci la password SSH o seleziona una chiave privata e verifica l’impronta nella console del fornitore. SSH deve consentire l’inoltro verso `127.0.0.1:18777` sul VPS. Conferma l’installazione e immetti la password sudo se richiesta. Puoi anche collegarti a un agente esistente senza reinstallarlo.
 3. Imposta il fornitore di IA, il modello e la chiave API. Per OpenRouter e UnoRouter puoi caricare il catalogo dei modelli nell’app. Aggiungi una fonte, scegli un profilo di elaborazione e avvia la raccolta.
@@ -22,9 +24,9 @@ Hovq è un’app Android per installare e gestire [Horizon](https://github.com/T
 
 ## Notifiche e aggiornamenti
 
-Attiva le notifiche per le nuove rassegne in **Impostazioni → Interfaccia → Notifiche** e concedi il permesso in Android. Hovq si collega brevemente al VPS via SSH o HTTPS vicino agli avvii pianificati e durante la preparazione. La notifica appare quando una rassegna è pronta. Non viene eseguito un servizio permanente. Android può posticipare i controlli in background, soprattutto in sospensione profonda.
+Attiva le notifiche in **Impostazioni → Interfaccia → Notifiche** e concedi il permesso in Android. Hovq mantiene una connessione diretta al VPS tramite SSH o HTTPS configurato. Android mostra una notifica di servizio silenziosa durante il monitoraggio. Una notifica separata avvisa quando è pronta una rassegna. Se la connessione cade, Hovq si riconnette e verifica se è uscita una nuova rassegna.
 
-L’APK si installa sopra Hovq 0.4.5–0.5.4 se il certificato coincide. Le versioni 0.4.4 e precedenti richiedono un’installazione pulita. Su un VPS già configurato, aggiorna l’agente alla versione 0.1.17 da Hovq per controllare pianificazione e stato della rassegna con una sola richiesta.
+L’APK si installa sopra Hovq 0.4.5–0.5.5 se il certificato coincide. Le versioni 0.4.4 e precedenti richiedono un’installazione pulita. Aggiorna l’agente sul VPS alla versione 0.1.18 da Hovq. Riconosce articoli sullo stesso evento formulati diversamente, anche con l’arricchimento su richiesta. L’impostazione di deduplicazione tematica di ciascun profilo continua a valere.
 
 ## Compilazione dal codice sorgente
 
@@ -39,4 +41,4 @@ Per ottenere un APK firmato, imposta
 
 `HM_RELEASE_KEYSTORE`, `HM_RELEASE_KEY_ALIAS`, `HM_RELEASE_STORE_PASSWORD`, `HM_RELEASE_KEY_PASSWORD`
 
-[Sorgenti dell’app e dell’agente per questa versione](https://github.com/DEGSOL/HorizonManager/tree/v0.5.5) · [Architettura e API](https://github.com/DEGSOL/HorizonManager/blob/v0.5.5/docs/ARCHITECTURE.md) · [Test](https://github.com/DEGSOL/HorizonManager/blob/v0.5.5/docs/TESTING.md)
+[Sorgenti dell’app e dell’agente per questa versione](https://github.com/DEGSOL/HorizonManager/tree/v0.5.6) · [Architettura e API](https://github.com/DEGSOL/HorizonManager/blob/v0.5.6/docs/ARCHITECTURE.md) · [Test](https://github.com/DEGSOL/HorizonManager/blob/v0.5.6/docs/TESTING.md)

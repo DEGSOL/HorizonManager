@@ -1,0 +1,20 @@
+<resources>
+    <string name="hovq_headline_range">Longueur du titre</string>
+    <string name="hovq_headline_min">Minimum de caractères</string>
+    <string name="hovq_headline_max">Maximum de caractères</string>
+    <string name="hovq_headline_help">Choisissez une plage de 1 à 240 caractères pour les prochains résumés. Les espaces et la ponctuation comptent.</string>
+    <string name="hovq_headline_save">Enregistrer la longueur des titres</string>
+    <string name="hovq_headline_upgrade">Mettez à jour l’agent du VPS pour modifier la longueur des titres.</string>
+    <string name="hovq_digest_notifications">Notifications des nouveaux résumés</string>
+    <string name="hovq_push_delivery_help">Hovq attend les nouveaux bulletins sur votre VPS. Android affiche une notification de service silencieuse lorsque la connexion directe est active.</string>
+    <string name="hovq_notification_offer">Autorisez les notifications Android pour être averti des nouveaux résumés même lorsque Hovq est fermé.</string>
+    <string name="hovq_allow_notifications">Autoriser les notifications</string>
+    <string name="hovq_later">Plus tard</string>
+    <string name="hovq_agent_update_offer">Mettez à jour l’agent Horizon sur le VPS de %1$s à %2$s pour utiliser les fonctions de cette version de Hovq.</string>
+    <string name="hovq_update_now">Mettre à jour l’agent</string>
+    <string name="hovq_update_sudo">Mot de passe sudo, si nécessaire</string>
+    <string name="hovq_open_photo">Ouvrir l’image</string>
+    <string name="prepare_digest_now">Préparer le digest maintenant</string>
+    <string name="hovq_listener_title">Réception directe des bulletins</string>
+    <string name="hovq_listener_detail">Hovq attend les nouveaux bulletins sur votre VPS.</string>
+</resources>

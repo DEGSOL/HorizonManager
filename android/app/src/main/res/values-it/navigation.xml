@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="favorites_title">Preferiti</string>
+    <string name="favorites_empty">Gli articoli che contrassegni con un segnalibro appariranno qui.</string>
+    <string name="archive_digests">Archivio dei riepiloghi</string>
+    <string name="archive_digests_detail">Apri i riepiloghi precedenti su questo server.</string>
+    <string name="archive_issue_actions">Azioni del riepilogo</string>
+    <string name="archive_remove_device">Rimuovi da questo dispositivo</string>
+    <string name="archive_remove_detail">Il riepilogo del %1$s sparirà dall’archivio di questo dispositivo. La copia sul VPS e gli articoli preferiti verranno conservati.</string>
+    <string name="browser_actions">Azioni del browser</string>
+    <string name="browser_open_external">Apri in un browser esterno</string>
+    <string name="browser_no_handler">Nessuna app può aprire questo link.</string>
+    <string name="nav_unread">Da leggere: %1$d</string>
+</resources>

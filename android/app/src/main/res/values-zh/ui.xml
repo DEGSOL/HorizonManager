@@ -231,8 +231,6 @@
     <string name="ui_copy">"复制"</string>
     <string name="ui_update_vps_agent">"更新 VPS 代理"</string>
     <string name="ui_settings_and_the_archive_will_stay">"设置和存档将保留在 VPS 上。如需单独的 sudo 密码，请输入。"</string>
-    <string name="ui_push_notification_service">"推送通知服务"</string>
-    <string name="ui_install_ntfy_and_enable_unifiedpush_in">"请安装 ntfy，并在其设置中启用 UnifiedPush。"</string>
     <string name="ui_model_api_address_and_request_limits">"模型、API 地址和请求限制"</string>
     <string name="ui_prompts_scoring_criteria_and_output_blocks">"提示词、评分标准和输出区块"</string>
     <string name="ui_email_and_webhook">"邮件和 Webhook"</string>
@@ -246,9 +244,7 @@
     <string name="ui_https_domain_optional">"HTTPS 域名（可选）"</string>
     <string name="ui_leave_blank_to_use_ssh_https">"留空将使用 SSH。使用 HTTPS 需要已配置的反向代理和有效的 TLS 证书。"</string>
     <string name="ui_background_news_checks">"后台检查新闻"</string>
-    <string name="ui_connect_push_notifications">"连接推送通知"</string>
     <string name="ui_push_notifications_connected">"推送通知已连接"</string>
-    <string name="ui_disconnect_push_notifications">"断开推送通知"</string>
     <string name="ui_save_connection">"保存连接"</string>
     <string name="ui_ssh_settings">"SSH 设置"</string>
     <string name="ui_journal">"日志"</string>

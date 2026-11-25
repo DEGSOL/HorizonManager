@@ -1,13 +1,14 @@
 package dev.horizonmanager
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -94,31 +95,36 @@ internal fun ArticleContext(
         }
     }
 
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        TextButton(enabled = !active && !checking, onClick = {
-            if (state == "ready") {
-                show = !show
-            } else {
-                show = true
-                loading = true
-                scope.launch {
-                    try {
-                        result = load(true)
-                    } finally {
-                        loading = false
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End,
+        verticalAlignment = Alignment.CenterVertically) {
+        if (active) {
+            DottedProgress(Modifier.width(44.dp), dots = 5)
+            Text(ui(R.string.article_context_pending), Modifier.weight(1f, fill = false)
+                .padding(horizontal = 8.dp).semantics {
+                    liveRegion = LiveRegionMode.Polite
+                }, color = theme.muted, style = MaterialTheme.typography.bodySmall)
+        }
+        Box(Modifier.navigationGlass(noticeGlassShape).savedNoticeWash()) {
+            TextButton(enabled = !active && !checking, onClick = {
+                if (state == "ready") {
+                    show = !show
+                } else {
+                    show = true
+                    loading = true
+                    scope.launch {
+                        try {
+                            result = load(true)
+                        } finally {
+                            loading = false
+                        }
                     }
                 }
+            }) {
+                Icon(ImageVector.vectorResource(R.drawable.ic_ai_sparkles), null, Modifier.size(19.dp),
+                    tint = publicationScoreAccent)
+                Spacer(Modifier.width(7.dp))
+                Text(ui(R.string.article_more), color = publicationScoreAccent)
             }
-        }) {
-            Icon(ImageVector.vectorResource(R.drawable.ic_ai_sparkles), null, Modifier.size(19.dp))
-            Spacer(Modifier.width(7.dp))
-            Text(ui(R.string.article_more))
-        }
-        if (active) {
-            CircularProgressIndicator(Modifier.size(15.dp), strokeWidth = 2.dp)
-            Text(ui(R.string.article_context_pending), Modifier.padding(start = 8.dp).semantics {
-                liveRegion = LiveRegionMode.Polite
-            }, color = theme.muted, style = MaterialTheme.typography.bodySmall)
         }
     }
     if (state == "failed" && !loading) {
