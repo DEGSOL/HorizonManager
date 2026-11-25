@@ -473,21 +473,26 @@ class FluidScreensTest {
         loadIssue(articleCount = 4)
         statusInset(44)
         val density = compose.activity.resources.displayMetrics.density
-        fun checkGlass(name: String) {
+        fun checkGlass(name: String, lightPage: Boolean = false) {
             val bitmap = snapshot(name)
             val x = (4 * density).toInt()
             val systemY = (20 * density).toInt()
             val contentY = (52 * density).toInt()
-            assertNotEquals("The system status bar still has a glass backing",
-                HorizonPalette.background.toArgb(), bitmap.getPixel(x, systemY))
-            assertEquals("Status blur stays above the app content",
-                HorizonPalette.background.toArgb(), bitmap.getPixel(x, contentY))
+            val content = bitmap.getPixel(x, contentY)
+            assertNotEquals("The system status bar still has a glass backing", content, bitmap.getPixel(x, systemY))
+            if (lightPage) {
+                val page = bitmap.getPixel(x, (75 * density).toInt())
+                assertEquals("Status blur stays above the light page",
+                    AndroidColor.red(page).toFloat(), AndroidColor.red(content).toFloat(), 3f)
+            } else {
+                assertEquals("Status blur stays above the app content", HorizonPalette.background.toArgb(), content)
+            }
         }
         tab(R.string.settings)
-        checkGlass("24-status-settings")
+        checkGlass("24-status-settings", lightPage = true)
         text(R.string.mr_interface).performClick()
         text(R.string.hovq_icon).assertIsDisplayed()
-        checkGlass("25-status-settings-section")
+        checkGlass("25-status-settings-section", lightPage = true)
         back()
         tab(R.string.favorites_title)
         text(R.string.favorites_empty).assertIsDisplayed()
@@ -638,8 +643,9 @@ class FluidScreensTest {
         back()
         list.performTouchInput { swipeDown() }
         tab(R.string.settings)
-        text(R.string.editorial_ai_processing).performClick()
-        compose.onNodeWithContentDescription(ui(R.string.setting_help_for, ui(R.string.digest_output_language))).performClick()
+        text(R.string.mr_news).performClick()
+        compose.onNodeWithContentDescription(ui(R.string.setting_help_for, ui(R.string.digest_output_language)))
+            .performScrollTo().performClick()
         text(R.string.digest_language_detail).assertIsDisplayed()
         text(R.string.ui_close).performClick()
         text(R.string.digest_language_detail).assertDoesNotExist()

@@ -112,7 +112,7 @@ internal fun ServerCredentialFields(draft: ServerDraft, enabled: Boolean, sectio
 
 @Composable
 internal fun VpsFormSection(content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxWidth().glassSurface(MaterialTheme.shapes.extraLarge, backdrop = true, raised = true)
+    Column(Modifier.fillMaxWidth().readingNavigationGlass(feedGlassShape)
         .padding(horizontal = 17.dp, vertical = 15.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
 }

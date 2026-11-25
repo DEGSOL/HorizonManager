@@ -85,14 +85,13 @@ internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boo
                 }
             else GlassSettingRow(def.optString("name"), summary) { editing = id }
         }
-        profiles.firstOrNull()?.let { template ->
-            OutlinedButton(
-                onClick = { add(profiles.getOrNull(ids.indexOf(active)) ?: template, false) }
-            ) {
-                Text(ui(R.string.mr_new_profile))
-            }
+        val template = profiles.getOrNull(ids.indexOf(active)) ?: profiles.firstOrNull()
+        if (template != null) {
+            SettingsActionPair(R.string.mr_new_profile, R.string.ui_advanced_settings, !panel.busy, true,
+                { add(template, false) }, { advanced = !advanced })
+        } else {
+            TextButton(onClick = { advanced = !advanced }) { Text(ui(R.string.ui_advanced_settings)) }
         }
-        TextButton(onClick = { advanced = !advanced }) { Text(ui(R.string.ui_advanced_settings)) }
         if (advanced) {
             val schema = panel.schema.getJSONObject("config")
             EditValue(
