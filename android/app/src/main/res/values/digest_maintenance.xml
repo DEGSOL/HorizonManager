@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="schedule_interval_start">First run time</string>
+    <string name="schedule_interval_pick_start">Choose a time</string>
+    <string name="schedule_interval_update_agent">Update the VPS agent to choose the first run time.</string>
+    <string name="archive_read_digest_title">Archive this digest?</string>
+    <string name="archive_read_digest_detail">You have read every article in this digest.</string>
+    <string name="archive_read_digest_accept">Move to archive</string>
+    <string name="archive_read_digest_later">Not now</string>
+    <string name="journal_headline_fallback_title">Headline rewrite</string>
+    <string name="journal_headline_fallback_count">The AI provider returned no usable headline for %1$d articles. Source text was used.</string>
+    <string name="journal_duplicates_title">Duplicate stories</string>
+    <string name="journal_duplicates_count">Duplicate stories removed before enrichment: %1$d.</string>
+    <string name="journal_duplicates_partial">The additional topic check did not finish. Exact duplicates were still removed.</string>
+</resources>

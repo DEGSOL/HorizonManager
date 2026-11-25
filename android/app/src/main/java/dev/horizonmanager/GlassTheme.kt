@@ -123,6 +123,15 @@ internal fun Modifier.settingsControlGlass(enabled: Boolean = true): Modifier =
     else clip(feedGlassShape).background(Color(0xFFA0A0A0))
 
 @Composable
+internal fun CompactSettingsButton(title: Int, enabled: Boolean, onClick: () -> Unit) {
+    Box(Modifier.heightIn(min = 48.dp).clickable(enabled = enabled, role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center) {
+        Text(ui(title), Modifier.settingsControlGlass(enabled).padding(horizontal = 12.dp, vertical = 5.dp),
+            style = MaterialTheme.typography.labelLarge, color = if (enabled) ReadingGlass.text else ReadingGlass.muted)
+    }
+}
+
+@Composable
 private fun SettingsAction(onClick: () -> Unit, enabled: Boolean, content: @Composable RowScope.() -> Unit) {
     MaterialTextButton(
         onClick, Modifier.settingsControlGlass(enabled), enabled = enabled, shape = feedGlassShape,

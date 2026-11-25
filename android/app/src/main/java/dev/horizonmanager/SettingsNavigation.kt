@@ -23,7 +23,7 @@ private fun SettingsSection(@StringRes title: Int, content: @Composable ColumnSc
 }
 
 @Composable
-internal fun SettingsHome(panel: Panel, open: (String) -> Unit, page: String, servers: () -> Unit) {
+internal fun SettingsHome(panel: Panel, open: (String) -> Unit, page: String) {
     val configured = panel.config.has("config") && panel.schema.length() > 0
     fun rowPage(id: String): () -> Unit = { open(id) }
     when (page) {
@@ -57,16 +57,6 @@ internal fun SettingsHome(panel: Panel, open: (String) -> Unit, page: String, se
                 GlassSettingRow(ui(R.string.mr_images), ui(R.string.mr_images_detail), open = rowPage("images"))
             }
             if (configured) SettingsSection(R.string.ui_digest) { DigestSettings(open) }
-        }
-        "server_settings" -> {
-            ServerConnectionStatus(panel, model = null)
-            SettingsSection(R.string.ui_connection) {
-                GlassSettingRow(ui(R.string.ui_servers), ui(R.string.servers_description), open = servers)
-                if (panel.ready) {
-                    GlassSettingRow(ui(R.string.ui_connection), ui(R.string.settings_connection_detail), open = rowPage("connection"))
-                    GlassSettingRow(ui(R.string.control), ui(R.string.control_description), open = rowPage("control"))
-                }
-            }
         }
         "interface" -> {
             SettingsSection(R.string.setting_group_reading) {
@@ -175,13 +165,11 @@ internal fun ServerConnectionStatus(panel: Panel, model: ManagerModel?) {
 }
 
 @Composable
-internal fun ConnectionSettings(panel: Panel, model: ManagerModel, dirtyChange: (Boolean) -> Unit, editSsh: () -> Unit) {
-    val server = panel.server ?: return
-    var url by remember(server.id, server.https) { mutableStateOf(server.https) }
-    val changed = url.trim() != server.https
-    val valid = AgentApi.validHttps(url.trim())
-    SideEffect { dirtyChange(changed) }
+internal fun ServerSettings(panel: Panel, model: ManagerModel, servers: () -> Unit,
+                            confirm: (String, () -> Unit) -> Unit) {
     ServerConnectionStatus(panel, model)
+    GlassSettingRow(ui(R.string.ui_servers), ui(R.string.servers_description), open = servers)
+    val server = panel.server ?: return
     var attaching by remember(server.id) { mutableStateOf(false) }
     if (panel.connectionProblem in setOf("AUTH_REQUIRED", "API_401", "API_403")) {
         OutlinedButton(onClick = { attaching = true }, enabled = !panel.busy) {
@@ -193,20 +181,7 @@ internal fun ConnectionSettings(panel: Panel, model: ManagerModel, dirtyChange: 
         attaching = false
         model.attachExisting(password)
     }
-    Tile {
-        val https = ui(R.string.ui_https_domain_optional)
-        OutlinedTextField(url, { url = it }, label = { Text(https) },
-            trailingIcon = { SettingHelp(https, R.string.ui_leave_blank_to_use_ssh_https) },
-            modifier = Modifier.fillMaxWidth(), singleLine = true, isError = changed && !valid,
-            supportingText = if (changed && !valid) ({ Text(errorText("HTTPS_URL")) }) else null,
-            colors = horizonFieldColors(), shape = horizonFieldShape())
-        Reveal(changed) {
-            Text(ui(R.string.editorial_unsaved), color = LocalHorizonPalette.current.warning)
-            Button(onClick = { model.settings(url.trim(), server.background) },
-                enabled = !panel.busy && valid) { Text(ui(R.string.ui_save_connection)) }
-        }
-    }
-    GlassSettingRow(ui(R.string.ui_ssh_settings), "${server.user} @ ${server.host} · ${server.port}", enabled = !panel.busy && !changed, open = editSsh)
+    if (panel.ready) HorizonOnVps(panel, model, confirm)
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -304,13 +279,13 @@ internal fun ServerMaintenance(panel: Panel, model: ManagerModel, open: (String)
     if (!panel.ready) return
     Tile {
         Text(ui(R.string.settings_agent_tools), style = MaterialTheme.typography.titleMedium)
-        FlowRow {
-            TextButton(onClick = model::check, enabled = !panel.busy) { Text(ui(R.string.ui_check_configuration)) }
-            TextButton(onClick = model::checkVersions, enabled = !panel.busy) { Text(ui(R.string.ui_check_horizon_version)) }
-            TextButton(onClick = { restart = true }, enabled = !panel.busy) { Text(ui(R.string.ui_restart_agent)) }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            CompactSettingsButton(R.string.ui_check_configuration, !panel.busy, model::check)
+            CompactSettingsButton(R.string.ui_check_horizon_version, !panel.busy, model::checkVersions)
+            CompactSettingsButton(R.string.ui_restart_agent, !panel.busy) { restart = true }
             if (agentUpdateAvailable(panel.status.optString("agent")) || panel.updatingAgent) {
-                TextButton(onClick = { upgrade = true }, enabled = !panel.busy && !panel.updatingAgent &&
-                    panel.jobs.none { it.optString("state") in setOf("queued", "running") }) { Text(ui(R.string.ui_update_vps_agent)) }
+                CompactSettingsButton(R.string.ui_update_vps_agent, !panel.busy && !panel.updatingAgent &&
+                    panel.jobs.none { it.optString("state") in setOf("queued", "running") }) { upgrade = true }
             }
         }
         Reveal(panel.updatingAgent) { DottedProgress(Modifier.fillMaxWidth()) }

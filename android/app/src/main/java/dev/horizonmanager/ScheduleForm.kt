@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.*
-import androidx.compose.material3.FilterChip as MaterialFilterChip
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -43,16 +42,18 @@ private fun ScheduleDayChip(title: Int, selected: Boolean, enabled: Boolean, was
     val shape = feedGlassShape
     val surface = if (selected) Modifier.glassSurface(shape, outlined = false).savedNoticeWash(phase = wash)
         else Modifier.settingsControlGlass(enabled)
-    MaterialFilterChip(
-        selected = selected, onClick = select, label = { Text(ui(title)) }, modifier = surface,
-        enabled = enabled, shape = shape, border = null,
-        colors = FilterChipDefaults.filterChipColors(
-            containerColor = Color.Transparent, selectedContainerColor = Color.Transparent,
-            disabledContainerColor = Color.Transparent, disabledSelectedContainerColor = Color.Transparent,
-            labelColor = ReadingGlass.text, selectedLabelColor = Color.White,
-            disabledLabelColor = if (selected) Color.White.copy(alpha = .74f) else ReadingGlass.muted,
-        ),
-    )
+    Box(Modifier.heightIn(min = 48.dp).selectable(
+        selected = selected, onClick = select, enabled = enabled, role = Role.Checkbox,
+    ), contentAlignment = Alignment.Center) {
+        Text(ui(title), surface.padding(horizontal = 12.dp, vertical = 5.dp),
+            style = MaterialTheme.typography.labelLarge,
+            color = when {
+                selected && enabled -> Color.White
+                selected -> Color.White.copy(alpha = .74f)
+                enabled -> ReadingGlass.text
+                else -> ReadingGlass.muted
+            })
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -72,21 +73,31 @@ internal fun ScheduleForm(panel: Panel, model: ManagerModel, dirtyChange: (Boole
     val saved = spec.toString()
     val savedMode = spec.optString("mode", "off")
     val savedHours = spec.optInt("hours", 6)
+    val supportsIntervalStart = spec.has("interval_start")
+    val savedStart = spec.optString("interval_start", "").takeUnless { spec.isNull("interval_start") }.orEmpty()
     val savedHour = spec.optInt("hour", 8)
     val savedMinute = spec.optInt("minute")
     val savedDays = spec.scheduleDayMask()
     val savedZone = spec.optString("zone", ZoneId.systemDefault().id)
     var mode by rememberSaveable(saved) { mutableStateOf(savedMode) }
     var hours by rememberSaveable(saved) { mutableStateOf(savedHours.toString()) }
+    var intervalStart by rememberSaveable(saved) { mutableStateOf(savedStart) }
+    var intervalZone by rememberSaveable(saved) {
+        mutableStateOf(if (savedStart.isBlank()) ZoneId.systemDefault().id else savedZone)
+    }
     var hour by rememberSaveable(saved) { mutableIntStateOf(savedHour) }
     var minute by rememberSaveable(saved) { mutableIntStateOf(savedMinute) }
     var days by rememberSaveable(saved) { mutableIntStateOf(savedDays) }
     var zone by rememberSaveable(saved) { mutableStateOf(savedZone) }
     var pickTime by rememberSaveable { mutableStateOf(false) }
     var pickZone by rememberSaveable { mutableStateOf(false) }
+    val start = intervalStart.split(':').takeIf { it.size == 2 }
+    val startHour = start?.get(0)?.toIntOrNull() ?: 8
+    val startMinute = start?.get(1)?.toIntOrNull() ?: 0
     val parsedHours = hours.toIntOrNull()
     val changed = mode != savedMode || when (mode) {
-        "interval" -> parsedHours != savedHours
+        "interval" -> parsedHours != savedHours || intervalStart != savedStart ||
+            (intervalStart.isNotBlank() && intervalZone != savedZone)
         "calendar" -> hour != savedHour || minute != savedMinute || days != savedDays || zone != savedZone
         else -> false
     }
@@ -98,7 +109,7 @@ internal fun ScheduleForm(panel: Panel, model: ManagerModel, dirtyChange: (Boole
     )
     val next = panel.schedule.optDouble("next")
     val nextRun = if (next.isFinite()) runCatching {
-        val timeZone = if (savedMode == "calendar") ZoneId.of(savedZone) else ZoneId.systemDefault()
+        val timeZone = if (savedMode == "calendar" || savedMode == "interval" && savedStart.isNotBlank()) ZoneId.of(savedZone) else ZoneId.systemDefault()
         Instant.ofEpochSecond(next.toLong()).atZone(timeZone)
     }.getOrNull() else null
 
@@ -141,6 +152,15 @@ internal fun ScheduleForm(panel: Panel, model: ManagerModel, dirtyChange: (Boole
                         keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
                     isError = (parsedHours ?: 0) !in 1..168, singleLine = true, enabled = !panel.busy,
                     colors = horizonFieldColors(), shape = horizonFieldShape())
+                if (supportsIntervalStart) {
+                    GlassSettingRow(ui(R.string.schedule_interval_start),
+                        if (intervalStart.isBlank()) ui(R.string.schedule_interval_pick_start)
+                        else targetTime(startHour, startMinute), enabled = !panel.busy) { pickTime = true }
+                    GlassSettingRow(ui(R.string.ui_time_zone), zoneLabel(intervalZone), enabled = !panel.busy,
+                        help = R.string.setting_help_schedule_zone) { pickZone = true }
+                } else {
+                    Text(ui(R.string.schedule_interval_update_agent), style = MaterialTheme.typography.bodySmall)
+                }
             }
             "calendar" -> {
                 val wash = rememberNoticeWashPhase()
@@ -169,34 +189,47 @@ internal fun ScheduleForm(panel: Panel, model: ManagerModel, dirtyChange: (Boole
         Reveal(changed) {
             Text(ui(R.string.editorial_unsaved), color = palette.warning)
             Button(enabled = !panel.busy && when (mode) {
-                "interval" -> (parsedHours ?: 0) in 1..168
+                "interval" -> (parsedHours ?: 0) in 1..168 && (!supportsIntervalStart || intervalStart.isNotBlank())
                 "calendar" -> days != 0
                 else -> true
             }, onClick = {
-                model.schedule(spec.copyObject().put("mode", mode).put("hours", parsedHours?.takeIf { it in 1..168 } ?: savedHours)
-                    .put("hour", hour).put("minute", minute).put("zone", zone)
-                    .put("days", JSONArray(weekdays.indices.filter { (days.takeIf { it != 0 } ?: savedDays) and (1 shl it) != 0 })))
+                val payload = spec.copyObject().put("mode", mode)
+                    .put("hours", parsedHours?.takeIf { it in 1..168 } ?: savedHours)
+                    .put("hour", hour).put("minute", minute)
+                    .put("zone", if (mode == "interval" && supportsIntervalStart) intervalZone else zone)
+                    .put("days", JSONArray(weekdays.indices.filter { (days.takeIf { it != 0 } ?: savedDays) and (1 shl it) != 0 }))
+                if (supportsIntervalStart) payload.put("interval_start", if (mode == "interval" && intervalStart.isNotBlank()) intervalStart else JSONObject.NULL)
+                model.schedule(payload)
             }) { Text(ui(R.string.ui_save_schedule)) }
         }
     }
+    val interval = mode == "interval"
     if (pickTime) {
-        ScheduleTimePicker(hour, minute, { pickTime = false }) { newHour, newMinute ->
-            hour = newHour
-            minute = newMinute
+        ScheduleTimePicker(if (interval) startHour else hour, if (interval) startMinute else minute,
+            if (interval) R.string.schedule_interval_start else R.string.schedule_time, { pickTime = false }
+        ) { newHour, newMinute ->
+            if (interval) intervalStart = LocalTime.of(newHour, newMinute).toString()
+            else {
+                hour = newHour
+                minute = newMinute
+            }
             pickTime = false
         }
     }
-    if (pickZone) ScheduleZonePicker(zone, { pickZone = false }) { zone = it; pickZone = false }
+    if (pickZone) ScheduleZonePicker(if (interval) intervalZone else zone, { pickZone = false }) {
+        if (interval) intervalZone = it else zone = it
+        pickZone = false
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ScheduleTimePicker(hour: Int, minute: Int, close: () -> Unit, choose: (Int, Int) -> Unit) {
+private fun ScheduleTimePicker(hour: Int, minute: Int, title: Int, close: () -> Unit, choose: (Int, Int) -> Unit) {
     val time = rememberTimePickerState(hour, minute, is24Hour = true)
     val configuration = LocalConfiguration.current
     val compact = configuration.screenHeightDp < 580 || configuration.screenWidthDp < 360 || configuration.fontScale > 1.3f
-    HorizonAlertDialog(close, { Text(ui(R.string.schedule_time)) }, text = {
-        if (compact) TimeInput(time) else TimePicker(time)
+    HorizonAlertDialog(close, { Text(ui(title)) }, text = {
+        if (compact || title == R.string.schedule_interval_start) TimeInput(time) else TimePicker(time)
     }, confirmButton = {
         TextButton(onClick = { choose(time.hour, time.minute) }) { Text(ui(R.string.editorial_done)) }
     }, dismissButton = { TextButton(onClick = close) { Text(ui(R.string.ui_cancel)) } })

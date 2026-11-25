@@ -573,6 +573,21 @@ class AgentTests(unittest.TestCase):
         self.assertFalse(any(event["code"] == "enrich" for event in self.client.get("/v1/events").json()))
         self.assertEqual(self.client.get("/v1/schedule").json()["spec"]["hours"], 2)
 
+    def test_interval_starts_at_selected_wall_time_and_keeps_cadence(self):
+        settings = {"mode": "interval", "hours": 7, "interval_start": "08:15", "zone": "Asia/Yekaterinburg"}
+        stamp = datetime(2026, 11, 25, 2, 0, tzinfo=timezone.utc).timestamp()
+        expected = datetime(2026, 11, 25, 3, 15, tzinfo=timezone.utc).timestamp()
+        with patch("horizon_manager.api.time.time", return_value=stamp):
+            result = self.client.put("/v1/schedule", json=settings).json()
+        self.assertEqual(result["next"], expected)
+        self.assertEqual(self.client.get("/v1/schedule").json()["spec"]["interval_start"], "08:15")
+        with patch("horizon_manager.api.time.time", return_value=expected + 20):
+            self.assertEqual(self.client.put("/v1/schedule", json=settings).json()["next"], expected)
+        schedule = Schedule.model_validate(settings)
+        self.assertEqual(next_run(schedule, expected + 20, previous=expected), expected + 7 * 3600)
+        self.assertEqual(next_run(schedule, expected + 7 * 3600 + 60, previous=expected), expected + 14 * 3600)
+        self.assertEqual(self.client.put("/v1/schedule", json={**settings, "interval_start": "24:00"}).status_code, 422)
+
     def test_restart_marks_inflight_without_resubmission(self):
         id = uuid4().hex
         with Store(self.root).db() as db:

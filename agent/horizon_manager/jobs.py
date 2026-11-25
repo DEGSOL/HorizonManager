@@ -40,7 +40,7 @@ def claim(store, article=False):
         schedule = db.execute("SELECT spec,next FROM schedule WHERE id=1").fetchone()
         if not article and schedule["next"] is not None and schedule["next"] <= now:
             spec = Schedule.model_validate_json(schedule["spec"])
-            db.execute("UPDATE schedule SET next=? WHERE id=1", (next_run(spec, now),))
+            db.execute("UPDATE schedule SET next=? WHERE id=1", (next_run(spec, now, previous=schedule["next"]),))
             if db.execute(f"SELECT 1 FROM jobs WHERE {PIPELINE_ACTIVE}").fetchone():
                 Store.event(db, "SCHEDULE_SKIPPED_ACTIVE", "WARNING", "scheduler")
             else:

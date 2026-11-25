@@ -77,7 +77,10 @@ internal fun NewsScreen(
     val state = rememberLazyStaggeredGridState()
     var bubble by rememberSaveable(run) { mutableStateOf(false) }
     var full by rememberSaveable(run) { mutableStateOf(false) }
-    var openId by rememberSaveable(run, panel.language) { mutableStateOf("") }
+    val serverId = panel.server?.id.orEmpty()
+    var openId by rememberSaveable(serverId, run, panel.language) { mutableStateOf("") }
+    var openedUnread by rememberSaveable(serverId, run, panel.language) { mutableStateOf(false) }
+    var archiveAfterReading by rememberSaveable(serverId, run, panel.language) { mutableStateOf(false) }
     val article =
         remember(panel.articles, loaded, openId) {
             panel.articles.find { loaded && it.optString("id") == openId }
@@ -106,6 +109,26 @@ internal fun NewsScreen(
     }
     val flags = remember(panel.flags) { panel.flags.associateBy(ArticleFlag::article) }
     val incomplete = loaded && panel.articles.size < panel.total
+    val allRead = remember(loaded, panel.total, panel.articles, flags) {
+        loaded && panel.total > 0 && panel.articles.size == panel.total &&
+            panel.articles.all { flags[it.optString("id")]?.read == true }
+    }
+    if (!archived && archiveAfterReading && allRead && openId.isEmpty() && !promptOpen) {
+        HorizonAlertDialog(
+            onDismissRequest = { archiveAfterReading = false },
+            title = { Text(ui(R.string.archive_read_digest_title)) },
+            text = { Text(ui(R.string.archive_read_digest_detail)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    archiveAfterReading = false
+                    model.archiveDigest(run)
+                }) { Text(ui(R.string.archive_read_digest_accept)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { archiveAfterReading = false }) { Text(ui(R.string.archive_read_digest_later)) }
+            },
+        )
+    }
     DisposableEffect(run, panel.language, incomplete) {
         val language = panel.language
         if (incomplete) model.loadChronology(run, language)
@@ -290,8 +313,10 @@ internal fun NewsScreen(
                                     movingBorder = movingBorder,
                                     relay = model.coverRelay(panel, id),
                                     open = {
+                                        archiveAfterReading = false
+                                        openedUnread = flag?.read != true
                                         openId = id
-                                        if (flag?.read != true) model.flag(item, read = true)
+                                        if (openedUnread) model.flag(item, read = true)
                                     },
                                 ) {
                                     model.flag(item, save = flag?.saved != true)
@@ -381,12 +406,15 @@ internal fun NewsScreen(
         article?.let { selected ->
             val id = selected.getString("id")
             val flag = flags[id]
-            val serverId = panel.server?.id.orEmpty()
             val run = panel.selectedRun
             val language = panel.language
             ArticleDialog(
                 selected, flag, { model.flag(selected, save = flag?.saved != true) },
-                { model.flag(selected, read = flag?.read != true) },
+                {
+                    val read = flag?.read != true
+                    openedUnread = read
+                    model.flag(selected, read = read)
+                },
                 artworkServer = serverId,
                 relay = model.coverRelay(panel, id),
                 contextContent = {
@@ -396,7 +424,11 @@ internal fun NewsScreen(
                         }
                     }
                 },
-            ) { openId = "" }
+            ) {
+                archiveAfterReading = !archived && openedUnread
+                openedUnread = false
+                openId = ""
+            }
         }
     }
 }

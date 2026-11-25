@@ -190,7 +190,7 @@ class FluidScreensTest {
             config = cfg.getJSONObject("config"),
             schema = cfg.getJSONObject("schema"),
             schedule = JSONObject().put("spec", JSONObject()
-                .put("mode", "calendar").put("hour", 9).put("minute", 0)
+                .put("mode", "calendar").put("hour", 9).put("minute", 0).put("interval_start", JSONObject.NULL)
                 .put("zone", "UTC").put("days", JSONArray((0..6).toList())))
                 .put("next", now.plusSeconds(3600).epochSecond),
             archive = listOf(issue) + archive,
@@ -497,6 +497,24 @@ class FluidScreensTest {
     }
 
     @Test
+    fun archiveOfferAppearsAfterClosingLastUnreadArticle() {
+        loadIssue(observeServer = true, articleCount = 2)
+        compose.onNodeWithText(headlines[0]).performClick()
+        compose.onNodeWithContentDescription(ui(R.string.ui_back)).performClick()
+        text(R.string.archive_read_digest_title).assertDoesNotExist()
+        compose.onNodeWithText(headlines[1]).performClick()
+        text(R.string.archive_read_digest_title).assertDoesNotExist()
+        compose.onNodeWithContentDescription(ui(R.string.ui_back)).performClick()
+        compose.waitUntil(8_000) {
+            compose.onAllNodesWithText(ui(R.string.archive_read_digest_title)).fetchSemanticsNodes().isNotEmpty()
+        }
+        text(R.string.archive_read_digest_later).performClick()
+        compose.onNodeWithText(headlines[1]).performClick()
+        compose.onNodeWithContentDescription(ui(R.string.ui_back)).performClick()
+        text(R.string.archive_read_digest_title).assertDoesNotExist()
+    }
+
+    @Test
     fun scheduleShowsServerRunAndRevealsOnlyRelevantControls() {
         loadIssue()
         tab(R.string.settings)
@@ -521,6 +539,11 @@ class FluidScreensTest {
         text(R.string.ui_at_regular_intervals).performScrollTo().performClick()
         text(R.string.ui_interval_from_1_to_168_hours).assertExists()
         text(R.string.schedule_time).assertDoesNotExist()
+        text(R.string.schedule_interval_start).assertExists()
+        text(R.string.ui_save_schedule).assertIsNotEnabled()
+        text(R.string.schedule_interval_start).performScrollTo().performClick()
+        text(R.string.editorial_done).performClick()
+        text(R.string.ui_save_schedule).assertIsEnabled()
     }
 
     @Test
@@ -807,10 +830,11 @@ class FluidScreensTest {
         text(R.string.ui_cancel).performClick()
         compose.onNodeWithText(serverName).assertIsDisplayed()
         back()
-        text(R.string.control).performClick()
+        text(R.string.control).assertDoesNotExist()
+        text(R.string.ui_connection).assertDoesNotExist()
+        text(R.string.ui_horizon_on_the_vps).assertExists()
         text(R.string.ui_check_status).assertExists()
         snapshot("07-server")
-        back()
         back()
         tab(R.string.settings)
         text(R.string.archive_digests).performClick()

@@ -110,15 +110,11 @@ internal fun phaseName(value: String) = mapOf("fetch" to ui(R.string.ui_collecti
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun Control(panel: Panel, model: ManagerModel, confirm: (String, () -> Unit) -> Unit,
-                     configure: (String) -> Unit) {
+internal fun HorizonOnVps(panel: Panel, model: ManagerModel, confirm: (String, () -> Unit) -> Unit) {
     val status = panel.status
-    ServerConnectionStatus(panel, model)
     val active = panel.jobs.firstOrNull {
         it.optString("kind") != "article_context" && it.optString("state") in setOf("queued", "running")
     }
-    val latest = panel.jobs.firstOrNull { it.optString("kind") == "run" && it.optString("state") == "success" }
-    val issue = panel.events.firstOrNull { it.optString("level") in listOf("ERROR", "CRITICAL") }
     Tile {
         Text(ui(R.string.ui_horizon_on_the_vps), style = MaterialTheme.typography.titleLarge)
         if (status.length() == 0) Text(ui(R.string.ui_monitoring_data_has_not_loaded_yet))
@@ -129,10 +125,7 @@ internal fun Control(panel: Panel, model: ManagerModel, confirm: (String, () -> 
             val available = mem?.optLong("MemAvailable") ?: 0
             if (mem?.has("MemAvailable") == true && total > 0 && status.has("disk_free")) Text(ui(R.string.ui_ram_mib_free_disk_mib, (total - available) / 1_048_576, total / 1_048_576, status.optLong("disk_free") / 1_048_576))
             if (status.has("cpu") && status.optDouble("load").isFinite()) Text(ui(R.string.ui_cpu_1_minute_load_average, status.optInt("cpu"), status.optDouble("load")))
-            Text(ui(R.string.ui_next_run, localEpoch(status.optDouble("next"))))
         }
-        latest?.let { Text(ui(R.string.ui_last_success_517d5d, localTime(it.optString("updated")))) }
-        issue?.let { Text(ui(R.string.ui_last_error, errorText(it.optString("code"))), color = MaterialTheme.colorScheme.error) }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { model.submit() }, enabled = active == null && !panel.busy) { Text(ui(R.string.ui_start_collection)) }
             OutlinedButton(onClick = { model.refresh() }) { Text(ui(R.string.ui_check_status)) }
@@ -145,26 +138,7 @@ internal fun Control(panel: Panel, model: ManagerModel, confirm: (String, () -> 
         Text(job.getString("id"), style = MaterialTheme.typography.labelSmall)
         TextButton(onClick = { confirm(ui(R.string.ui_stop_this_job_the_provider_may)) { model.stop(job.getString("id")) } }) { Text(ui(R.string.ui_stop)) }
     } }
-    GlassSettingRow(ui(R.string.ui_schedule), ui(R.string.ui_days_intervals_and_time_zone)) { configure("schedule") }
-    if (panel.jobs.isNotEmpty()) Tile {
-        Text(ui(R.string.ui_job_history), style = MaterialTheme.typography.titleMedium)
-        panel.jobs.take(25).forEach { job ->
-            Column(Modifier.fillMaxWidth().settingsItemSurface().padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                val kind = when (job.optString("kind")) { "ai" -> ui(R.string.ui_ai_test); "source" -> ui(R.string.ui_source_test); "localize" -> ui(R.string.ui_translation); "article_context" -> ui(R.string.article_context_heading); else -> ui(R.string.ui_digest) }
-                Text("$kind · ${stateName(job.optString("state"))} · ${localTime(job.optString("created"))}")
-                Text(job.optString("id"), style = MaterialTheme.typography.labelSmall)
-                job.optJSONObject("result")?.let { result ->
-                    val counts = listOf("raw" to ui(R.string.ui_collected), "scored" to ui(R.string.ui_scored), "kept" to ui(R.string.ui_in_issue), "enriched" to ui(R.string.ui_enriched))
-                        .mapNotNull { (key, title) -> if (result.has(key)) "$title ${result.getInt(key)}" else null }
-                    if (counts.isNotEmpty()) Text(counts.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
-                }
-                if (active == null && job.optString("kind") in setOf("ai", "run") && job.optString("state") in setOf("failed", "timeout", "interrupted")) {
-                    TextButton(onClick = { model.submit(job.optString("kind")) }) { Text(ui(R.string.ui_retry)) }
-                }
-            }
-        }
-    }
+
 }
 
 private fun profileIds(profiles: JSONArray) = profiles.objects().mapNotNull { it.optJSONObject("definition")?.optString("id") }

@@ -434,8 +434,16 @@ def create_app(root, token):
 
     @app.put("/v1/schedule")
     def put_schedule(body: Schedule):
-        upcoming = next_run(body, time.time())
         with store.db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT spec,next FROM schedule WHERE id=1").fetchone()
+            current = Schedule.model_validate_json(row["spec"])
+            if (body.mode == current.mode == "interval" and body.interval_start is not None
+                    and (body.hours, body.interval_start, body.zone) ==
+                    (current.hours, current.interval_start, current.zone) and row["next"] is not None):
+                upcoming = row["next"]
+            else:
+                upcoming = next_run(body, time.time())
             db.execute("UPDATE schedule SET spec=?,next=? WHERE id=1", (body.model_dump_json(), upcoming))
             Store.event(db, "SCHEDULE_SAVED", component="scheduler")
         return {"spec": body.model_dump(), "next": upcoming}

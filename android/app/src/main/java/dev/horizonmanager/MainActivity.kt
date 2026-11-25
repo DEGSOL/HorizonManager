@@ -532,11 +532,9 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                 "interface" -> ui(R.string.mr_interface)
                 "images" -> ui(R.string.mr_images)
                 "sources" -> ui(R.string.sources)
-                "control" -> ui(R.string.control)
                 "schedule" -> ui(R.string.ui_schedule)
                 "delivery" -> ui(R.string.settings_server_delivery)
                 "alerts" -> ui(R.string.settings_notifications)
-                "connection" -> ui(R.string.ui_connection)
                 "maintenance" -> ui(R.string.ui_maintenance)
                 "transfer" -> ui(R.string.settings_transfer)
                 "icon" -> ui(R.string.hovq_icon)
@@ -622,10 +620,8 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                                     }
                                     "setup" -> Setup(panel, model)
                                     "sources" -> Sources(panel, model) { if (configPage == screen.page) dirtyPage = it }
-                                    "control" -> Control(panel, model, { description, action -> confirm = description to action }, ::openSettings)
-                                    "connection" -> ConnectionSettings(panel, model, { if (configPage == screen.page) dirtyPage = it }) {
-                                        model.clearServerEditResult()
-                                        editingServerId = currentServer?.id.orEmpty()
+                                    "server_settings" -> ServerSettings(panel, model, { manageServers = true }) {
+                                        description, action -> confirm = description to action
                                     }
                                     "alerts" -> NotificationSettings(panel, model, ::requestNotifications,
                                         { openSettings("delivery") })
@@ -644,8 +640,8 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                                     "local" -> LocalReadingData(panel)
                                     "digest_settings" -> DigestSettings(::openSettings)
                                     "ai_settings" -> AiSettings(panel, model, ::openSettings)
-                                    "settings", "news_settings", "server_settings", "interface" ->
-                                        SettingsHome(panel, ::openSettings, screen.page) { manageServers = true }
+                                    "settings", "news_settings", "interface" ->
+                                        SettingsHome(panel, ::openSettings, screen.page)
                                     "images" -> ImageSettings(panel, model)
                                     else -> CompositionLocalProvider(LocalEditorBack provides editorBack) {
                                         SettingsForm(panel, model, screen.page) { if (configPage == screen.page) dirtyPage = it }
