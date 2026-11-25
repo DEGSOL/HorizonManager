@@ -14,11 +14,12 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.CancellationException
+import org.json.JSONObject
 
 @Composable
 internal fun ChatGptSettings(
     serverId: String, model: ManagerModel, currentModel: String, busy: Boolean,
-    select: (String) -> Unit, save: () -> Unit,
+    select: (String) -> Unit,
 ) {
     val context = LocalContext.current
     val status by model.chatgptLogin.collectAsStateWithLifecycle()
@@ -73,47 +74,51 @@ internal fun ChatGptSettings(
             Text(ui(if (connected) R.string.hovq_chatgpt_reconnect else R.string.hovq_chatgpt_sign_in))
         }
     }
-    if (loading && login?.waiting != true) DottedProgress(Modifier.fillMaxWidth())
+    if (loading && !choosing && login?.waiting != true) DottedProgress(Modifier.fillMaxWidth())
     val failure = login?.error?.takeIf(String::isNotBlank) ?: error
-    if (failure.isNotBlank()) Text(errorText(failure), color = MaterialTheme.colorScheme.error)
+    if (!choosing && failure.isNotBlank()) Text(errorText(failure), color = MaterialTheme.colorScheme.error)
     if (connected && login?.waiting != true) {
         val selected = models.firstOrNull { it.id == currentModel }
         if (currentModel.isNotBlank()) Text(selected?.name ?: currentModel, style = MaterialTheme.typography.titleMedium)
-        OutlinedButton(onClick = { choosing = true }, enabled = models.isNotEmpty() && !busy && !loading) {
+        OutlinedButton(onClick = { choosing = true }, enabled = !busy && !loading) {
             Text(ui(if (currentModel.isBlank()) R.string.ui_select_model else R.string.ui_change_model))
         }
-        TextButton(onClick = { refresh++ }, enabled = !busy && !loading) { Text(ui(R.string.ui_refresh_list)) }
-        if (choosing && models.isNotEmpty()) RouterPicker(models, currentModel, { choosing = false }) {
-            select(it)
+        if (choosing) RouterPicker(models, currentModel, loading, failure.takeIf(String::isNotBlank)?.let(::errorText).orEmpty(),
+            refresh = { refresh++ }, close = { choosing = false }) {
             choosing = false
-        }
-        Button(enabled = !busy && !loading && currentModel.isNotBlank(), onClick = save) {
-            Text(ui(R.string.ui_save_settings))
+            select(it)
         }
     }
 }
 
 @Composable
-internal fun SavedModelTest(panel: Panel, model: ManagerModel, savedModel: String) {
-    val checks by model.savedModelChecks.collectAsStateWithLifecycle()
-    val check = checks[panel.server?.id]?.takeIf { it.model == savedModel && it.revision == panel.config.optInt("revision") }
-    TextButton(onClick = model::testSavedModel, enabled = !panel.busy && savedModel.isNotBlank() && check?.pending != true) {
+internal fun SavedModelTest(
+    selected: JSONObject, saved: JSONObject, revision: Int, busy: Boolean, check: SavedModelCheck?,
+    ready: Boolean, test: () -> Unit,
+) {
+    val selectedModel = selected.optString("model")
+    val applied = ready && selected.toString() == saved.toString() && selectedModel.isNotBlank()
+    val result = check?.takeIf { applied && it.model == selectedModel && it.revision == revision }
+    TextButton(onClick = test, enabled = !busy && applied && check?.pending != true) {
         Text(ui(R.string.ui_test_saved_model))
     }
-    if (check != null) {
-        if (check.pending) DottedProgress(Modifier.fillMaxWidth())
+    if (busy && !applied && selectedModel.isNotBlank()) {
+        Text(ui(R.string.ui_saving), style = MaterialTheme.typography.bodySmall)
+    }
+    if (result != null) {
+        if (result.pending) DottedProgress(Modifier.fillMaxWidth())
         val message = when {
-            check.pending -> ui(R.string.hovq_ai_testing, check.model)
-            check.error.isNotEmpty() -> {
-                val detail = if (check.error == "UPSTREAM_FAILURE") ui(R.string.hovq_ai_test_no_reply)
-                else errorText(check.error)
-                ui(R.string.hovq_ai_test_failed, check.model, detail)
+            result.pending -> ui(R.string.hovq_ai_testing, result.model)
+            result.error.isNotEmpty() -> {
+                val detail = if (result.error == "UPSTREAM_FAILURE") ui(R.string.hovq_ai_test_no_reply)
+                else errorText(result.error)
+                ui(R.string.hovq_ai_test_failed, result.model, detail)
             }
-            else -> ui(R.string.hovq_ai_test_success, check.model)
+            else -> ui(R.string.hovq_ai_test_success, result.model)
         }
         Text(message, Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-            color = if (check.error.isNotEmpty()) MaterialTheme.colorScheme.error else LocalHorizonPalette.current.text)
-    } else if (savedModel.isBlank()) {
+            color = if (result.error.isNotEmpty()) MaterialTheme.colorScheme.error else LocalHorizonPalette.current.text)
+    } else if (!applied && !busy) {
         Text(ui(R.string.hovq_ai_test_save_first), style = MaterialTheme.typography.bodySmall)
     }
 }

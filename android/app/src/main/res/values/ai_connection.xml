@@ -18,6 +18,6 @@
     <string name="hovq_ai_testing">Checking whether %1$s responds…</string>
     <string name="hovq_ai_test_success">%1$s responded. The saved model works.</string>
     <string name="hovq_ai_test_failed">The check for %1$s failed. %2$s</string>
-    <string name="hovq_ai_test_save_first">Save a model to test it.</string>
+    <string name="hovq_ai_test_save_first">Choose a model to apply these settings and run the check.</string>
     <string name="hovq_ai_test_no_reply">The provider did not return a usable response.</string>
 </resources>

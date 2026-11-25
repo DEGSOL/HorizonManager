@@ -1069,12 +1069,14 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     private val modelChecks = MutableStateFlow<Map<String, SavedModelCheck>>(emptyMap())
     val savedModelChecks = modelChecks.asStateFlow()
 
-    fun testSavedModel() {
+    fun testSavedModel(serverId: String, revision: Int, selected: JSONObject) {
         val panel = state.value
         val server = panel.server ?: return
-        val model = panel.config.optJSONObject("config")?.optJSONObject("ai")?.optString("model").orEmpty()
-        if (model.isBlank() || modelChecks.value[server.id]?.pending == true) return
-        val revision = panel.config.optInt("revision")
+        val savedAi = panel.config.optJSONObject("config")?.optJSONObject("ai") ?: return
+        if (panel.busy || server.id != serverId || panel.config.optInt("revision") != revision ||
+            savedAi.toString() != selected.toString() || modelChecks.value[server.id]?.pending == true) return
+        val model = savedAi.optString("model")
+        if (model.isBlank()) return
         fun show(pending: Boolean, error: String = "") {
             modelChecks.update { it + (server.id to SavedModelCheck(model, revision, pending, error)) }
         }

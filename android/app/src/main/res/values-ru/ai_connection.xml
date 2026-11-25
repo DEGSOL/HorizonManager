@@ -18,6 +18,6 @@
     <string name="hovq_ai_testing">Проверяю ответ модели %1$s…</string>
     <string name="hovq_ai_test_success">Модель %1$s ответила. Проверка пройдена.</string>
     <string name="hovq_ai_test_failed">Модель %1$s не прошла проверку. %2$s</string>
-    <string name="hovq_ai_test_save_first">Сохрани модель, чтобы проверить её.</string>
+    <string name="hovq_ai_test_save_first">Выбери модель, чтобы применить настройки и запустить проверку.</string>
     <string name="hovq_ai_test_no_reply">Провайдер не вернул пригодный ответ.</string>
 </resources>

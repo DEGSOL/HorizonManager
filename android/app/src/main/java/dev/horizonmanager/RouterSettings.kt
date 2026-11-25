@@ -36,8 +36,7 @@ internal fun RouterSettings(
     hasSavedKey: Boolean,
     busy: Boolean,
     load: suspend (String?) -> List<RouterModel>?,
-    selected: (String) -> Unit,
-    save: (String?) -> Unit,
+    select: (String, String?) -> Unit,
 ) {
     var input by remember { mutableStateOf("") }
     var checkedKey by remember { mutableStateOf<String?>(null) }
@@ -103,46 +102,58 @@ internal fun RouterSettings(
             modifier = Modifier.fillMaxWidth(), singleLine = true, colors = horizonFieldColors(), shape = horizonFieldShape(), enabled = !loading && !busy,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { if (input.isNotBlank()) request++ }),
+            keyboardActions = KeyboardActions(onDone = {
+                if (input.isNotBlank() && !busy && !loading) {
+                    chooseModel = true
+                    request++
+                }
+            }),
         )
     }
-    TextButton(enabled = !busy && !loading && (hasSavedKey || input.isNotBlank()), onClick = { request++ }) {
-        Text(when {
-            models != null -> ui(R.string.ui_refresh_list)
-            input.isNotBlank() -> ui(R.string.ui_connect_and_load_models)
-            else -> ui(R.string.ui_load_models)
-        })
+    val selection = models.orEmpty().firstOrNull { it.id == currentModel }
+    if (currentModel.isNotBlank()) Text(selection?.name ?: currentModel, style = MaterialTheme.typography.titleMedium)
+    OutlinedButton(onClick = {
+        chooseModel = true
+        if (models == null) request++
+    }, enabled = !busy && (hasSavedKey || input.isNotBlank())) {
+        Text(ui(if (currentModel.isBlank()) R.string.ui_select_model else R.string.ui_change_model))
     }
-    if (loading) {
-        DottedProgress(Modifier.fillMaxWidth())
-        Text(ui(R.string.ui_loading_the_catalog, router.title))
-    }
-    if (error.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error)
-    val available = models.orEmpty()
-    val selection = available.find { it.id == currentModel }
-    if (models != null) {
-        Text(if (available.isEmpty()) ui(R.string.ui_the_catalog_returned_no_text_models) else ui(R.string.ui_available_models, available.size))
-    }
-    if (currentModel.isNotBlank()) {
-        Text(selection?.name ?: currentModel, style = MaterialTheme.typography.titleMedium)
-        if (models != null && selection == null) Text(ui(R.string.ui_the_current_model_is_unavailable_for))
-    }
-    OutlinedButton(onClick = { chooseModel = true }, enabled = available.isNotEmpty() && !busy && !loading) {
-        Text(if (currentModel.isBlank()) ui(R.string.ui_select_model) else ui(R.string.ui_change_model))
-    }
-    if (chooseModel) RouterPicker(available, currentModel, { chooseModel = false }) {
-        selected(it)
+    if (chooseModel) RouterPicker(models.orEmpty(), currentModel, loading, error,
+        refresh = { request++ }, close = { chooseModel = false }) { id ->
         chooseModel = false
-    }
-    Button(enabled = !busy && !loading &&
-        (selection != null || hasSavedKey && input.isBlank() && currentModel.isNotBlank()),
-        onClick = { save(checkedKey) }) {
-        Text(ui(R.string.ui_save_settings))
+        select(id, checkedKey)
     }
 }
 
 @Composable
-internal fun RouterPicker(models: List<RouterModel>, selectedId: String, close: () -> Unit, select: (String) -> Unit) {
+internal fun ManualModelPicker(currentModel: String, busy: Boolean, select: (String) -> Unit) {
+    var choosing by remember { mutableStateOf(false) }
+    if (currentModel.isNotBlank()) Text(currentModel, style = MaterialTheme.typography.titleMedium)
+    OutlinedButton(onClick = { choosing = true }, enabled = !busy) {
+        Text(ui(if (currentModel.isBlank()) R.string.ui_select_model else R.string.ui_change_model))
+    }
+    if (choosing) {
+        var id by remember(currentModel) { mutableStateOf(currentModel) }
+        HorizonAlertDialog(
+            onDismissRequest = { choosing = false },
+            title = { Text(ui(R.string.ui_choose_a_model)) },
+            text = { ValueField(ui(R.string.ui_model_id), id, { id = it }, help = R.string.ui_enter_the_model_id_from_your) },
+            confirmButton = {
+                Button(enabled = !busy && id.trim().isNotBlank(), onClick = {
+                    choosing = false
+                    select(id.trim())
+                }) { Text(ui(R.string.ui_select_model)) }
+            },
+            dismissButton = { TextButton(onClick = { choosing = false }) { Text(ui(R.string.ui_cancel)) } },
+        )
+    }
+}
+
+@Composable
+internal fun RouterPicker(
+    models: List<RouterModel>, selectedId: String, loading: Boolean, error: String,
+    refresh: () -> Unit, close: () -> Unit, select: (String) -> Unit,
+) {
     var query by remember { mutableStateOf("") }
     val filtered = remember(models, query) {
         val text = query.trim()
@@ -150,14 +161,17 @@ internal fun RouterPicker(models: List<RouterModel>, selectedId: String, close: 
     }
     HorizonAlertDialog(
         onDismissRequest = close,
-        title = { Text(ui(R.string.ui_choose_a_model)) },
+        title = { Text(ui(if (selectedId.isBlank()) R.string.ui_choose_a_model else R.string.ui_change_model)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = query, onValueChange = { query = it }, label = { Text(ui(R.string.ui_search_by_name)) },
                     modifier = Modifier.fillMaxWidth(), singleLine = true, colors = horizonFieldColors(), shape = horizonFieldShape(),
                 )
-                if (filtered.isEmpty()) Text(ui(R.string.ui_no_models_found))
+                TextButton(onClick = refresh, enabled = !loading) { Text(ui(R.string.ui_refresh_list)) }
+                if (loading) DottedProgress(Modifier.fillMaxWidth())
+                if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
+                if (!loading && error.isBlank() && filtered.isEmpty()) Text(ui(R.string.ui_no_models_found))
                 LazyColumn(Modifier.heightIn(max = 340.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(filtered, key = RouterModel::id) { model ->
                         ListItem(
@@ -167,7 +181,7 @@ internal fun RouterPicker(models: List<RouterModel>, selectedId: String, close: 
                                 Text(model.id + context)
                             },
                             trailingContent = if (model.id == selectedId) ({ Text(ui(R.string.ui_selected)) }) else null,
-                            modifier = Modifier.settingsControlGlass().clickable { select(model.id) },
+                            modifier = Modifier.settingsControlGlass().clickable(enabled = !loading) { select(model.id) },
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent,
                                 headlineColor = ReadingGlass.text, supportingColor = ReadingGlass.muted,
                                 trailingIconColor = ReadingGlass.text),
