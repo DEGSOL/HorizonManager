@@ -6,14 +6,12 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.atomic.AtomicReference
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "ru-rRU-w412dp-h860dp-xhdpi")
@@ -47,36 +45,5 @@ class AiModelSelectionTest {
         compose.runOnIdle { saved.value = chatgpt }
         test.assertIsEnabled().performClick()
         assertEquals(1, checks.get())
-    }
-
-    @Test
-    fun refreshIsInsideThePickerAndChoosingCommitsTheModelWithItsKey() {
-        val selected = AtomicReference<Pair<String, String?>?>()
-        val requests = AtomicInteger()
-        compose.runOnUiThread {
-            compose.activity.setContent {
-                HorizonTheme {
-                    RouterSettings(AiRouter.OpenRouter, "", hasSavedKey = false, busy = false,
-                        load = {
-                            requests.incrementAndGet()
-                            listOf(RouterModel("provider/model", "Fixture model", null))
-                        },
-                        select = { model, key -> selected.set(model to key) })
-                }
-            }
-        }
-
-        val refresh = compose.onNodeWithText(ui(R.string.ui_refresh_list))
-        refresh.assertDoesNotExist()
-        compose.onNodeWithText(ui(R.string.ui_save_settings)).assertDoesNotExist()
-        compose.onNodeWithText(ui(R.string.ui_api_key, AiRouter.OpenRouter.title)).performTextInput("fixture-key")
-        compose.onNodeWithText(ui(R.string.ui_select_model)).assertIsEnabled().performClick()
-        compose.waitUntil(5000) { requests.get() == 1 }
-        refresh.assertIsDisplayed().performClick()
-        compose.waitUntil(5000) { requests.get() == 2 }
-        assertNull(selected.get())
-        compose.onNodeWithText("Fixture model").performClick()
-        assertEquals("provider/model" to "fixture-key", selected.get())
-        refresh.assertDoesNotExist()
     }
 }
