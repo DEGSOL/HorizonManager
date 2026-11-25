@@ -17,7 +17,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import org.json.JSONArray
 import org.json.JSONObject
@@ -75,8 +74,7 @@ internal fun matchesEventLevel(filter: String, level: String) =
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model: ManagerModel, export: (String) -> Unit,
-                     top: Dp) {
+internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model: ManagerModel, export: (String) -> Unit) {
     var level by rememberSaveable { mutableStateOf("") }
     var component by rememberSaveable { mutableStateOf("") }
     var period by rememberSaveable { mutableStateOf("all") }
@@ -106,7 +104,7 @@ internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model:
         }
     }
     LazyColumn(Modifier.fillMaxSize().editorialSideBottomInsets(), state = rememberLazyListState(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = top, bottom = 16.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item("filters") {
             Tile {

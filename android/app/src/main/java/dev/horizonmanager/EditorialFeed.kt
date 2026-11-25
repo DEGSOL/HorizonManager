@@ -735,7 +735,6 @@ internal fun ArchiveScreen(
     issues: List<JSONObject>,
     panel: Panel,
     model: ManagerModel,
-    top: Dp,
     open: (JSONObject) -> Unit,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -779,7 +778,7 @@ internal fun ArchiveScreen(
     LazyColumn(
         Modifier.fillMaxSize().editorialSideBottomInsets(),
         state = rememberLazyListState(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = top, bottom = 24.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         item("summary") {

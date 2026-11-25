@@ -709,6 +709,8 @@ class FluidScreensTest {
         text(R.string.digest_basic_title).assertIsDisplayed()
         val maximum = compose.onNode(hasSetTextAction() and hasContentDescription(ui(R.string.hovq_headline_max)))
         maximum.performScrollTo().performTextReplacement("2")
+        val header = text(R.string.settings_digest_rules).getUnclippedBoundsInRoot()
+        assertTrue(maximum.getUnclippedBoundsInRoot().top > header.bottom)
         text(R.string.hovq_headline_save).performScrollTo().assertIsNotEnabled()
         maximum.performScrollTo().performTextReplacement("8")
         text(R.string.hovq_headline_save).performScrollTo().assertIsEnabled()
@@ -1083,8 +1085,8 @@ class FluidScreensTest {
             compose.runOnUiThread {
                 compose.activity.setContent {
                     HorizonTheme {
-                        SettingsPage(ui(R.string.settings), back = null) { top ->
-                            Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = top),
+                        SettingsPage(ui(R.string.settings), back = null) {
+                            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                                 verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Tile {
                                     ValueField(key, "", {}, help = R.string.secrets_custom_help)

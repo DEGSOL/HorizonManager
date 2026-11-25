@@ -569,14 +569,15 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                     }) {
                         if (screen == currentDestination) overlay = it
                     }
-                    else -> SettingsPage(heading, if (screenBack) ::goBack else null, action) { top ->
+                    else -> SettingsPage(heading, if (screenBack) ::goBack else null, action,
+                        bottomClearance = if (showTabs) LocalNavigationClearance.current else 0.dp) {
                         when (screen.page) {
-                            "archive" -> ArchiveScreen(issues.archive, panel, model, top) { archiveIssue = it.getString("id") }
+                            "archive" -> ArchiveScreen(issues.archive, panel, model) { archiveIssue = it.getString("id") }
                             "journal" -> Journal(panel, { description, run -> confirm = description to run }, model,
-                                { model.prepareExportDocument(it); output.launch("horizon-journal.json") }, top)
+                                { model.prepareExportDocument(it); output.launch("horizon-journal.json") })
                             else -> Column(Modifier.fillMaxSize().editorialSideBottomInsets()
                                 .then(if (screen.page == "setup") Modifier.imePadding() else Modifier)
-                                .verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = top, bottom = 10.dp),
+                                .verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
                                 verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Reveal(panel.busy) { DottedProgress(Modifier.fillMaxWidth()) }
                                 when (screen.page) {
@@ -648,7 +649,6 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                                         SettingsForm(panel, model, screen.page) { if (configPage == screen.page) dirtyPage = it }
                                     }
                                 }
-                                Spacer(Modifier.height(if (showTabs) LocalNavigationClearance.current else 10.dp))
                             }
                         }
                     }

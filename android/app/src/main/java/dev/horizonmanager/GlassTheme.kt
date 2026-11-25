@@ -39,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.rememberGraphicsLayer
@@ -286,7 +287,7 @@ internal fun GlassLayout(tabs: List<HorizonTab>, selection: Int, showTabs: Boole
 @Composable
 internal fun SettingsPage(
     heading: String, back: (() -> Unit)?, action: (@Composable () -> Unit)? = null,
-    content: @Composable (Dp) -> Unit,
+    bottomClearance: Dp = 0.dp, content: @Composable () -> Unit,
 ) {
     val layer = rememberGraphicsLayer()
     val scene = remember(layer) { GlassScene(layer) }
@@ -299,7 +300,8 @@ internal fun SettingsPage(
             MaterialTheme(colorScheme = settingsColors) {
                 CompositionLocalProvider(LocalSettingsGlass provides true, LocalLightGlass provides true,
                     LocalContentColor provides HorizonPalette.text, LocalMenuScene provides scene) {
-                    content(statusInset + toolbarHeight + 16.dp)
+                    Box(Modifier.fillMaxSize().padding(top = statusInset + toolbarHeight + 16.dp, bottom = bottomClearance)
+                        .clipToBounds()) { content() }
                 }
             }
         }
