@@ -42,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -125,6 +126,7 @@ private fun mainTabs() = listOf(
 private fun Manager(model: ManagerModel, notificationServer: String, consumed: () -> Unit) {
     val panel by model.state.collectAsStateWithLifecycle()
     val currentServer = panel.server
+    val appRelease by model.appUpdates.available.collectAsStateWithLifecycle()
     val locale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -172,6 +174,9 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     }
     var archiveIssue by rememberSaveable(currentServer?.id) { mutableStateOf("") }
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    LaunchedEffect(model, lifecycle) {
+        lifecycle.repeatAt(androidx.lifecycle.Lifecycle.State.RESUMED) { model.appUpdates.refresh() }
+    }
     val now by produceState(Instant.now(), lifecycle) {
         lifecycle.repeatAt(androidx.lifecycle.Lifecycle.State.RESUMED) {
             while (true) {
@@ -442,11 +447,14 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     val updateKey = "${currentServer?.id}/$installedAgent"
     var requestUpdatePassword by remember(updateKey) { mutableStateOf(false) }
     val showPermissionOffer = promptsAllowed && notificationOffer && !notificationAllowed
-    val showUpdateOffer = promptsAllowed && !showPermissionOffer && !canGoBack && panel.ready &&
+    val appUpdate = appRelease?.takeIf {
+        promptsAllowed && !showPermissionOffer && !requestUpdatePassword && !canGoBack && !panel.busy && !panel.updatingAgent
+    }
+    val showUpdateOffer = promptsAllowed && appUpdate == null && !showPermissionOffer && !canGoBack && panel.ready &&
         !panel.busy && !panel.updatingAgent && !enableDigestAfterPermission && currentServer != null &&
         panel.jobs.none { it.optString("state") in setOf("running", "queued") } &&
         agentUpdateAvailable(installedAgent) && updateKey !in dismissedAgentUpdates
-    val promptOpen = showPermissionOffer || showUpdateOffer || requestUpdatePassword
+    val promptOpen = showPermissionOffer || appUpdate != null || showUpdateOffer || requestUpdatePassword
     val swipeTabs = panel.ready && !canGoBack && overlay == ReadingOverlay.None && !promptOpen &&
         (tab != FEED || !feedFilters.searchOpen && !feedFilters.optionsOpen)
     val releaseDialogs: @Composable () -> Unit = {
@@ -463,6 +471,15 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                 }, dismissButton = {
                     TextButton(onClick = { notificationOffer = false }) { Text(ui(R.string.hovq_later)) }
                 })
+        } else if (appUpdate != null) {
+            val links = LocalUriHandler.current
+            fun postpone() { model.appUpdates.postpone(appUpdate) }
+            UpdateOffer(ui(R.string.hovq_app_update_title),
+                ui(R.string.hovq_app_update_message, BuildConfig.VERSION_NAME, appUpdate.version),
+                ui(R.string.hovq_app_update_open), ::postpone) {
+                postpone()
+                links.openUri(appUpdate.pageUrl)
+            }
         } else if (showUpdateOffer) {
             fun dismissAgent() { dismissedAgentUpdates = dismissedAgentUpdates + updateKey }
             AgentUpdateOffer(installedAgent, dismiss = ::dismissAgent) {

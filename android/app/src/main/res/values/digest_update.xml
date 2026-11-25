@@ -17,4 +17,7 @@
     <string name="prepare_digest_now">Prepare digest now</string>
     <string name="hovq_listener_title">Live digest delivery</string>
     <string name="hovq_listener_detail">Hovq is listening for new digests on your VPS.</string>
+    <string name="hovq_app_update_title">Hovq update available</string>
+    <string name="hovq_app_update_message">You have Hovq %1$s. Version %2$s is available on GitHub.</string>
+    <string name="hovq_app_update_open">Open release</string>
 </resources>

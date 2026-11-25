@@ -78,6 +78,7 @@ internal data class Panel(
 internal fun Panel.preferredDigestLanguage() = status.optString("digest_language", digestLocale())
 
 internal class ManagerModel(private val app: Application) : AndroidViewModel(app) {
+    val appUpdates = AppUpdates(app.getSharedPreferences("app_updates", 0))
     private val connectivity = app.getSystemService(ConnectivityManager::class.java)
     val networkAvailable = callbackFlow {
         val manager = connectivity ?: run { close(); return@callbackFlow }

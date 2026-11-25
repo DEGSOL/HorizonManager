@@ -1,2 +1,2 @@
 """Horizon Manager server agent."""
-VERSION = "0.1.18"
+VERSION = "0.1.19"

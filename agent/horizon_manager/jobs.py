@@ -68,7 +68,7 @@ def consume(store, job, event):
                 enqueue_digest(db, job)
             db.execute("UPDATE jobs SET result=? WHERE id=?", (json.dumps(data), job))
         elif kind == "log":
-            Store.event(db, event["code"], event["level"], "horizon", job, event["detail"])
+            Store.event(db, event["code"], event["level"], "horizon", job, event.get("detail", ""))
         elif kind == "source":
             status, name = event["status"], event["source"]
             db.execute("""INSERT INTO source_history VALUES (?,?,?,?)

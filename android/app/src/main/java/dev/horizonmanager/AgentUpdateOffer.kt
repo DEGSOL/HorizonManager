@@ -22,10 +22,17 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun AgentUpdateOffer(installedVersion: String, dismiss: () -> Unit, update: () -> Unit) {
-    val title = ui(R.string.ui_update_vps_agent)
+    UpdateOffer(
+        ui(R.string.ui_update_vps_agent), ui(R.string.hovq_agent_update_offer, installedVersion, BuildConfig.AGENT_VERSION),
+        ui(R.string.hovq_update_now), dismiss, update,
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun UpdateOffer(title: String, message: String, action: String, dismiss: () -> Unit, update: () -> Unit) {
     val palette = LocalHorizonPalette.current
     Dialog(onDismissRequest = dismiss) {
         DialogMotion()
@@ -37,8 +44,7 @@ internal fun AgentUpdateOffer(installedVersion: String, dismiss: () -> Unit, upd
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 Text(title, style = MaterialTheme.typography.headlineSmall, color = palette.text)
-                Text(ui(R.string.hovq_agent_update_offer, installedVersion, BuildConfig.AGENT_VERSION),
-                    style = MaterialTheme.typography.bodyMedium, color = palette.text)
+                Text(message, style = MaterialTheme.typography.bodyMedium, color = palette.text)
                 FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     MaterialTextButton(
@@ -50,7 +56,7 @@ internal fun AgentUpdateOffer(installedVersion: String, dismiss: () -> Unit, upd
                         onClick = update, shape = feedGlassShape,
                         modifier = Modifier.readingNavigationGlass(feedGlassShape, menu = true),
                         colors = ButtonDefaults.textButtonColors(contentColor = ReadingGlass.text),
-                    ) { Text(ui(R.string.hovq_update_now)) }
+                    ) { Text(action) }
                 }
             }
         }

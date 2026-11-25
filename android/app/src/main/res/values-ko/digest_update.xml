@@ -17,4 +17,7 @@
     <string name="prepare_digest_now">지금 다이제스트 만들기</string>
     <string name="hovq_listener_title">다이제스트 바로 받기</string>
     <string name="hovq_listener_detail">Hovq가 VPS에서 새 다이제스트를 기다립니다.</string>
+    <string name="hovq_app_update_title">Hovq 업데이트 가능</string>
+    <string name="hovq_app_update_message">설치된 버전은 %1$s입니다. GitHub에서 %2$s 버전을 받을 수 있습니다.</string>
+    <string name="hovq_app_update_open">릴리스 열기</string>
 </resources>

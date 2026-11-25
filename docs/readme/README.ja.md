@@ -1,4 +1,4 @@
-# Hovq 0.5.6
+# Hovq 0.5.7
 
 [Русский](../../README.md) · [English](README.en.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Italiano](README.it.md) · [Español](README.es.md) · **日本語** · [한국어](README.ko.md) · [简体中文](README.zh.md) · [Қазақша](README.kk.md) · [Татарча](README.tt.md)
 
@@ -26,7 +26,7 @@ Hovq は、専用の VPS に [Horizon](https://github.com/Thysrael/Horizon) を�
 
 **設定 → インターフェース → 通知**で新しいダイジェストの通知を有効にし、Android で許可します。Hovq は SSH または設定済みの HTTPS で VPS への直接接続を維持します。監視中は Android がサイレントなサービス通知を表示し、完成時には別の通知を表示します。接続が切れると Hovq は再接続して新しい号を確認します。
 
-同じ証明書で署名された Hovq 0.4.5〜0.5.5 には上書きインストールできます。0.4.4 以前では新規インストールが必要です。既存の VPS では、Hovq からエージェントを 0.1.18 に更新します。オンデマンドで補足する設定でも、表現の異なる記事が同じ出来事を扱っているか確認します。各プロファイルの重複排除設定は引き続き適用されます。
+同じ証明書で署名された Hovq 0.4.5〜0.5.6 には上書きインストールできます。0.4.4 以前では新規インストールが必要です。既存の VPS では、Hovq からエージェントを 0.1.19 に更新します。オンデマンドで補足する設定でも、表現の異なる記事が同じ出来事を扱っているか確認します。各プロファイルの重複排除設定は引き続き適用されます。
 
 ## ソースからビルド
 
@@ -41,4 +41,4 @@ cd android
 
 `HM_RELEASE_KEYSTORE`, `HM_RELEASE_KEY_ALIAS`, `HM_RELEASE_STORE_PASSWORD`, `HM_RELEASE_KEY_PASSWORD`
 
-[このリリースのアプリとエージェントのソース](https://github.com/DEGSOL/HorizonManager/tree/v0.5.6) · [アーキテクチャと API](https://github.com/DEGSOL/HorizonManager/blob/v0.5.6/docs/ARCHITECTURE.md) · [テスト](https://github.com/DEGSOL/HorizonManager/blob/v0.5.6/docs/TESTING.md)
+[このリリースのアプリとエージェントのソース](https://github.com/DEGSOL/HorizonManager/tree/v0.5.7) · [アーキテクチャと API](https://github.com/DEGSOL/HorizonManager/blob/v0.5.7/docs/ARCHITECTURE.md) · [テスト](https://github.com/DEGSOL/HorizonManager/blob/v0.5.7/docs/TESTING.md)

@@ -17,4 +17,7 @@
     <string name="prepare_digest_now">Préparer le digest maintenant</string>
     <string name="hovq_listener_title">Réception directe des bulletins</string>
     <string name="hovq_listener_detail">Hovq attend les nouveaux bulletins sur votre VPS.</string>
+    <string name="hovq_app_update_title">Mise à jour de Hovq disponible</string>
+    <string name="hovq_app_update_message">Hovq %1$s est installé. La version %2$s est disponible sur GitHub.</string>
+    <string name="hovq_app_update_open">Ouvrir la version</string>
 </resources>

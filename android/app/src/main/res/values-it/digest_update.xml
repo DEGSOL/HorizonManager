@@ -17,4 +17,7 @@
     <string name="prepare_digest_now">Prepara la rassegna ora</string>
     <string name="hovq_listener_title">Consegna diretta dei riepiloghi</string>
     <string name="hovq_listener_detail">Hovq attende nuovi riepiloghi sul VPS.</string>
+    <string name="hovq_app_update_title">Aggiornamento di Hovq disponibile</string>
+    <string name="hovq_app_update_message">Hai installato Hovq %1$s. La versione %2$s è disponibile su GitHub.</string>
+    <string name="hovq_app_update_open">Apri la versione</string>
 </resources>

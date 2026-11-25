@@ -17,4 +17,7 @@
     <string name="prepare_digest_now">今すぐダイジェストを作成</string>
     <string name="hovq_listener_title">ダイジェストの直接受信</string>
     <string name="hovq_listener_detail">VPSからの新しいダイジェストを待っています。</string>
+    <string name="hovq_app_update_title">Hovq の更新があります</string>
+    <string name="hovq_app_update_message">インストール済みのバージョンは %1$s です。GitHub で %2$s を入手できます。</string>
+    <string name="hovq_app_update_open">リリースを開く</string>
 </resources>
