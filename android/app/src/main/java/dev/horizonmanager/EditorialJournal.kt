@@ -5,7 +5,6 @@ import android.content.ClipboardManager
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -147,10 +146,10 @@ internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model:
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Choice(ui(R.string.ui_component), (listOf("") + components + component).distinct(),
-                        component, { component = it }, ::journalComponent)
+                        component, { component = it }, ::journalComponent, anchoredMenu = true)
                     Choice(ui(R.string.ui_time_range), listOf("all", "day", "week"), period, { period = it }, {
                         ui(when (it) { "day" -> R.string.ui_last_24_hours; "week" -> R.string.ui_last_7_days; else -> R.string.ui_all_dates })
-                    })
+                    }, anchoredMenu = true)
                 }
                 if (job.isNotEmpty()) TextButton(onClick = { job = "" }) { Text(ui(R.string.ui_clear_operation_filter, job)) }
                 FlowRow {
@@ -174,12 +173,20 @@ internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model:
                 is JournalEntry.Digest -> {
                     val open = entry.id in expanded
                     item("digest-${entry.id}") {
-                        DigestJournalHeader(entry, open) {
-                            expanded = ArrayList(if (open) expanded - entry.id else expanded + entry.id)
+                        Column(Modifier.fillMaxWidth().readingNavigationGlass(feedGlassShape)) {
+                            DigestJournalHeader(entry, open) {
+                                expanded = ArrayList(if (open) expanded - entry.id else expanded + entry.id)
+                            }
+                            Reveal(open) {
+                                Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 5.dp, bottom = 10.dp)) {
+                                    entry.events.forEachIndexed { index, row -> key(row.optLong("id")) {
+                                        if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 4.dp),
+                                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .36f))
+                                        JournalEventCard(row, grouped = true) { detail = row }
+                                    } }
+                                }
+                            }
                         }
-                    }
-                    if (open) items(entry.events, key = { "digest-${entry.id}-event-${it.optLong("id")}" }) { row ->
-                        Box(Modifier.padding(horizontal = 10.dp)) { JournalEventCard(row) { detail = row } }
                     }
                 }
             }
@@ -210,7 +217,7 @@ internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model:
 }
 
 @Composable
-private fun JournalEventCard(row: JSONObject, open: () -> Unit) {
+private fun JournalEventCard(row: JSONObject, grouped: Boolean = false, open: () -> Unit) {
     val importance = row.optString("level")
     val color = when (importance) {
         "ERROR", "CRITICAL" -> MaterialTheme.colorScheme.error
@@ -218,11 +225,15 @@ private fun JournalEventCard(row: JSONObject, open: () -> Unit) {
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     val (title, explanation) = journalMessage(row)
-    Tile(Modifier.clickable(role = Role.Button, onClick = open)) {
+    val tap = Modifier.clickable(role = Role.Button, onClick = open)
+    val body: @Composable ColumnScope.() -> Unit = {
         Text(listOf(journalLevel(importance), journalComponent(row.optString("component")), localTime(row.optString("time")))
             .filter(String::isNotBlank).joinToString(" · "), style = MaterialTheme.typography.labelMedium, color = color)
         Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
         Text(explanation, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall,
             maxLines = 3, overflow = TextOverflow.Ellipsis)
     }
+    if (grouped) Column(Modifier.fillMaxWidth().then(tap).padding(horizontal = 8.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp), content = body)
+    else Tile(tap, content = body)
 }

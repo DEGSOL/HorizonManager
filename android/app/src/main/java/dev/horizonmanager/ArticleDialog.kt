@@ -13,7 +13,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -112,8 +111,8 @@ internal fun ArticleDialog(
                             ) {
                                 actions = true
                             }
-                            GlassDropdownMenu(actions, { actions = false }) {
-                                DropdownMenuItem(
+                            GlassDropdownMenu(actions, { actions = false }, ui(R.string.editorial_article_actions)) {
+                                GlassPickerItem(
                                     text = {
                                         Text(
                                             ui(
@@ -127,7 +126,7 @@ internal fun ArticleDialog(
                                         onRead()
                                     },
                                 )
-                                DropdownMenuItem(
+                                GlassPickerItem(
                                     text = { Text(ui(R.string.ui_copy)) },
                                     onClick = {
                                         actions = false
@@ -138,7 +137,7 @@ internal fun ArticleDialog(
                                             )
                                     },
                                 )
-                                DropdownMenuItem(
+                                GlassPickerItem(
                                     text = { Text(ui(R.string.editorial_share)) },
                                     onClick = {
                                         actions = false

@@ -233,6 +233,9 @@ internal fun NewsScreen(
         val fontScale = androidx.compose.ui.platform.LocalDensity.current.fontScale
         val columns = if (maxWidth / fontScale < 295.dp) 1 else 2
         val controlsHeight = (maxHeight - topInset).coerceAtLeast(0.dp) * .45f
+        val navigationInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        val preparingHeight = (maxHeight - topInset - headerHeight - navigationInset -
+            LocalNavigationClearance.current - 8.dp).coerceAtLeast(126.dp)
         Box(Modifier.fillMaxSize().then(
             if (article != null) Modifier.clearAndSetSemantics {} else Modifier
         )) {
@@ -253,6 +256,7 @@ internal fun NewsScreen(
                                     LocalNavigationClearance.current,
                             )
                     ) {
+                        if (preparing) item("preparing-digest") { DigestPreparingPanel(preparingHeight) }
                         items(blocks.size) { i -> MarkdownBlock(blocks[i]) }
                     }
                 } else {
@@ -273,18 +277,22 @@ internal fun NewsScreen(
                         verticalItemSpacing = 9.dp,
                         horizontalArrangement = Arrangement.spacedBy(9.dp),
                     ) {
-                        if (preparing || panel.syncing && !loaded)
+                        if (preparing) {
+                            item("preparing-digest", span = StaggeredGridItemSpan.FullLine) {
+                                DigestPreparingPanel(preparingHeight)
+                            }
+                        } else if (panel.syncing && !loaded)
                             item("progress", span = StaggeredGridItemSpan.FullLine) {
                                 Column {
                                     Text(status, style = MaterialTheme.typography.labelLarge)
                                     DottedProgress(Modifier.fillMaxWidth())
                                 }
                             }
-                        if (issue == null && !archived)
+                        if (!preparing && issue == null && !archived)
                             item("empty-feed", span = StaggeredGridItemSpan.FullLine) {
                                 EmptyDigestFeed(panel) { model.submit() }
                             }
-                        else if (!loaded || shown.isEmpty())
+                        else if (!preparing && (!loaded || shown.isEmpty()))
                             item("empty", span = StaggeredGridItemSpan.FullLine) {
                                 Tile {
                                     Text(
@@ -443,6 +451,23 @@ internal fun NewsScreen(
 }
 
 @Composable
+private fun DigestPreparingPanel(height: Dp) {
+    Box(Modifier.fillMaxWidth().height(height), contentAlignment = Alignment.Center) {
+        Column(Modifier.widthIn(max = 300.dp).fillMaxWidth(.9f)
+            .readingNavigationGlass(feedGlassShape)
+            .padding(horizontal = 20.dp, vertical = 16.dp)
+            .semantics { liveRegion = LiveRegionMode.Polite },
+            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Text(ui(R.string.feed_digest_nearly_ready), color = ReadingGlass.text,
+                style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+            CompositionLocalProvider(LocalLightGlass provides true) {
+                DottedProgress(Modifier.widthIn(max = 160.dp).fillMaxWidth())
+            }
+        }
+    }
+}
+
+@Composable
 private fun EmptyDigestFeed(panel: Panel, prepare: () -> Unit) {
     val mode = panel.schedule.optJSONObject("spec")?.optString("mode")
     val next = panel.schedule.optDouble("next", panel.status.optDouble("next"))
@@ -556,9 +581,9 @@ internal fun DigestBubble(
                     GlassIconAction(Icons.Default.MoreVert, ui(R.string.editorial_digest_actions)) {
                         menu = true
                     }
-                    GlassDropdownMenu(menu, { menu = false }) {
+                    GlassDropdownMenu(menu, { menu = false }, ui(R.string.editorial_digest_actions)) {
                         if (!archived) {
-                            DropdownMenuItem(
+                            GlassPickerItem(
                                 { Text(ui(R.string.ui_start_collection)) },
                                 {
                                     menu = false
@@ -567,7 +592,7 @@ internal fun DigestBubble(
                                 enabled = canRun,
                             )
                             if (issue != null)
-                                DropdownMenuItem(
+                                GlassPickerItem(
                                     { Text(ui(R.string.archive_early)) },
                                     {
                                         menu = false
@@ -576,7 +601,7 @@ internal fun DigestBubble(
                                 )
                         }
                         if (canTranslate)
-                            DropdownMenuItem(
+                            GlassPickerItem(
                                 { Text(ui(R.string.ui_translate_issue)) },
                                 {
                                     menu = false
@@ -585,14 +610,14 @@ internal fun DigestBubble(
                                 enabled = canRun,
                             )
                         if (ai != null) {
-                            DropdownMenuItem(
+                            GlassPickerItem(
                                 { Text(ui(R.string.ui_configure_ai)) },
                                 {
                                     menu = false
                                     ai()
                                 },
                             )
-                            DropdownMenuItem(
+                            GlassPickerItem(
                                 { Text(ui(R.string.ui_add_a_source)) },
                                 {
                                     menu = false
@@ -601,7 +626,7 @@ internal fun DigestBubble(
                             )
                         }
                         if (archived && !canTranslate)
-                            DropdownMenuItem(
+                            GlassPickerItem(
                                 { Text(ui(R.string.editorial_open_digest)) },
                                 {
                                     menu = false
@@ -856,8 +881,8 @@ internal fun ArchiveScreen(
                     }
                     Box {
                         GlassIconAction(Icons.Default.MoreVert, ui(R.string.archive_issue_actions)) { menu = id }
-                        GlassDropdownMenu(expanded = menu == id, onDismissRequest = { menu = "" }) {
-                            DropdownMenuItem(
+                        GlassDropdownMenu(menu == id, { menu = "" }, ui(R.string.archive_issue_actions)) {
+                            GlassPickerItem(
                                 text = { Text(ui(R.string.archive_remove_device)) },
                                 enabled = !panel.busy,
                                 onClick = { menu = ""; pendingRemoval = id },

@@ -1,6 +1,5 @@
 <resources>
     <string name="journal_digest_title">Digest · %1$s</string>
-    <string name="journal_digest_tokens">Total tokens · %1$s</string>
     <string name="journal_digest_started">Preparation started</string>
     <string name="journal_digest_started_detail">Horizon checks the settings and starts collecting news.</string>
     <string name="journal_digest_ready">Digest ready</string>

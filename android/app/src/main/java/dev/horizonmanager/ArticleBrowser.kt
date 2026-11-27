@@ -123,8 +123,8 @@ private fun WebBrowser(initial: String, onUnavailable: () -> Unit, close: () -> 
                         style = MaterialTheme.typography.bodySmall)
                     Box {
                         GlassIconAction(Icons.Default.MoreVert, ui(R.string.browser_actions)) { menu = true }
-                        GlassDropdownMenu(menu, { menu = false }) {
-                            DropdownMenuItem(text = { Text(ui(R.string.browser_open_external)) }, onClick = {
+                        GlassDropdownMenu(menu, { menu = false }, ui(R.string.browser_actions)) {
+                            GlassPickerItem(text = { Text(ui(R.string.browser_open_external)) }, onClick = {
                                 menu = false
                                 linkUri(current)?.let {
                                     context.tryOpen(Intent(Intent.ACTION_VIEW, it).addCategory(Intent.CATEGORY_BROWSABLE), onUnavailable)

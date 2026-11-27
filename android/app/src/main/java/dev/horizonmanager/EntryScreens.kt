@@ -77,22 +77,7 @@ private fun EntryScene(grayWash: Boolean = false, content: @Composable BoxScope.
     val palette = LocalHorizonPalette.current
     val layer = rememberGraphicsLayer()
     val scene = remember(layer) { GlassScene(layer) }
-    if (grayWash) {
-        val window = LocalActivity.current?.window
-        DisposableEffect(window) {
-            val controller = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
-            val lightStatus = controller?.isAppearanceLightStatusBars
-            val lightNavigation = controller?.isAppearanceLightNavigationBars
-            controller?.isAppearanceLightStatusBars = true
-            controller?.isAppearanceLightNavigationBars = true
-            onDispose {
-                if (controller != null && lightStatus != null && lightNavigation != null) {
-                    controller.isAppearanceLightStatusBars = lightStatus
-                    controller.isAppearanceLightNavigationBars = lightNavigation
-                }
-            }
-        }
-    }
+    if (grayWash) EntrySystemBars()
     Box(Modifier.fillMaxSize()) {
         if (grayWash) {
             Box(Modifier.matchParentSize().recordScene(scene).entryGrayWash())
@@ -113,7 +98,25 @@ private fun EntryScene(grayWash: Boolean = false, content: @Composable BoxScope.
 }
 
 @Composable
-private fun Modifier.entryGrayWash(): Modifier {
+internal fun EntrySystemBars() {
+    val window = LocalActivity.current?.window
+    DisposableEffect(window) {
+        val controller = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
+        val lightStatus = controller?.isAppearanceLightStatusBars
+        val lightNavigation = controller?.isAppearanceLightNavigationBars
+        controller?.isAppearanceLightStatusBars = true
+        controller?.isAppearanceLightNavigationBars = true
+        onDispose {
+            if (controller != null && lightStatus != null && lightNavigation != null) {
+                controller.isAppearanceLightStatusBars = lightStatus
+                controller.isAppearanceLightNavigationBars = lightNavigation
+            }
+        }
+    }
+}
+
+@Composable
+internal fun Modifier.entryGrayWash(): Modifier {
     val phase = rememberInfiniteTransition(label = "Silver background").animateFloat(
         0f, 1f, infiniteRepeatable(tween(8200, easing = LinearEasing)), label = "Light and shadow",
     )

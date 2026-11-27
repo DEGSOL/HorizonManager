@@ -309,37 +309,25 @@ internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boo
                 },
             )
     }
+    SettingsSaveAction(dirty, R.string.ui_save_settings, !panel.busy && profiles.all { profile ->
+        profile.getJSONObject("definition").optString("name").isNotBlank() &&
+            validInstruction(profile.optString("summary_instruction", defaultInstruction))
+    }) {
+        val edited = JSONArray(draft)
+        val newsChanges = if (profileRenames == "[]" && processing == base.getJSONObject("processing").toString())
+            changedProfileNewsText(originals, edited, defaultInstruction) else null
+        if (newsChanges == null) {
+            model.saveConfig(references.copyObject().put("processing", settings), edited, expectedRevision = revision)
+        } else model.saveProfileNewsText(newsChanges, revision)
+    }
     if (dirty)
         Tile {
             SettingNote(ui(R.string.editorial_unsaved))
-            Button(
-                enabled =
-                    !panel.busy &&
-                        profiles.all { profile ->
-                            val def = profile.getJSONObject("definition")
-                            def.optString("name").isNotBlank() &&
-                                validInstruction(profile.optString("summary_instruction", defaultInstruction))
-                        },
-                onClick = {
-                    val edited = JSONArray(draft)
-                    val newsChanges = if (profileRenames == "[]" &&
-                        processing == base.getJSONObject("processing").toString()
-                    ) changedProfileNewsText(originals, edited, defaultInstruction) else null
-                    if (newsChanges == null) {
-                        model.saveConfig(references.copyObject().put("processing", settings), edited,
-                            expectedRevision = revision)
-                    } else model.saveProfileNewsText(newsChanges, revision)
-                },
-            ) {
-                Text(ui(R.string.ui_save_settings))
-            }
-            TextButton(
-                onClick = {
-                    draft = originals.toString()
-                    profileRenames = "[]"
-                    processing = base.getJSONObject("processing").toString()
-                }
-            ) {
+            TextButton(enabled = !panel.busy, onClick = {
+                draft = originals.toString()
+                profileRenames = "[]"
+                processing = base.getJSONObject("processing").toString()
+            }) {
                 Text(ui(R.string.ui_cancel))
             }
         }

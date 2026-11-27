@@ -46,6 +46,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -502,6 +503,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         else -> Screen("feed")
     }
     GlassLayout(tabs, tab, showTabs, unread = unread, overlay = overlay, statusGlassInContent = destination.reading,
+        preparingDigest = preparing && destination.page == "feed",
         select = ::selectTab, modal = releaseDialogs) {
         val currentDestination by rememberUpdatedState(destination)
         AnimatedContent(destination,
@@ -579,10 +581,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                             "archive" -> ArchiveScreen(issues.archive, panel, model) { archiveIssue = it.getString("id") }
                             "journal" -> Journal(panel, { description, run -> confirm = description to run }, model,
                                 { model.prepareExportDocument(it); output.launch("horizon-journal.json") })
-                            else -> Column(Modifier.fillMaxSize().editorialSideBottomInsets()
-                                .then(if (screen.page == "setup") Modifier.imePadding() else Modifier)
-                                .verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            else -> SettingsScroll(withImePadding = screen.page == "setup") {
                                 Reveal(panel.busy) { DottedProgress(Modifier.fillMaxWidth()) }
                                 when (screen.page) {
                                     "server_editor" -> panel.servers.find { it.id == screen.issueId }?.let { server ->
@@ -720,23 +719,30 @@ private fun Setup(panel: Panel, model: ManagerModel) {
         }
     }
     if (server == null || probe.isEmpty()) {
-        Column(Modifier.fillMaxWidth().readingNavigationGlass(MaterialTheme.shapes.extraLarge)
-            .padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(ui(R.string.ui_connect_to_your_vps), color = ReadingGlass.text, style = MaterialTheme.typography.titleLarge)
-            Text(ui(R.string.hovq_vps_connect_detail), color = ReadingGlass.muted, style = MaterialTheme.typography.bodyMedium)
-        }
-        ServerCredentialFields(draft, enabled = !panel.busy, sectioned = true) { draft = it }
         val setupProblem = panel.problem.takeIf { it == "SERVER_FIELDS" || isConnectionFailure(it) }
-        if (panel.connectionPhase != ConnectionPhase.Idle || setupProblem != null) VpsFormSection {
-            if (panel.connectionPhase != ConnectionPhase.Idle) Text(ui(panel.connectionPhase.label()))
-            if (setupProblem != null) Text(errorText(setupProblem), color = MaterialTheme.colorScheme.error)
-        }
-        Box(Modifier.fillMaxWidth().padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
-            SavedGlassButton(ui(if (setupProblem != null) R.string.ui_retry else R.string.ui_connect),
-                enabled = !panel.busy && draft.credential.isNotBlank()) { model.connect(draft, server) }
-        }
-        if (panel.connectionCancellable) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            TextButton(onClick = model::cancelConnection) { Text(ui(R.string.ui_cancel)) }
+        VpsFormSection {
+            Text(ui(R.string.ui_connect_to_your_vps), Modifier.fillMaxWidth(), color = ReadingGlass.text,
+                style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+            Text(ui(R.string.hovq_vps_connect_detail), Modifier.fillMaxWidth(), color = ReadingGlass.muted,
+                style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(3.dp))
+            ServerCredentialFields(draft, enabled = !panel.busy, sectioned = true) { draft = it }
+            if (panel.connectionPhase != ConnectionPhase.Idle || setupProblem != null) {
+                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (panel.connectionPhase != ConnectionPhase.Idle) Text(ui(panel.connectionPhase.label()))
+                    if (setupProblem != null) Text(errorText(setupProblem), color = MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Center)
+                }
+            }
+            Box(Modifier.fillMaxWidth().padding(top = 5.dp), contentAlignment = Alignment.Center) {
+                SavedGlassButton(ui(if (setupProblem != null) R.string.ui_retry else R.string.ui_connect),
+                    Modifier.widthIn(max = 320.dp).fillMaxWidth(), inLightDialog = true,
+                    enabled = !panel.busy && draft.credential.isNotBlank()) { model.connect(draft, server) }
+            }
+            if (panel.connectionCancellable) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                TextButton(onClick = model::cancelConnection) { Text(ui(R.string.ui_cancel)) }
+            }
         }
     } else {
         VpsFormSection {

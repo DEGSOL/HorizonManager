@@ -3,13 +3,17 @@ package dev.horizonmanager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -67,13 +71,16 @@ internal fun ServerCredentialFields(draft: ServerDraft, enabled: Boolean, sectio
     @Composable
     fun Address() {
         ValueField(ui(R.string.ui_server_name), draft.name, { change(draft.copy(name = it)) }, enabled = enabled)
-        ValueField(ui(R.string.ui_ip_address_or_domain), draft.host, { change(draft.copy(host = it)) }, enabled = enabled)
+        ValueField(ui(R.string.ui_ip_address_or_domain), draft.host, { change(draft.copy(host = it)) }, enabled = enabled,
+            help = R.string.vps_form_address_help)
         BoxWithConstraints {
             val port: @Composable () -> Unit = {
-                ValueField(ui(R.string.ui_ssh_port), draft.port, { change(draft.copy(port = it)) }, numeric = true, enabled = enabled)
+                ValueField(ui(R.string.ui_ssh_port), draft.port, { change(draft.copy(port = it)) }, numeric = true, enabled = enabled,
+                    help = R.string.vps_form_port_help)
             }
             val user: @Composable () -> Unit = {
-                ValueField(ui(R.string.ui_ssh_user), draft.user, { change(draft.copy(user = it)) }, enabled = enabled)
+                ValueField(ui(R.string.ui_ssh_user), draft.user, { change(draft.copy(user = it)) }, enabled = enabled,
+                    help = R.string.vps_form_user_help)
             }
             if (maxWidth < 280.dp || LocalConfiguration.current.fontScale > 1.3f) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -91,14 +98,15 @@ internal fun ServerCredentialFields(draft: ServerDraft, enabled: Boolean, sectio
 
     @Composable
     fun Credentials() {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for ((key, label) in listOf(false to R.string.ui_password, true to R.string.ui_ssh_key)) {
                 FilterChip(draft.keyMode == key, {
                     if (draft.keyMode != key) {
                         keyError = false
                         change(draft.copy(keyMode = key, credential = "", passphrase = ""))
                     }
-                }, { Text(ui(label)) }, enabled = enabled)
+                }, { Text(ui(label), Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
+                    enabled = enabled, modifier = Modifier.weight(1f))
             }
         }
         if (draft.keyMode) {
@@ -113,11 +121,12 @@ internal fun ServerCredentialFields(draft: ServerDraft, enabled: Boolean, sectio
         }
     }
     if (sectioned) {
-        VpsFormSection { Address() }
-        VpsFormSection {
-            Text(ui(R.string.ui_ssh_settings), style = MaterialTheme.typography.titleMedium)
-            Credentials()
-        }
+        Text(ui(R.string.vps_form_address), style = MaterialTheme.typography.titleMedium)
+        Address()
+        HorizontalDivider(Modifier.padding(top = 4.dp, bottom = 4.dp),
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))
+        SettingHeading(ui(R.string.vps_form_credentials), R.string.vps_form_auth_help)
+        Credentials()
     } else {
         Address()
         Credentials()
@@ -149,8 +158,12 @@ internal fun SavedServerEditor(server: Server, panel: Panel, model: ManagerModel
         panel.problem.takeIf(String::isNotBlank)?.let {
             Text(errorText(it), color = HorizonPalette.danger)
         }
-        SettingsActionPair(R.string.ui_save_connection, R.string.ui_cancel, enabled && canSave,
-            enabled || panel.connectionCancellable, { model.editServer(server.id, draft) }, close)
+        SettingsSaveAction(draft != ServerDraft(server), R.string.ui_save_connection, enabled && canSave) {
+            model.editServer(server.id, draft)
+        }
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            TextButton(onClick = close, enabled = enabled || panel.connectionCancellable) { Text(ui(R.string.ui_cancel)) }
+        }
     }
     ServerHostPrompt(panel.hostConfirmation, model::confirmHost)
 }

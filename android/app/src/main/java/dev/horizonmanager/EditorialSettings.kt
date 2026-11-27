@@ -81,13 +81,9 @@ internal fun DigestRulesForm(panel: Panel, model: ManagerModel, base: JSONObject
             Text(ui(R.string.hovq_headline_help), style = MaterialTheme.typography.bodySmall)
             CountField(R.string.hovq_headline_min, headlineMinimum, { headlineMinimum = it }, validMinimum)
             CountField(R.string.hovq_headline_max, headlineMaximum, { headlineMaximum = it }, validMaximum)
-            if (headlineDirty) {
-                Button(enabled = !panel.busy && validMinimum && validMaximum, onClick = {
-                    if (minimumCharacters != null && maximumCharacters != null)
-                        model.setHeadlineRange(minimumCharacters, maximumCharacters)
-                }) {
-                    Text(ui(R.string.hovq_headline_save))
-                }
+            SettingsSaveAction(headlineDirty, R.string.hovq_headline_save, !panel.busy && validMinimum && validMaximum) {
+                if (minimumCharacters != null && maximumCharacters != null)
+                    model.setHeadlineRange(minimumCharacters, maximumCharacters)
             }
         }
     }
@@ -125,14 +121,12 @@ internal fun DigestRulesForm(panel: Panel, model: ManagerModel, base: JSONObject
         if (available.isNotEmpty()) Choice(ui(R.string.digest_order_add), available, "",
             { id -> change("profile_order", JSONArray(order + id)) }, { names[it] ?: it }, row = true)
     }
-    if (dirty) Tile {
-        SettingNote(ui(R.string.editorial_unsaved))
-        Button(enabled = !panel.busy && correctHours && correctMaximum && validDefaultLimit && validRoutes && validOrder, onClick = {
-            val updated = base.copyObject()
-                .put("collection", collection.copyObject().put("time_window_hours", hours.toInt()))
-                .put("digest", digest.copyObject().put("max_items", maximum.toIntOrNull() ?: JSONObject.NULL))
-            model.saveConfig(updated, profiles, expectedRevision = revision)
-        }) { Text(ui(R.string.ui_save_settings)) }
+    SettingsSaveAction(dirty, R.string.ui_save_settings,
+        !panel.busy && correctHours && correctMaximum && validDefaultLimit && validRoutes && validOrder) {
+        val updated = base.copyObject()
+            .put("collection", collection.copyObject().put("time_window_hours", hours.toInt()))
+            .put("digest", digest.copyObject().put("max_items", maximum.toIntOrNull() ?: JSONObject.NULL))
+        model.saveConfig(updated, profiles, expectedRevision = revision)
     }
 }
 
@@ -257,10 +251,11 @@ internal fun SecretsSettings(panel: Panel, model: ManagerModel, base: JSONObject
                 if (name.isNotEmpty() && !valid) Text(ui(R.string.secrets_custom_help), color = MaterialTheme.colorScheme.error)
             } else Text(name, style = MaterialTheme.typography.titleSmall)
             PasswordField(ui(R.string.ui_new_value), value) { value = it }
-            Button(enabled = valid && value.isNotBlank() && value.length <= 8192 && !panel.busy, onClick = {
+            SettingsSaveAction(value.isNotEmpty(), R.string.ui_save_secret,
+                valid && value.isNotBlank() && value.length <= 8192 && !panel.busy) {
                 submitted = revision
                 model.saveConfig(base, profiles, JSONObject().put(name, value))
-            }) { Text(ui(R.string.ui_save_secret)) }
+            }
             TextButton(enabled = !panel.busy, onClick = { close() }) { Text(ui(R.string.ui_cancel)) }
             if (name in saved) TextButton(enabled = !panel.busy, onClick = { removing = true }) {
                 Text(ui(R.string.ui_delete_secret))

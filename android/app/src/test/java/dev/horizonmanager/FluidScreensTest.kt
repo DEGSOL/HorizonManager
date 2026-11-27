@@ -8,7 +8,9 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.toArgb
@@ -86,6 +88,29 @@ class FluidScreensTest {
     private fun text(id: Int) = compose.onAllNodesWithText(ui(id)).onFirst()
 
     private fun tab(id: Int) = compose.onNodeWithContentDescription(ui(id)).performClick()
+
+    @Test
+    fun pendingSaveStaysVisibleAndDocksBelowTheLastSetting() {
+        compose.runOnUiThread {
+            compose.activity.setContent {
+                HorizonTheme {
+                    SettingsScroll {
+                        repeat(25) { Text("Setting ${it + 1}", Modifier.height(52.dp)) }
+                        Text("Last setting", Modifier.height(52.dp))
+                        SettingsSaveAction(true, R.string.ui_save_settings, true) {}
+                    }
+                }
+            }
+        }
+        val button = text(R.string.ui_save_settings).assertIsDisplayed()
+        val floating = button.getUnclippedBoundsInRoot()
+        compose.onNode(hasScrollAction()).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 4800f) }
+        compose.waitForIdle()
+        val docked = button.assertIsDisplayed().getUnclippedBoundsInRoot()
+        val last = compose.onNodeWithText("Last setting").assertIsDisplayed().getUnclippedBoundsInRoot()
+        assertTrue(docked.width > floating.width)
+        assertTrue(docked.top >= last.bottom)
+    }
 
     private fun back() {
         compose.runOnUiThread {
@@ -752,9 +777,9 @@ class FluidScreensTest {
         maximum.performScrollTo().performTextReplacement("2")
         val header = text(R.string.settings_digest_rules).getUnclippedBoundsInRoot()
         assertTrue(maximum.getUnclippedBoundsInRoot().top > header.bottom)
-        text(R.string.hovq_headline_save).performScrollTo().assertIsNotEnabled()
+        text(R.string.hovq_headline_save).assertIsDisplayed().assertIsNotEnabled()
         maximum.performScrollTo().performTextReplacement("8")
-        text(R.string.hovq_headline_save).performScrollTo().assertIsEnabled()
+        text(R.string.hovq_headline_save).assertIsDisplayed().assertIsEnabled()
         maximum.performScrollTo().performTextReplacement("60")
         text(R.string.digest_groups_title).performScrollTo().performClick()
         text(R.string.digest_group_add).performScrollTo().performClick()
@@ -799,7 +824,7 @@ class FluidScreensTest {
         text(R.string.ui_integration).performScrollTo().performClick()
         compose.onNodeWithText(label("telegram")).performClick()
         compose.onNode(isToggleable()).performClick()
-        text(R.string.ui_apply_source_settings).performScrollTo().assertIsEnabled()
+        text(R.string.ui_apply_source_settings).assertIsDisplayed().assertIsEnabled()
         back()
         text(R.string.editorial_discard_prompt).assertIsDisplayed()
         text(R.string.ui_cancel).performClick()

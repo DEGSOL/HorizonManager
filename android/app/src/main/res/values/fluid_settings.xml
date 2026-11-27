@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <string name="feed_digest_nearly_ready">The new digest will be ready soon</string>
+    <string name="vps_form_address">Server address</string>
+    <string name="vps_form_credentials">How to sign in</string>
+    <string name="vps_form_address_help">Enter the IP address or host name shown in your VPS control panel.</string>
+    <string name="vps_form_port_help">SSH usually uses port 22. Change it if your provider gave you a different SSH port.</string>
+    <string name="vps_form_user_help">Use the login name for your server. Your VPS provider usually lists it next to the access details.</string>
+    <string name="vps_form_auth_help">Choose password if you sign in with a password. Choose SSH key if you have a private key file for this server.</string>
+</resources>

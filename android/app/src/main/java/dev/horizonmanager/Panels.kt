@@ -49,13 +49,12 @@ internal fun Sources(panel: Panel, model: ManagerModel, dirtyChange: (Boolean) -
                 working = working.copyObject().put(type, it)
             }, ids, expandedByDefault = true)
         }
+        SettingsSaveAction(dirty, R.string.ui_apply_source_settings, !panel.busy) {
+            model.saveConfig(config.copyObject().put("sources", working), profiles)
+        }
         Reveal(dirty) {
             SettingNote(ui(R.string.editorial_unsaved))
-            FlowRow {
-                Button(onClick = { model.saveConfig(config.copyObject().put("sources", working), profiles) },
-                    enabled = !panel.busy) { Text(ui(R.string.ui_apply_source_settings)) }
-                TextButton(onClick = { working = original.copyObject() }, enabled = !panel.busy) { Text(ui(R.string.ui_discard_changes)) }
-            }
+            TextButton(onClick = { working = original.copyObject() }, enabled = !panel.busy) { Text(ui(R.string.ui_discard_changes)) }
         }
     }
     if (type != "telegram") Tile {
@@ -178,14 +177,9 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, dirty
     val fields = schema.getJSONObject("properties")
     val dirty = working.toString() != stored.toString()
     SideEffect { dirtyChange(dirty) }
+    SettingsSaveAction(dirty, R.string.ui_save_settings, !panel.busy) { model.saveConfig(working, storedProfiles) }
     if (page == "advanced") {
         AdvancedSettings(working, schema, ids) { name, value -> working = working.copyObject().put(name, value) }
-        if (dirty) Tile {
-            SettingNote(ui(R.string.editorial_unsaved))
-            Button(onClick = { model.saveConfig(working, storedProfiles) }, enabled = !panel.busy) {
-                Text(ui(R.string.ui_save_settings))
-            }
-        }
         return
     }
     Tile {
@@ -195,12 +189,6 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, dirty
             key(name) {
                 EditValue(schema, fields.getJSONObject(name), name, working.opt(name),
                     { working = working.copyObject().put(name, it) }, ids, showHeader = false)
-            }
-        }
-        Reveal(dirty) {
-            SettingNote(ui(R.string.editorial_unsaved))
-            Button(onClick = { model.saveConfig(working, storedProfiles) }, enabled = !panel.busy) {
-                Text(ui(R.string.ui_save_settings))
             }
         }
     }

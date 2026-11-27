@@ -167,15 +167,15 @@ private fun TelegramRow(entry: JSONObject, index: Int, lastIndex: Int, testEnabl
         }
         Box {
             GlassIconAction(Icons.Default.MoreVert, ui(R.string.editorial_article_actions)) { menu = true }
-            GlassDropdownMenu(menu, { menu = false }) {
-                DropdownMenuItem(text = { Text(ui(R.string.editorial_edit)) }, onClick = { menu = false; edit() })
-                DropdownMenuItem(text = { Text(ui(R.string.editorial_test_saved)) }, enabled = testEnabled,
+            GlassDropdownMenu(menu, { menu = false }, ui(R.string.editorial_article_actions)) {
+                GlassPickerItem(text = { Text(ui(R.string.editorial_edit)) }, onClick = { menu = false; edit() })
+                GlassPickerItem(text = { Text(ui(R.string.editorial_test_saved)) }, enabled = testEnabled,
                     onClick = { menu = false; test() })
-                DropdownMenuItem(text = { Text(ui(if (enabled) R.string.editorial_disable else R.string.editorial_enable)) },
+                GlassPickerItem(text = { Text(ui(if (enabled) R.string.editorial_disable else R.string.editorial_enable)) },
                     onClick = { menu = false; toggle() })
-                DropdownMenuItem(text = { Text(ui(R.string.ui_move_up)) }, enabled = index > 0, onClick = { menu = false; move(index - 1) })
-                DropdownMenuItem(text = { Text(ui(R.string.editorial_move_down)) }, enabled = index < lastIndex, onClick = { menu = false; move(index + 1) })
-                DropdownMenuItem(text = { Text(ui(R.string.ui_remove)) }, onClick = { menu = false; remove() })
+                GlassPickerItem(text = { Text(ui(R.string.ui_move_up)) }, enabled = index > 0, onClick = { menu = false; move(index - 1) })
+                GlassPickerItem(text = { Text(ui(R.string.editorial_move_down)) }, enabled = index < lastIndex, onClick = { menu = false; move(index + 1) })
+                GlassPickerItem(text = { Text(ui(R.string.ui_remove)) }, onClick = { menu = false; remove() })
             }
         }
     }

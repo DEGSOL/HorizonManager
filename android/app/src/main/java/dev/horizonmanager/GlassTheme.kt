@@ -244,12 +244,14 @@ internal fun horizonFieldColors() = if (LocalSettingsGlass.current || LocalLight
 internal fun GlassLayout(tabs: List<HorizonTab>, selection: Int, showTabs: Boolean, select: (Int) -> Unit,
                          unread: Int, overlay: ReadingOverlay = ReadingOverlay.None,
                          statusGlassInContent: Boolean = false,
+                         preparingDigest: Boolean = false,
                          modal: @Composable () -> Unit = {},
                          content: @Composable BoxScope.() -> Unit) {
     val palette = LocalHorizonPalette.current
     val sceneLayer = rememberGraphicsLayer()
     val scene = remember(sceneLayer) { GlassScene(sceneLayer) }
     var clearance by remember { mutableStateOf(defaultNavigationClearance) }
+    if (preparingDigest) EntrySystemBars()
     Box(Modifier.fillMaxSize().background(palette.background).imePadding()) {
         Box(Modifier.fillMaxSize().then(
             if (overlay == ReadingOverlay.Article) Modifier.blur(5.dp) else Modifier
@@ -260,7 +262,10 @@ internal fun GlassLayout(tabs: List<HorizonTab>, selection: Int, showTabs: Boole
                     drawCircle(androidx.compose.ui.graphics.Brush.radialGradient(
                         listOf(palette.tint.copy(alpha = .095f), Color.Transparent), center, size.width * .64f),
                         radius = size.width * .64f, center = center)
-                }, content = content)
+                }) {
+                    if (preparingDigest) Box(Modifier.matchParentSize().entryGrayWash().savedNoticeWash())
+                    content()
+                }
             }
             CompositionLocalProvider(LocalGlassScene provides scene) {
                 if (!statusGlassInContent) StatusGlass()

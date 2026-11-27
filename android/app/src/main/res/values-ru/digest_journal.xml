@@ -1,6 +1,5 @@
 <resources>
     <string name="journal_digest_title">Дайджест · %1$s</string>
-    <string name="journal_digest_tokens">Всего токенов · %1$s</string>
     <string name="journal_digest_started">Подготовка началась</string>
     <string name="journal_digest_started_detail">Horizon проверяет настройки и запускает сбор новостей.</string>
     <string name="journal_digest_ready">Дайджест готов</string>

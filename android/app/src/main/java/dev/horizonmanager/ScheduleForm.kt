@@ -185,22 +185,19 @@ internal fun ScheduleForm(panel: Panel, model: ManagerModel, dirtyChange: (Boole
                     help = R.string.setting_help_schedule_zone) { pickZone = true }
             }
         }
-        Reveal(changed) {
-            SettingNote(ui(R.string.editorial_unsaved))
-            Button(enabled = !panel.busy && when (mode) {
-                "interval" -> (parsedHours ?: 0) in 1..168 && (!supportsIntervalStart || intervalStart.isNotBlank())
-                "calendar" -> days != 0
-                else -> true
-            }, onClick = {
-                val payload = spec.copyObject().put("mode", mode)
-                    .put("hours", parsedHours?.takeIf { it in 1..168 } ?: savedHours)
-                    .put("hour", hour).put("minute", minute)
-                    .put("zone", if (mode == "interval" && supportsIntervalStart) intervalZone else zone)
-                    .put("days", JSONArray(weekdays.indices.filter { (days.takeIf { it != 0 } ?: savedDays) and (1 shl it) != 0 }))
-                if (supportsIntervalStart) payload.put("interval_start", if (mode == "interval" && intervalStart.isNotBlank()) intervalStart else JSONObject.NULL)
-                model.schedule(payload)
-            }) { Text(ui(R.string.ui_save_schedule)) }
-        }
+    }
+    SettingsSaveAction(changed, R.string.ui_save_schedule, !panel.busy && when (mode) {
+        "interval" -> (parsedHours ?: 0) in 1..168 && (!supportsIntervalStart || intervalStart.isNotBlank())
+        "calendar" -> days != 0
+        else -> true
+    }) {
+        val payload = spec.copyObject().put("mode", mode)
+            .put("hours", parsedHours?.takeIf { it in 1..168 } ?: savedHours)
+            .put("hour", hour).put("minute", minute)
+            .put("zone", if (mode == "interval" && supportsIntervalStart) intervalZone else zone)
+            .put("days", JSONArray(weekdays.indices.filter { (days.takeIf { it != 0 } ?: savedDays) and (1 shl it) != 0 }))
+        if (supportsIntervalStart) payload.put("interval_start", if (mode == "interval" && intervalStart.isNotBlank()) intervalStart else JSONObject.NULL)
+        model.schedule(payload)
     }
     val interval = mode == "interval"
     if (pickTime) {
@@ -242,7 +239,6 @@ private fun zoneLabel(id: String, at: Instant = Instant.now(),
     return "$city · UTC${if (offset == "Z") "" else offset}"
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ScheduleZonePicker(current: String, close: () -> Unit, choose: (String) -> Unit) {
     val available = remember { ZoneId.getAvailableZoneIds() }
@@ -259,25 +255,15 @@ private fun ScheduleZonePicker(current: String, close: () -> Unit, choose: (Stri
     val visible = remember(query, zones) { zones.filter { (id, name) ->
         id.contains(query.trim(), true) || name.contains(query.trim(), true)
     } }
-    ModalBottomSheet(onDismissRequest = close,
-        modifier = Modifier.imePadding().readingNavigationGlass(feedGlassShape),
-        shape = feedGlassShape, containerColor = Color.Transparent, contentColor = ReadingGlass.text,
-    ) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
-            Text(ui(R.string.ui_time_zone), style = MaterialTheme.typography.titleLarge)
+    GlassPickerDialog(ui(R.string.ui_time_zone), close) {
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             SettingsTextField(ui(R.string.schedule_zone_search), query, { query = it })
             if (device != null) TextButton(onClick = { choose(device) }) { Text(ui(R.string.schedule_device_zone)) }
             if (visible.isEmpty()) Text(ui(R.string.schedule_zone_empty), Modifier.padding(bottom = 16.dp))
-            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            LazyColumn(Modifier.weight(1f, fill = false).heightIn(max = 340.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(visible, key = { it.first }) { (id, name) ->
-                    ListItem(
-                        headlineContent = { Text(name) }, supportingContent = { Text(id) },
-                        trailingContent = { RadioButton(id == current, onClick = null, colors = RadioButtonDefaults.colors(
-                            selectedColor = ReadingGlass.text, unselectedColor = ReadingGlass.muted)) },
-                        modifier = Modifier.settingsControlGlass().selectable(id == current, role = Role.RadioButton) { choose(id) },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent,
-                            headlineColor = ReadingGlass.text, supportingColor = ReadingGlass.muted),
-                    )
+                    GlassPickerItem(text = { Text(name) }, supportingContent = { Text(id) }, selected = id == current,
+                        onClick = { choose(id) })
                 }
             }
         }

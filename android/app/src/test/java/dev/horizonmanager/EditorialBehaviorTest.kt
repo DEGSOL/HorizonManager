@@ -137,13 +137,13 @@ class EditorialBehaviorTest {
         assertEquals(DigestJournalStatus.Preparing, running.status)
         assertEquals(listOf(fetch, score), running.events)
         assertTrue(running.progress in 0.01f..0.99f)
-        assertNull(running.totalTokens)
+        assertNull(running.tokens)
 
         val success = diagnosticEvent(event("JOB_SUCCESS", "tokens 83 21").put("digest_ready", 1))
         val completed = groupJournalEvents(listOf(success, score, fetch), listOf(score), emptyList(), emptyList())
             .single() as JournalEntry.Digest
         assertEquals(DigestJournalStatus.Completed, completed.status)
-        assertEquals(104L, completed.totalTokens)
+        assertEquals(83L to 21L, completed.tokens)
         assertEquals(listOf(score), completed.events)
         assertEquals(1f, completed.progress, 0f)
 
@@ -151,7 +151,7 @@ class EditorialBehaviorTest {
         val incomplete = groupJournalEvents(listOf(emptyRun, fetch), listOf(emptyRun, fetch), emptyList(), emptyList())
             .single() as JournalEntry.Digest
         assertEquals(DigestJournalStatus.Incomplete, incomplete.status)
-        assertNull(incomplete.totalTokens)
+        assertNull(incomplete.tokens)
     }
 
     @Test

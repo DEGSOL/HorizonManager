@@ -1,6 +1,5 @@
 package dev.horizonmanager
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -157,10 +156,8 @@ internal fun RouterPicker(
         val text = query.trim()
         models.filter { it.id.contains(text, ignoreCase = true) || it.name.contains(text, ignoreCase = true) }
     }
-    HorizonAlertDialog(
-        onDismissRequest = close,
-        title = { Text(ui(if (selectedId.isBlank()) R.string.ui_choose_a_model else R.string.ui_change_model)) },
-        text = {
+    GlassPickerDialog(ui(if (selectedId.isBlank()) R.string.ui_choose_a_model else R.string.ui_change_model),
+        close, secondary = { TextButton(onClick = refresh, enabled = !loading) { Text(ui(R.string.ui_refresh_list)) } }) {
             Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 SettingsTextField(ui(R.string.ui_search_by_name), query, { query = it })
                 if (loading) DottedProgress(Modifier.fillMaxWidth())
@@ -169,25 +166,16 @@ internal fun RouterPicker(
                 LazyColumn(Modifier.weight(1f, fill = false).heightIn(max = 340.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(filtered, key = RouterModel::id) { model ->
-                        ListItem(
-                            headlineContent = { Text(model.name) },
+                        GlassPickerItem(
+                            text = { Text(model.name) },
                             supportingContent = {
                                 val context = model.contextLength?.let { ui(R.string.ui_token_context, it) }.orEmpty()
                                 Text(model.id + context)
                             },
-                            trailingContent = if (model.id == selectedId) ({ Text(ui(R.string.ui_selected)) }) else null,
-                            modifier = Modifier.glassSurface(feedGlassShape, lightNavigation = true,
-                                outlined = model.id == selectedId).clickable(enabled = !loading) { select(model.id) },
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent,
-                                headlineColor = ReadingGlass.text, supportingColor = ReadingGlass.muted,
-                                trailingIconColor = ReadingGlass.text),
+                            selected = model.id == selectedId, enabled = !loading, onClick = { select(model.id) },
                         )
                     }
                 }
             }
-        },
-        confirmButton = { TextButton(onClick = close) { Text(ui(R.string.ui_close)) } },
-        dismissButton = { TextButton(onClick = refresh, enabled = !loading) { Text(ui(R.string.ui_refresh_list)) } },
-        light = true,
-    )
+    }
 }

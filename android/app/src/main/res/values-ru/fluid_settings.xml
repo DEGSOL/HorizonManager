@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="feed_digest_nearly_ready">Новый дайджест скоро будет готов</string>
+    <string name="vps_form_address">Адрес сервера</string>
+    <string name="vps_form_credentials">Вход на сервер</string>
+    <string name="vps_form_address_help">Возьми IP-адрес или имя сервера из панели управления VPS.</string>
+    <string name="vps_form_port_help">Обычно SSH использует порт 22. Если провайдер указал другой порт для подключения, введи его.</string>
+    <string name="vps_form_user_help">Введи имя пользователя для входа на сервер. Оно обычно указано в панели VPS рядом с данными для подключения.</string>
+    <string name="vps_form_auth_help">Выбери «Пароль», если входишь по паролю. Если для входа нужен файл приватного ключа, выбери «SSH-ключ».</string>
+</resources>

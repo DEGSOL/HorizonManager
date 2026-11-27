@@ -2,11 +2,11 @@ package dev.horizonmanager
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -15,6 +15,8 @@ import androidx.compose.runtime.State
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.semantics.Role
@@ -49,7 +51,7 @@ internal sealed interface JournalEntry {
         val status: DigestJournalStatus,
         val phase: String?,
         val progress: Float,
-        val totalTokens: Long?,
+        val tokens: Pair<Long, Long>?,
     ) : JournalEntry
 }
 
@@ -99,7 +101,7 @@ internal fun groupJournalEvents(
             DigestJournalStatus.Preparing -> ((phase?.let(digestPhases::indexOf) ?: -1) + 2f) / (digestPhases.size + 2f)
         }
         val tokens = terminal?.takeIf { status == DigestJournalStatus.Completed }
-            ?.let { jobTokenCounts(it.optString("detail")) }?.let { (input, output) -> input + output }
+            ?.let { jobTokenCounts(it.optString("detail")) }
         JournalEntry.Digest(id, start, visible.asReversed(), status, phase, fill, tokens)
     }
     return (standalone + digests).sortedByDescending { parseJournalTime(it.time) }
@@ -122,6 +124,7 @@ internal fun DigestJournalHeader(digest: JournalEntry.Digest, expanded: Boolean,
     }
     val expansion = ui(if (expanded) R.string.journal_digest_expanded else R.string.journal_digest_collapsed)
     val progress = animateFloatAsState(digest.progress, tween(480), label = "Digest preparation")
+    val arrow = animateFloatAsState(if (expanded) 180f else 0f, tween(220), label = "Digest disclosure")
     val washPhase = rememberNoticeWashPhase()
     val palette = if (digest.status == DigestJournalStatus.Incomplete) NoticeWash.Disconnected else NoticeWash.Connected
     Box(Modifier.fillMaxWidth().glassSurface(feedGlassShape, raised = true)
@@ -131,28 +134,41 @@ internal fun DigestJournalHeader(digest: JournalEntry.Digest, expanded: Boolean,
             .savedNoticeWash(NoticeWash.Saved, washPhase))
         Box(Modifier.matchParentSize().digestWashClip(progress, filled = true)
             .savedNoticeWash(palette, washPhase))
+        if (digest.status == DigestJournalStatus.Preparing) Canvas(Modifier.matchParentSize()) {
+            if (progress.value > 0f && progress.value < 1f) {
+                val edge = progressBoundary(size.width, progress.value, layoutDirection)
+                val top = Offset(edge, 0f)
+                val bottom = Offset(edge, size.height)
+                drawLine(Color.Black.copy(alpha = .30f), top, bottom, 3.dp.toPx())
+                drawLine(Color.White.copy(alpha = .84f), top, bottom, 1.dp.toPx())
+            }
+        }
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 13.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(title, style = MaterialTheme.typography.titleMedium, color = Color.White)
                 val summary = when {
-                    digest.totalTokens != null -> ui(R.string.journal_digest_tokens,
-                        NumberFormat.getIntegerInstance(locale).format(digest.totalTokens))
+                    digest.tokens != null -> {
+                        val number = NumberFormat.getIntegerInstance(locale)
+                        ui(R.string.journal_job_tokens, number.format(digest.tokens.first), number.format(digest.tokens.second))
+                    }
                     digest.status == DigestJournalStatus.Completed -> ui(R.string.journal_job_tokens_unavailable)
                     else -> status
                 }
                 Text(summary, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = .9f))
             }
-            Icon(if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                contentDescription = null, tint = Color.White)
+            Icon(Icons.Default.KeyboardArrowDown, contentDescription = null,
+                modifier = Modifier.rotate(arrow.value), tint = Color.White)
         }
     }
 }
 
 private fun Modifier.digestWashClip(progress: State<Float>, filled: Boolean): Modifier = drawWithContent {
-    val width = size.width * progress.value
     val startOnLeft = layoutDirection == LayoutDirection.Ltr
-    val boundary = if (startOnLeft) width else size.width - width
+    val boundary = progressBoundary(size.width, progress.value, layoutDirection)
     if (filled == startOnLeft) clipRect(right = boundary) { this@drawWithContent.drawContent() }
     else clipRect(left = boundary) { this@drawWithContent.drawContent() }
 }
+
+private fun progressBoundary(width: Float, progress: Float, direction: LayoutDirection): Float =
+    width * (if (direction == LayoutDirection.Ltr) progress else 1f - progress)
