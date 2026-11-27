@@ -8,4 +8,10 @@
     <string name="vps_form_port_help">Обычно SSH использует порт 22. Если провайдер указал другой порт для подключения, введи его.</string>
     <string name="vps_form_user_help">Введи имя пользователя для входа на сервер. Оно обычно указано в панели VPS рядом с данными для подключения.</string>
     <string name="vps_form_auth_help">Выбери «Пароль», если входишь по паролю. Если для входа нужен файл приватного ключа, выбери «SSH-ключ».</string>
+    <string name="hovq_export_complete">Файл сохранён</string>
+    <string name="hovq_file_picker_unavailable">Системное окно выбора файла недоступно.</string>
+    <string name="vps_form_edit_title">Редактирование подключения</string>
+    <string name="vps_form_edit_detail">Обнови адрес сервера или данные для входа.</string>
+    <string name="vps_form_https_help">Заполни это поле, если у агента Horizon есть настроенный HTTPS-адрес. Оставь поле пустым, чтобы подключаться через SSH.</string>
+    <string name="vps_form_passphrase_help">У некоторых SSH-ключей есть отдельный пароль. Введи пароль, который ты задал для ключа, или оставь поле пустым.</string>
 </resources>

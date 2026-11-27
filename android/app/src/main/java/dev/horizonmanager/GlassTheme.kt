@@ -145,7 +145,7 @@ internal fun CompactSettingsButton(title: Int, enabled: Boolean, selected: Boole
 }
 
 @Composable
-private fun SettingsAction(onClick: () -> Unit, enabled: Boolean, modifier: Modifier = Modifier,
+internal fun SettingsAction(onClick: () -> Unit, enabled: Boolean, modifier: Modifier = Modifier,
                            content: @Composable RowScope.() -> Unit) {
     val face = if (LocalLightGlass.current) Modifier.heightIn(min = 48.dp)
         .glassSurface(feedGlassShape, lightNavigation = true, outlined = enabled)
@@ -335,7 +335,7 @@ internal fun SettingsPage(
     }
 }
 
-private val settingsColors = lightColorScheme(
+internal val settingsColors = lightColorScheme(
     primary = ReadingGlass.muted, onPrimary = Color.White,
     primaryContainer = ReadingGlass.raised, onPrimaryContainer = ReadingGlass.text,
     secondary = ReadingGlass.muted, onSecondary = Color.White,

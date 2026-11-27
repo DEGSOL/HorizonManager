@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -43,7 +44,6 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -243,13 +243,15 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     }
     var confirm by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
     var fileAction by rememberSaveable { mutableStateOf("") }
-    var restoreFile by remember { mutableStateOf("") }
+    var restoreUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    var savingDocument by rememberSaveable { mutableStateOf(false) }
+    var stagingDocument by remember { mutableStateOf(false) }
     LaunchedEffect(panel.userProblem) {
         val problem = panel.userProblem.takeIf(String::isNotEmpty) ?: return@LaunchedEffect
         notices.showSnackbar(ErrorNotice(errorText(problem)))
         model.consumeProblem(problem)
     }
-    var backupDialog by remember { mutableStateOf("") }
+    var backupDialog by rememberSaveable { mutableStateOf("") }
     var notificationOffer by rememberSaveable { mutableStateOf(true) }
     var notificationAllowed by remember { mutableStateOf(DigestNotifications.deliveryAllowed(ctx)) }
     var requestingAlerts by rememberSaveable { mutableStateOf(false) }
@@ -305,43 +307,50 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
         }
     }
     val output = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
-        val content = model.takeExportDocument()
-        if (uri != null) scope.launch {
-            val saved = withContext(Dispatchers.IO) {
-                runCatching {
-                    require(!content.isNullOrBlank())
-                    ctx.contentResolver.openOutputStream(uri, "wt")?.use { it.write(content.toByteArray()) } ?: error("output")
-                }.isSuccess
+        if (savingDocument) scope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    if (uri == null) BackupDocument.discard(ctx) else BackupDocument.writeTo(ctx, uri)
+                }
+                if (uri != null) notices.showSnackbar(SavedNotice(ui(R.string.hovq_export_complete)))
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                notices.showSnackbar(ErrorNotice(ui(R.string.ui_could_not_write_the_file)))
+            } finally {
+                savingDocument = false
             }
-            if (!saved) notices.showSnackbar(ui(R.string.ui_could_not_write_the_file))
+        }
+    }
+    suspend fun exportDocument(content: String, name: String) {
+        if (savingDocument || stagingDocument) return
+        stagingDocument = true
+        try {
+            withContext(Dispatchers.IO) { BackupDocument.stage(ctx, content) }
+            savingDocument = true
+            output.launch(name)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            savingDocument = false
+            withContext(Dispatchers.IO) { BackupDocument.discard(ctx) }
+            notices.showSnackbar(ErrorNotice(ui(R.string.ui_could_not_write_the_file)))
+        } finally {
+            stagingDocument = false
         }
     }
     val input = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) scope.launch {
-            val action = fileAction
-            fileAction = ""
-            try {
-                val content = withContext(Dispatchers.IO) {
-                    ctx.contentResolver.openInputStream(uri)?.use { it.readBounded(9_000_000).decodeToString() }
-                        ?: error("input")
-                }
-                if (action.isNotEmpty()) {
-                    restoreFile = content.trim()
-                    backupDialog = "${action}_import"
-                }
-            } catch (error: kotlinx.coroutines.CancellationException) {
-                throw error
-            } catch (_: Exception) {
-                notices.showSnackbar(ui(R.string.ui_the_file_is_damaged_too_large))
-            }
+        val action = fileAction
+        fileAction = ""
+        if (uri != null && action.isNotEmpty()) {
+            restoreUri = uri
+            backupDialog = "${action}_import"
         }
     }
     LaunchedEffect(panel.file) {
-        panel.file?.let {
-            model.prepareExportDocument(it)
-            output.launch(if (panel.deviceFile) "hovq-settings.hqb" else "horizon-settings.hmb")
-            model.clearFile()
-        }
+        val content = panel.file ?: return@LaunchedEffect
+        exportDocument(content, if (panel.deviceFile) "hovq-settings.hqb" else "horizon-settings.hmb")
+        model.clearFile()
     }
     val running = panel.jobs.firstOrNull()?.optString("state") in setOf("running", "queued")
     val checkingInstall = panel.probe["install"] == "running" || panel.updatingAgent
@@ -437,14 +446,14 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                 }),
                 minimum = DeviceBackup.MIN_PASSWORD,
                 maximum = DeviceBackup.MAX_PASSWORD,
-                close = { backupDialog = ""; restoreFile = "" },
+                close = { backupDialog = ""; restoreUri = null },
             ) { password ->
                 backupDialog = ""
-                val file = restoreFile
-                restoreFile = ""
+                val file = restoreUri
+                restoreUri = null
                 when {
-                    restoring && device -> model.restoreDevice(file, password)
-                    restoring -> model.restore(file, password)
+                    restoring && device -> file?.let { model.restoreDevice(it, password) }
+                    restoring -> file?.let { model.restore(it, password) }
                     device -> model.exportDevice(password)
                     else -> model.export(password)
                 }
@@ -577,7 +586,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                         when (screen.page) {
                             "archive" -> ArchiveScreen(issues.archive, panel, model) { archiveIssue = it.getString("id") }
                             "journal" -> Journal(panel, { description, run -> confirm = description to run }, model,
-                                { model.prepareExportDocument(it); output.launch("horizon-journal.json") })
+                                { report -> scope.launch { exportDocument(report, "horizon-journal.json") } })
                             else -> SettingsScroll(withImePadding = screen.page == "setup") {
                                 Reveal(panel.busy) { DottedProgress(Modifier.fillMaxWidth()) }
                                 when (screen.page) {
@@ -629,11 +638,16 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                                     "alerts" -> NotificationSettings(panel, model, notificationAllowed, ::requestNotifications,
                                         ::openDigestSoundSettings)
                                     "maintenance" -> ServerMaintenance(panel, model, ::openSettings)
-                                    "transfer" -> TransferSettings(panel,
+                                    "transfer" -> TransferSettings(panel.copy(busy = panel.busy || stagingDocument || savingDocument),
                                         { device -> backupDialog = if (device) "device_export" else "vps_export" },
                                         { device ->
                                             fileAction = if (device) "device" else "vps"
-                                            input.launch(arrayOf("*/*"))
+                                            try {
+                                                input.launch(arrayOf("*/*"))
+                                            } catch (_: android.content.ActivityNotFoundException) {
+                                                fileAction = ""
+                                                scope.launch { notices.showSnackbar(ErrorNotice(ui(R.string.hovq_file_picker_unavailable))) }
+                                            }
                                         })
                                     "reading" -> ReadingPreferences(panel, model, defaultOrder) {
                                         defaultOrder = it
@@ -677,14 +691,14 @@ internal fun PasswordDialog(title: String, detail: String, minimum: Int = 0, max
 
 @Composable
 internal fun PasswordField(title: String, value: String, enabled: Boolean = true, light: Boolean = false,
-                           change: (String) -> Unit) {
+                           help: Int? = null, change: (String) -> Unit) {
     val colors = if (light && !LocalSettingsGlass.current) OutlinedTextFieldDefaults.colors(
         focusedTextColor = ReadingGlass.text, unfocusedTextColor = ReadingGlass.text, cursorColor = ReadingGlass.text,
         focusedLabelColor = ReadingGlass.text, unfocusedLabelColor = ReadingGlass.muted,
         focusedBorderColor = ReadingGlass.muted, unfocusedBorderColor = ReadingGlass.muted.copy(alpha = .55f),
         disabledTextColor = ReadingGlass.muted,
     ) else horizonFieldColors()
-    SettingsTextField(title, value, change, enabled = enabled, colors = colors,
+    SettingsTextField(title, value, change, enabled = enabled, colors = colors, help = help,
         shape = if (light) feedGlassShape else horizonFieldShape(), visualTransformation = PasswordVisualTransformation())
 }
 
@@ -717,29 +731,18 @@ private fun Setup(panel: Panel, model: ManagerModel) {
     }
     if (server == null || probe.isEmpty()) {
         val setupProblem = panel.problem.takeIf { it == "SERVER_FIELDS" || isConnectionFailure(it) }
-        VpsFormSection {
-            Text(ui(R.string.ui_connect_to_your_vps), Modifier.fillMaxWidth(), color = ReadingGlass.text,
-                style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
-            Text(ui(R.string.hovq_vps_connect_detail), Modifier.fillMaxWidth(), color = ReadingGlass.muted,
-                style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
-            Spacer(Modifier.height(3.dp))
-            ServerCredentialFields(draft, enabled = !panel.busy, sectioned = true) { draft = it }
-            if (panel.connectionPhase != ConnectionPhase.Idle || setupProblem != null) {
-                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (panel.connectionPhase != ConnectionPhase.Idle) Text(ui(panel.connectionPhase.label()))
-                    if (setupProblem != null) Text(errorText(setupProblem), color = MaterialTheme.colorScheme.error,
-                        textAlign = TextAlign.Center)
-                }
-            }
-            Box(Modifier.fillMaxWidth().padding(top = 5.dp), contentAlignment = Alignment.Center) {
-                SavedGlassButton(ui(if (setupProblem != null) R.string.ui_retry else R.string.ui_connect),
-                    Modifier.widthIn(max = 320.dp).fillMaxWidth(), inLightDialog = true,
-                    enabled = !panel.busy && draft.credential.isNotBlank()) { model.connect(draft, server) }
-            }
-            if (panel.connectionCancellable) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                TextButton(onClick = model::cancelConnection) { Text(ui(R.string.ui_cancel)) }
-            }
+        VpsFormIntro(R.string.ui_connect_to_your_vps, R.string.hovq_vps_connect_detail)
+        ServerCredentialFields(draft, enabled = !panel.busy) { draft = it }
+        if (panel.connectionPhase != ConnectionPhase.Idle || setupProblem != null) VpsFormSection {
+            if (panel.connectionPhase != ConnectionPhase.Idle) Text(ui(panel.connectionPhase.label()))
+            if (setupProblem != null) Text(errorText(setupProblem), color = MaterialTheme.colorScheme.error)
+        }
+        Box(Modifier.fillMaxWidth().padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
+            SavedGlassButton(ui(if (setupProblem != null) R.string.ui_retry else R.string.ui_connect),
+                enabled = !panel.busy && draft.credential.isNotBlank()) { model.connect(draft, server) }
+        }
+        if (panel.connectionCancellable) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            TextButton(onClick = model::cancelConnection) { Text(ui(R.string.ui_cancel)) }
         }
     } else {
         VpsFormSection {
@@ -864,6 +867,7 @@ internal fun errorText(code: String) = when (code.substringBefore(" · ")) {
     "NO_PREVIOUS_CONFIG" -> ui(R.string.ui_there_is_no_previous_configuration_on)
     "BACKUP_VERSION" -> ui(R.string.journal_backup_version)
     "AGENT_UPDATE_REQUIRED" -> ui(R.string.article_context_update)
+    "BACKUP_FILE_READ" -> ui(R.string.ui_the_file_is_damaged_too_large)
     "BACKUP_INVALID" -> ui(R.string.ui_check_the_password_and_backup_file)
     "SERVER_FIELDS" -> ui(R.string.ui_check_the_address_ssh_port_username)
     "OPENBB_DEPENDENCY" -> ui(R.string.ui_openbb_requires_an_additional_set_of)

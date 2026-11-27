@@ -14,7 +14,7 @@ import javax.crypto.spec.SecretKeySpec
 internal object DeviceBackup {
     private val header = "HOVQ-ANDROID-BACKUP\u0001".toByteArray()
     private val random = SecureRandom()
-    private const val LIMIT = 9_000_000
+    const val MAX_FILE_SIZE = 9_000_000
     private const val SALT = 16
     private const val NONCE = 12
     const val MIN_PASSWORD = 4
@@ -62,7 +62,7 @@ internal object DeviceBackup {
         return try {
             val data = header + salt + nonce + cipher(Cipher.ENCRYPT_MODE, password, salt, nonce).doFinal(payload)
             val encoded = Base64.getEncoder().encodeToString(data)
-            if (encoded.length > LIMIT) throw Problem("BACKUP_INVALID")
+            if (encoded.length > MAX_FILE_SIZE) throw Problem("BACKUP_INVALID")
             encoded
         } finally {
             payload.fill(0)
@@ -70,7 +70,7 @@ internal object DeviceBackup {
     }
 
     fun unpack(encoded: String, password: String): Settings = try {
-        require(encoded.length <= LIMIT && password.length in MIN_PASSWORD..MAX_PASSWORD)
+        require(encoded.length <= MAX_FILE_SIZE && password.length in MIN_PASSWORD..MAX_PASSWORD)
         val data = Base64.getDecoder().decode(encoded)
         val start = header.size
         val body = start + SALT + NONCE

@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.toArgb
@@ -621,6 +623,13 @@ class FluidScreensTest {
         compose.onNodeWithContentDescription("${ui(R.string.editorial_edit)} ${other.name}").performClick()
 
         text(R.string.editorial_edit).assertExists()
+        text(R.string.vps_form_edit_title).assertIsDisplayed()
+        text(R.string.vps_form_address).assertIsDisplayed()
+        text(R.string.vps_form_credentials).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription(ui(R.string.setting_help_for, ui(R.string.ui_https_domain_optional)))
+            .performScrollTo().performClick()
+        text(R.string.vps_form_https_help).assertIsDisplayed()
+        back()
         fun field(value: String) = compose.onNode(hasText(value) and hasSetTextAction())
         field(other.name).assertExists()
         field(other.host).assertExists()
@@ -628,10 +637,10 @@ class FluidScreensTest {
         field(other.user).assertExists()
         val save = text(R.string.ui_save_connection)
         save.assertDoesNotExist()
-        field(other.name).performTextReplacement("Резервный сервер")
+        field(other.name).performScrollTo().performTextReplacement("Резервный сервер")
         save.assertIsEnabled()
         assertEquals(active.id, flow.value.server?.id)
-        text(R.string.ui_cancel).performClick()
+        text(R.string.ui_cancel).performScrollTo().performClick()
         save.assertDoesNotExist()
         assertEquals(other, flow.value.servers.find { it.id == other.id })
         assertEquals(active.id, flow.value.server?.id)
@@ -900,6 +909,42 @@ class FluidScreensTest {
         assertEquals(2, compose.onAllNodesWithText(ui(R.string.hovq_export)).fetchSemanticsNodes().size)
         assertEquals(2, compose.onAllNodesWithText(ui(R.string.hovq_import)).fetchSemanticsNodes().size)
         snapshot("12-backup-targets")
+    }
+
+    @Test
+    @Config(qualifiers = "ru-rRU-w320dp-h640dp-xhdpi")
+    fun pickerKeepsWrappingOptionsAndCloseReachableWithLargeText() {
+        val originalScale = org.robolectric.RuntimeEnvironment.getFontScale()
+        try {
+            org.robolectric.RuntimeEnvironment.setFontScale(1.8f)
+            compose.activityRule.scenario.recreate()
+            val longOption = "Подробное описание выбранного формата карточки с заголовком и текстом"
+            val label = "Формат карточки"
+            compose.runOnUiThread {
+                compose.activity.setContent {
+                    HorizonTheme {
+                        var open by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(true) }
+                        GlassDropdownMenu(open, { open = false }, label) {
+                            GlassPickerItem({ Text(longOption) }, onClick = {}, selected = true)
+                            repeat(18) { i -> GlassPickerItem({ Text("Вариант ${i + 1}") }, onClick = {}) }
+                        }
+                    }
+                }
+            }
+            val selected = compose.onNode(hasText(longOption) and isSelected())
+            selected.assertIsDisplayed()
+            val layouts = mutableListOf<TextLayoutResult>()
+            compose.onNodeWithText(longOption, useUnmergedTree = true)
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { assertTrue(it(layouts)) }
+            assertFalse(layouts.single().hasVisualOverflow)
+            val close = text(R.string.ui_close).assertIsDisplayed()
+            compose.onNode(hasScrollAction()).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 5000f) }
+            compose.onNodeWithText("Вариант 18").assertIsDisplayed()
+            close.performClick()
+            compose.onNodeWithText(label).assertDoesNotExist()
+        } finally {
+            org.robolectric.RuntimeEnvironment.setFontScale(originalScale)
+        }
     }
 
     @Test

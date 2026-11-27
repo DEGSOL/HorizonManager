@@ -3,7 +3,6 @@ package dev.horizonmanager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -51,7 +50,7 @@ internal fun Server.sameSshCredentials(other: Server): Boolean =
         (!keyMode || passphrase == other.passphrase)
 
 @Composable
-internal fun ServerCredentialFields(draft: ServerDraft, enabled: Boolean, sectioned: Boolean = false,
+internal fun ServerCredentialFields(draft: ServerDraft, enabled: Boolean,
                                     change: (ServerDraft) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -114,22 +113,28 @@ internal fun ServerCredentialFields(draft: ServerDraft, enabled: Boolean, sectio
                 Text(ui(if (draft.credential.isEmpty()) R.string.ui_select_private_key else R.string.ui_replace_selected_key))
             }
             if (keyError) Text(ui(R.string.ui_could_not_read_the_key_file),
-                color = if (sectioned) MaterialTheme.colorScheme.error else HorizonPalette.danger)
-            PasswordField(ui(R.string.ui_key_passphrase_if_set), draft.passphrase, enabled) { change(draft.copy(passphrase = it)) }
+                color = MaterialTheme.colorScheme.error)
+            PasswordField(ui(R.string.ui_key_passphrase_if_set), draft.passphrase, enabled, help = R.string.vps_form_passphrase_help) { change(draft.copy(passphrase = it)) }
         } else {
             PasswordField(ui(R.string.ui_ssh_password), draft.credential, enabled) { change(draft.copy(credential = it)) }
         }
     }
-    if (sectioned) {
+    VpsFormSection {
         Text(ui(R.string.vps_form_address), style = MaterialTheme.typography.titleMedium)
         Address()
-        HorizontalDivider(Modifier.padding(top = 4.dp, bottom = 4.dp),
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))
+    }
+    VpsFormSection {
         SettingHeading(ui(R.string.vps_form_credentials), R.string.vps_form_auth_help)
         Credentials()
-    } else {
-        Address()
-        Credentials()
+    }
+}
+
+@Composable
+internal fun VpsFormIntro(title: Int, detail: Int) {
+    Column(Modifier.fillMaxWidth().readingNavigationGlass(MaterialTheme.shapes.extraLarge)
+        .padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(ui(title), color = ReadingGlass.text, style = MaterialTheme.typography.titleLarge)
+        Text(ui(detail), color = ReadingGlass.muted, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -148,22 +153,23 @@ internal fun SavedServerEditor(server: Server, panel: Panel, model: ManagerModel
     var draft by remember(server.id) { mutableStateOf(ServerDraft(server)) }
     val enabled = !panel.busy && panel.hostConfirmation == null
     val canSave = draft.update(server)?.let { it != server && AgentApi.validHttps(it.https) } == true
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        ServerCredentialFields(draft, enabled) { draft = it }
+    VpsFormIntro(R.string.vps_form_edit_title, R.string.vps_form_edit_detail)
+    ServerCredentialFields(draft, enabled) { draft = it }
+    VpsFormSection {
         ValueField(ui(R.string.ui_https_domain_optional), draft.https,
-            { draft = draft.copy(https = it) }, enabled = enabled)
+            { draft = draft.copy(https = it) }, enabled = enabled, help = R.string.vps_form_https_help)
         if (!AgentApi.validHttps(draft.https.trim())) {
-            Text(errorText("HTTPS_URL"), color = HorizonPalette.danger)
+            Text(errorText("HTTPS_URL"), color = MaterialTheme.colorScheme.error)
         }
-        panel.problem.takeIf(String::isNotBlank)?.let {
-            Text(errorText(it), color = HorizonPalette.danger)
-        }
-        SettingsSaveAction(draft != ServerDraft(server), R.string.ui_save_connection, enabled && canSave) {
-            model.editServer(server.id, draft)
-        }
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            TextButton(onClick = close, enabled = enabled || panel.connectionCancellable) { Text(ui(R.string.ui_cancel)) }
-        }
+    }
+    panel.problem.takeIf(String::isNotBlank)?.let {
+        VpsFormSection { Text(errorText(it), color = MaterialTheme.colorScheme.error) }
+    }
+    SettingsSaveAction(draft != ServerDraft(server), R.string.ui_save_connection, enabled && canSave) {
+        model.editServer(server.id, draft)
+    }
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        TextButton(onClick = close, enabled = enabled || panel.connectionCancellable) { Text(ui(R.string.ui_cancel)) }
     }
     ServerHostPrompt(panel.hostConfirmation, model::confirmHost)
 }

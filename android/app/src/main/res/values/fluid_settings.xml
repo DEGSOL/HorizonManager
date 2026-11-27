@@ -8,4 +8,10 @@
     <string name="vps_form_port_help">SSH usually uses port 22. Change it if your provider gave you a different SSH port.</string>
     <string name="vps_form_user_help">Use the login name for your server. Your VPS provider usually lists it next to the access details.</string>
     <string name="vps_form_auth_help">Choose password if you sign in with a password. Choose SSH key if you have a private key file for this server.</string>
+    <string name="hovq_export_complete">File saved</string>
+    <string name="hovq_file_picker_unavailable">Android’s file picker is unavailable.</string>
+    <string name="vps_form_edit_title">Edit VPS connection</string>
+    <string name="vps_form_edit_detail">Update the address or sign-in details for this server.</string>
+    <string name="vps_form_https_help">Fill this in only if you have set up a secure web address for the Horizon agent. Leave it empty to connect through SSH.</string>
+    <string name="vps_form_passphrase_help">Some SSH keys are protected by a separate password. Enter the password you set for the key, or leave this blank if it has none.</string>
 </resources>

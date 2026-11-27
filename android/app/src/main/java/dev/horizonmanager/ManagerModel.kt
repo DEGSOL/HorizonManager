@@ -1406,8 +1406,9 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         mutable.update { panel -> panel.copy(file = result.getString("archive"), deviceFile = false) }
     }
 
-    fun restore(file: String, password: String) = mutate(full = true, setting = true) {
-        it.post("restore", JSONObject().put("password", password).put("archive", file)
+    fun restore(file: android.net.Uri, password: String) = mutate(full = true, setting = true) {
+        val archive = BackupDocument.read(app, file)
+        it.post("restore", JSONObject().put("password", password).put("archive", archive)
             .put("revision", state.value.config.getInt("revision")))
     }
 
@@ -1418,13 +1419,14 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         mutable.update { it.copy(file = encoded, deviceFile = true) }
     }
 
-    fun restoreDevice(file: String, password: String) = operation {
-        val incoming = DeviceBackup.unpack(file, password)
+    fun restoreDevice(file: android.net.Uri, password: String) = operation {
+        val incoming = DeviceBackup.unpack(BackupDocument.read(app, file), password)
         val previous = vault.load()
         val profiles = (previous + incoming.servers).associateBy { it.id }.values.toList()
         vault.save(profiles)
         cache.restoreFavorites(incoming.favorites)
-        val next = profiles.find { it.id == incoming.selected } ?: state.value.server
+        val selected = incoming.selected.ifEmpty { state.value.server?.id.orEmpty() }
+        val next = profiles.find { it.id == selected }
         withContext(Dispatchers.Main.immediate) {
             app.getSharedPreferences("reading", 0).edit().putString("default_order", incoming.order.name).apply()
             incoming.icon.apply(app)
@@ -1441,7 +1443,15 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             if (profile.background) DigestWorker.sync(app, profile.id, reschedule = true)
         }
         settingsSaved()
-        if (next != null) loadSelected(next)
+        if (next != null) {
+            try {
+                loadSelected(next)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                record(error, next, announce = false)
+            }
+        }
     }
 
     fun clearEvents() {
@@ -1499,12 +1509,6 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             synchronize(server, everything = full)
         }
     }
-
-    private var exportDocument: String? = null
-
-    fun prepareExportDocument(content: String) { exportDocument = content }
-
-    fun takeExportDocument(): String? = exportDocument.also { exportDocument = null }
 
     fun clearFile() = mutable.update { it.copy(file = null) }
     fun consumeProblem(problem: String) = mutable.update {
