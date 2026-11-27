@@ -301,7 +301,8 @@ class FluidScreensTest {
             .joinToString(" → ") { ui(it) }).performScrollTo().assertIsDisplayed()
         begin.assertIsDisplayed().performClick()
         text(R.string.ui_connect_to_your_vps).assertIsDisplayed()
-        text(R.string.ui_ssh_settings).assertIsDisplayed()
+        text(R.string.vps_form_address).assertIsDisplayed()
+        text(R.string.vps_form_credentials).performScrollTo().assertIsDisplayed()
         text(R.string.hovq_welcome_start).assertDoesNotExist()
         snapshot("30-vps-setup")
     }
