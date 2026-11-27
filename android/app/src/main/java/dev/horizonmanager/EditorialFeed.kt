@@ -424,6 +424,7 @@ internal fun NewsScreen(
                     model.flag(selected, read = read)
                 },
                 artworkServer = serverId,
+                displayOptions = panel.status.optJSONObject("article_options") ?: model.articleDisplayOptions(serverId),
                 relay = model.coverRelay(panel, id),
                 contextContent = {
                     key(serverId, run, language, id) {

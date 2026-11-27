@@ -149,6 +149,9 @@ internal interface Cache {
     @Query("SELECT * FROM SavedPublication WHERE server = :server AND article = :article")
     suspend fun savedPublication(server: String, article: String): SavedPublication?
 
+    @Query("UPDATE SavedPublication SET data = :data WHERE server = :server AND article = :article AND run = :run AND language = :language")
+    suspend fun refreshSavedArticle(server: String, article: String, run: String, language: String, data: String)
+
     @Query("SELECT article FROM ArticleFlag WHERE server = :server AND saved = 1")
     suspend fun savedIds(server: String): List<String>
 

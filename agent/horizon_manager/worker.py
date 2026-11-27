@@ -20,7 +20,7 @@ from .article_context import context_artifacts, find_item, read_json
 from .classification import score_with_retry
 from .configuration import DEFAULT_HEADLINE_RANGE, only_source, write_profiles
 from .digest_duplicates import digest_duplicates
-from .localized_digest import atomic_text, complete_artifacts, save_localized
+from .localized_digest import LANGUAGE_NAMES, atomic_text, complete_artifacts, save_localized
 
 STATE = Path(os.environ["HM_STATE"])
 WIRE = sys.stdout
@@ -173,7 +173,7 @@ async def main(payload, job):
     cfg.write_text(json.dumps(config, ensure_ascii=False), encoding="utf-8")
     with TemporaryDirectory(prefix="profiles-", dir=STATE) as folder:
         profiles = Path(folder) / "profiles"
-        write_profiles(profiles, settings["profiles"])
+        summary_settings = write_profiles(profiles, settings["profiles"])
         effective = json.loads(cfg.read_text(encoding="utf-8"))
         effective["processing"]["profiles_dir"] = str(profiles)
         try:
@@ -218,7 +218,8 @@ async def main(payload, job):
                 send("result", data={"raw": raw, "fetch_status": status})
                 return
             phase("score")
-            scored = await score_with_retry(service, job, **common)
+            scored = await score_with_retry(service, job, summary_settings=summary_settings,
+                                   language=LANGUAGE_NAMES[language], **common)
             phase("filter")
             filtered = await service.filter_items(job, **common)
             context, _, _ = service._build_context(**common, sources=None)
@@ -263,7 +264,9 @@ async def main(payload, job):
             run_path = store_dir / job
             assigned = {item.processing.classification.profile for item in items if item.processing.classification}
             atomic_text(run_path / "enrichment_profiles.json", json.dumps({
-                profile["definition"]["id"]: profile for profile in settings["profiles"]
+                profile["definition"]["id"]: {key: value for key, value in profile.items()
+                                              if key not in {"summary_mode", "summary_instruction"}}
+                for profile in settings["profiles"]
                 if profile["definition"]["id"] in assigned
             }, ensure_ascii=False))
             summaries = await save_localized(

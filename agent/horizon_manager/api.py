@@ -26,6 +26,7 @@ from src.processing.content import split_content
 from . import VERSION, backup, jobs, push, router_catalog
 from .article_context import find_item, key_for, localized_context, previous_context, read_json
 from .chatgpt_login import ChatGptLogin
+from .classification import check_analysis_contract
 from .configuration import (DIGEST_LANGUAGES, MAX_HEADLINE_CHARACTERS, MAX_HEADLINE_WORDS, MIN_HEADLINE_WORDS,
                             DigestLanguageCode, ai_missing, schema, secret_name_allowed, validate)
 from .localized_digest import LocalizedSummarizer, restore_original_cards
@@ -65,6 +66,11 @@ class JobInput(Body):
 
 class MediaSearch(Body):
     enabled: bool
+
+
+class ArticleOptions(Body):
+    card_text_mode: Literal["summary", "classic"] | None = None
+    show_score_reason: bool | None = None
 
 
 class EnrichmentMode(Body):
@@ -147,6 +153,7 @@ def public(config):
 
 
 def create_app(root, token):
+    check_analysis_contract()
     store = Store(root)
     chatgpt = ChatGptLogin(root)
     upstream_lock = threading.Lock()
@@ -250,6 +257,7 @@ def create_app(root, token):
                     "digest_languages": DIGEST_LANGUAGES, "headline_max_words": store.headline_words(db),
                     "headline_range": headline_range(db), "disk_free": disk.free, "disk_total": disk.total,
                     "media_search": store.media_search(db), "cover_relay": True, "article_source_links": True, "enrichment_mode": store.enrichment_mode(db),
+                    "article_options": store.article_options(db), "digest_content_version": 4,
                     "load": os.getloadavg()[0], "cpu": os.cpu_count(), "memory": mem, "next": next_at}
 
     @app.put("/v1/media-search")
@@ -258,6 +266,12 @@ def create_app(root, token):
             db.execute("INSERT OR REPLACE INTO media_options VALUES (1, ?)", (int(body.enabled),))
             Store.event(db, "MEDIA_SEARCH_CHANGED")
             return {"enabled": store.media_search(db)}
+
+    @app.put("/v1/article-options")
+    def set_article_options(body: ArticleOptions):
+        with store.db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            return Store.set_article_options(db, body.model_dump(exclude_none=True))
 
     @app.put("/v1/enrichment-mode")
     def set_enrichment_mode(body: EnrichmentMode):
@@ -409,6 +423,7 @@ def create_app(root, token):
             if not previous:
                 fail(404, "NO_PREVIOUS_CONFIG")
             updated = json.loads(previous[0])
+            updated["profiles"] = Store.merge_profiles(updated["profiles"], updated.get("profile_text_options", {}))
             check_config(updated["config"], updated["profiles"], updated["secrets"])
             store.put_settings(db, current, updated)
             Store.event(db, "CONFIG_REVERTED")
@@ -720,18 +735,19 @@ def create_app(root, token):
         return access_context(run, key, language, submit=True)
 
     @app.get("/v1/digests/{run}/{language}")
-    def digest(run: str, language: DigestLanguageCode, offset: int = Query(0, ge=0), limit: int = Query(40, ge=1, le=80)):
+    def digest(run: str, language: DigestLanguageCode, offset: int = Query(0, ge=0),
+               limit: int = Query(40, ge=1, le=80), article: str | None = Query(None, max_length=256)):
         path = artifacts(run)
         try:
             with (path / f"summary-{language}.md").open(encoding="utf-8") as file:
-                markdown = file.read(3_000_000) if offset == 0 else ""
+                markdown = file.read(3_000_000) if offset == 0 and article is None else ""
             stage = next((path / name for name in ("localized_items.json", "enriched_items.json",
                          "filtered_items.json") if (path / name).is_file()), path / "filtered_items.json")
             items = json.loads(stage.read_text(encoding="utf-8"))
         except FileNotFoundError:
             fail(404, "DIGEST_UNKNOWN")
         repaired = restore_original_cards(items, language)
-        if repaired and offset == 0:
+        if repaired and offset == 0 and article is None:
             meta = read_json(path / "meta.json", {})
             profiles = read_json(path / "enrichment_profiles.json", {})
             names = {profile_id: entry["definition"].get("display_names", {})
@@ -745,8 +761,8 @@ def create_app(root, token):
         media_file = path / "media.json"
         media = json.loads(media_file.read_text()) if media_file.is_file() else None
         cards = []
-        has_localized_items = stage.name == "localized_items.json"
-        for item in items[offset:offset + limit]:
+        page = items[offset:offset + limit] if article is None else [item for item in items if item["id"] == article]
+        for item in page:
             process = item.get("processing") or {}
             metadata = item.get("metadata") or {}
             analysis = process.get("analysis") or {}
@@ -772,15 +788,16 @@ def create_app(root, token):
                 **({"telegram_channel": metadata.get("channel") or item.get("author")}
                    if item["source_type"] == "telegram" else {}),
                 "profile": (process.get("classification") or {}).get("profile"),
-                "score": analysis.get("score"), "summary": body[:8000],
+                "score": analysis.get("score"), "summary": analysis.get("summary") or "",
+                "reason": analysis.get("reason") or "", "tags": analysis.get("tags") or [],
+                "summary_from_analysis": True,
                 "body": body, "body_is_plain": not bool(primary) or (
                     len(blocks) == 1 and blocks[0].get("id") == "article" and blocks[0].get("title") == ""
                 ),
-                "reason": (analysis.get("reason") or "")[:8000] if not has_localized_items else "",
                 "blocks": blocks[:30], "citations": artifact.get("sources", [])[:50],
             })
         return {"id": run, "language": language, "markdown": markdown, "items": cards, "total": len(items),
-                "content_version": 3}
+                "content_version": 4}
 
     @app.post("/v1/backup")
     def export(body: Password):
@@ -789,12 +806,14 @@ def create_app(root, token):
             schedule = json.loads(db.execute("SELECT spec FROM schedule WHERE id=1").fetchone()[0])
             media_search = store.media_search(db)
             enrichment_mode = store.enrichment_mode(db)
+            article_options = store.article_options(db)
             language, chosen = store.digest_language(db)
             headline_words = store.headline_words(db)
             characters = headline_range(db)
             Store.event(db, "BACKUP_EXPORTED")
         return {"archive": backup.pack({"horizon": REVISION, "settings": settings, "schedule": schedule,
                                         "media_search": media_search, "enrichment_mode": enrichment_mode,
+                                        "article_options": article_options,
                                         "digest_language": language, "digest_language_chosen": chosen,
                                         "headline_max_words": headline_words, "headline_range": characters}, body.password)}
 
@@ -811,6 +830,7 @@ def create_app(root, token):
                 if not secret_name_allowed(name) or not isinstance(value, str) or not 1 <= len(value) <= 8192 or "\0" in value:
                     fail(422, "SECRET_VALUE_INVALID")
             restored_schedule = Schedule.model_validate(payload["schedule"])
+            article_options = ArticleOptions.model_validate(payload.get("article_options", {}))
             check_config(updated["config"], updated["profiles"], updated["secrets"])
         except (KeyError, ValueError, TypeError, AttributeError):
             fail(422, "BACKUP_INVALID")
@@ -828,6 +848,8 @@ def create_app(root, token):
             mode = payload.get("enrichment_mode")
             if mode in ("on_demand", "automatic"):
                 Store.set_enrichment_mode(db, mode)
+            if options := article_options.model_dump(exclude_none=True):
+                Store.set_article_options(db, options)
             if payload.get("digest_language_chosen") is False:
                 db.execute("DELETE FROM digest_options WHERE id=1")
             elif payload.get("digest_language") in DIGEST_LANGUAGES:

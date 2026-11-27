@@ -43,6 +43,7 @@ internal fun ArticleDialog(
     onSave: () -> Unit,
     onRead: () -> Unit,
     artworkServer: String,
+    displayOptions: JSONObject,
     relay: (suspend () -> ByteArray?)? = null,
     contextContent: @Composable () -> Unit,
     close: () -> Unit,
@@ -53,7 +54,11 @@ internal fun ArticleDialog(
     val bodyColor = Color(0xFF202020)
     val sourceLink = originalPublicationUrl(article)
     val link = article.optString("url")
-    val body = article.optString("body").ifBlank { article.optString("summary") }
+    val classic = displayOptions.optString("card_text_mode") == "classic"
+    val analyzed = article.optBoolean("summary_from_analysis")
+    val summary = if (analyzed) articleField(article, "summary") else ""
+    val body = if (classic) articleField(article, "body").ifBlank { summary } else summary
+    val reason = if (analyzed && displayOptions.optBoolean("show_score_reason")) articleField(article, "reason") else ""
     var actions by remember { mutableStateOf(false) }
     val shareText =
         listOf(article.optString("title"), body, link.takeIf(::isWeb).orEmpty())
@@ -180,9 +185,17 @@ internal fun ArticleDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = theme.muted,
                 )
-                if (article.optBoolean("body_is_plain"))
-                    Text(linkedText(body), style = MaterialTheme.typography.bodyLarge)
-                else Markdown(body)
+                when {
+                    body.isBlank() -> Text(ui(R.string.article_no_analysis_text), color = theme.muted)
+                    classic && !article.optBoolean("body_is_plain") -> Markdown(body)
+                    else -> Text(linkedText(body), style = MaterialTheme.typography.bodyLarge)
+                }
+                if (reason.isNotBlank()) {
+                    Tile {
+                        Text(ui(R.string.article_score_reason), style = MaterialTheme.typography.titleSmall)
+                        Text(reason, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
                 contextContent()
                 val media = article.optJSONObject("media")
                 if (media != null && cover != null) {

@@ -130,6 +130,12 @@ class FluidScreensTest {
                 true,
             )
         val cfg = JSONObject(bytes("config.json").decodeToString())
+        val defaultInstruction = "Сохраняй подробности исходной публикации."
+        cfg.getJSONObject("schema").getJSONObject("profile").getJSONObject("properties")
+            .put("summary_instruction", JSONObject().put("type", "string").put("default", defaultInstruction))
+        cfg.getJSONObject("config").getJSONArray("profiles").objects().forEach {
+            it.put("summary_mode", "news").put("summary_instruction", defaultInstruction)
+        }
         val archive =
             (1..9).map { n ->
                 JSONObject()
@@ -172,9 +178,12 @@ class FluidScreensTest {
                     .put("telegram_channel", if (n < 6) "nasa_fixture" else "")
                     .put("category", "Космос")
                     .put(
-                        "body",
+                        "summary",
                         "Экипаж Международной космической станции запечатлел рассвет над горизонтом Земли. На снимке видны тонкие слои атмосферы и переход от ночной стороны планеты к дневной.",
                     )
+                    .put("summary_from_analysis", true)
+                    .put("reason", "Первичный материал экспедиции.")
+                    .put("body", "Исходная публикация")
                     .put("body_is_plain", true)
                     .put(
                         "media",
@@ -343,6 +352,38 @@ class FluidScreensTest {
         compose.runOnIdle { state.value = state.value.copy(agentVersion = BuildConfig.AGENT_VERSION, problem = "") }
         dismissNotificationOffer()
         compose.onNodeWithText(heading).assertIsDisplayed()
+    }
+
+    @Test
+    fun newerAgentOffersTheBundledVersionAsARollback() {
+        val newer = "0.2.0"
+        val heading = loadIssue(agentVersion = newer, articleCount = 2)
+        text(R.string.agent_rollback_title).assertIsDisplayed()
+        text(R.string.agent_rollback_action).assertIsEnabled()
+        compose.onNodeWithText(ui(R.string.agent_rollback_offer, newer, BuildConfig.AGENT_VERSION)).assertIsDisplayed()
+        back()
+        compose.onNodeWithText(heading).assertDoesNotExist()
+    }
+
+    @Test
+    fun profileTextEditorOpensAtTheBottomAndKeepsItsMultilineDraft() {
+        loadIssue(articleCount = 2)
+        tab(R.string.settings)
+        text(R.string.editorial_ai_processing).performClick()
+        text(R.string.ui_processing_profiles).performClick()
+        compose.onNodeWithText("Technology News").performScrollTo().performClick()
+        text(R.string.profile_news_text).performScrollTo().performClick()
+        text(R.string.profile_edit_text).performScrollTo().performClick()
+        val input = compose.onNode(hasSetTextAction() and hasContentDescription(ui(R.string.profile_summary_instruction)))
+        val apply = text(R.string.profile_apply_text)
+        val dialog = compose.onNode(isDialog()).getUnclippedBoundsInRoot()
+        val gap = dialog.bottom - apply.getUnclippedBoundsInRoot().bottom
+        assertTrue(gap in 0.dp..56.dp)
+        assertTrue(input.getUnclippedBoundsInRoot().bottom <= apply.getUnclippedBoundsInRoot().top)
+        val draft = "Новый первый абзац.\nИ второй абзац."
+        input.performTextReplacement(draft)
+        apply.performClick()
+        compose.onNodeWithText(draft).assertExists()
     }
 
     @Test

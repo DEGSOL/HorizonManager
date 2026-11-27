@@ -5,11 +5,11 @@ from tempfile import TemporaryDirectory
 from typing import Literal, get_args
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from src.collection_window import collection_hours
 from src.mcp.horizon_adapter import get_enabled_sources
 from src.models import AI_PROVIDER_DEFAULTS, Config, SOURCE_REGISTRY
-from src.processing.profiles import BUILTIN_PROFILES_DIR, ProfileDefinition, ProfileRegistry
+from src.processing.profiles import BUILTIN_PROFILES_DIR, ProfileContent, ProfileDefinition, ProfileRegistry
 
 SECRET_NAMES = frozenset({
     "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY", "AZURE_OPENAI_API_KEY",
@@ -27,25 +27,48 @@ MIN_HEADLINE_WORDS = 2
 MAX_HEADLINE_WORDS = 30
 DEFAULT_HEADLINE_RANGE = (3, 60)
 MAX_HEADLINE_CHARACTERS = 240
+DEFAULT_SUMMARY_INSTRUCTION = (
+    "Формируй самостоятельную новость произвольной длины, сохраняя все существенные факты и подробности "
+    "исходной публикации, без необоснованного скептицизма, повторов и вымышленных сведений"
+)
+SummaryMode = Literal["news", "original"]
 
 
 def secret_name_allowed(name):
     return name in SECRET_NAMES or SECRET_ALIAS.fullmatch(name) is not None
 
 
+class ManagedProfileContent(ProfileContent):
+    analysis_max_chars: int = Field(default=6000, ge=500, le=100_000)
+    enrichment_max_chars: int = Field(default=8000, ge=500, le=100_000)
+
+
+class ManagedProfileDefinition(ProfileDefinition):
+    content: ManagedProfileContent = Field(default_factory=ManagedProfileContent)
+
+
 class ProfileDocument(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    definition: ProfileDefinition
+    definition: ManagedProfileDefinition
     match_prompt: str = Field(min_length=1, max_length=100_000)
     analysis_prompt: str = Field(min_length=1, max_length=100_000)
     enrichment_prompt: str = Field(min_length=1, max_length=100_000)
+    summary_mode: SummaryMode = "news"
+    summary_instruction: str = Field(default=DEFAULT_SUMMARY_INSTRUCTION, min_length=1, max_length=12_000)
+
+    @field_validator("summary_instruction")
+    @classmethod
+    def require_instruction(cls, value):
+        if not value.strip() or "\0" in value:
+            raise ValueError("summary instruction must contain text")
+        return value
 
 
 def builtin_profiles():
     registry = ProfileRegistry.load(BUILTIN_PROFILES_DIR, "tech-news")
     return [
         ProfileDocument(
-            definition=p.definition, match_prompt=p.match_prompt,
+            definition={**p.definition.model_dump(), "content": {}}, match_prompt=p.match_prompt,
             analysis_prompt=p.analysis_prompt, enrichment_prompt=p.enrichment_prompt,
         ).model_dump(mode="json")
         for p in registry.profiles
@@ -81,6 +104,7 @@ def write_profiles(target, documents):
         definition.analysis = "analysis.md"
         definition.enrichment.prompt = "enrichment.md"
         (folder / "profile.json").write_text(definition.model_dump_json(indent=2), encoding="utf-8")
+    return {entry.definition.id: (entry.summary_mode, entry.summary_instruction) for entry in entries}
 
 
 def validate(config, documents, secrets, ready=False, openbb=False, auth_root=None):

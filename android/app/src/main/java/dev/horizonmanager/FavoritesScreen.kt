@@ -35,10 +35,11 @@ private val openFavoriteSaver = Saver<SavedPublication?, Bundle>(
 @Composable
 internal fun FavoritesScreen(
     model: ManagerModel,
-    servers: List<Server>,
+    panel: Panel,
     header: @Composable () -> Unit,
     focus: (ReadingOverlay) -> Unit,
 ) {
+    val servers = panel.servers
     val favorites by model.favorites.collectAsStateWithLifecycle(initialValue = emptyList())
     var selected by rememberSaveable(stateSaver = openFavoriteSaver) { mutableStateOf<SavedPublication?>(null) }
     val grid = rememberLazyStaggeredGridState()
@@ -84,11 +85,16 @@ internal fun FavoritesScreen(
             val favorite = favorites.find { it.snapshot.server == item.server && it.snapshot.article == item.article }
             val snapshot = favorite?.snapshot ?: item
             val article = remember(snapshot) { snapshot.publication() }
+            LaunchedEffect(snapshot) {
+                if (!article.optBoolean("summary_from_analysis")) model.refreshSavedArticle(snapshot)
+            }
+            val liveOptions = panel.status.optJSONObject("article_options").takeIf { panel.server?.id == item.server }
             ArticleDialog(
                 article, ArticleFlag(item.server, item.article, favorite != null, favorite?.read ?: true),
                 onSave = { model.flag(snapshot, save = favorite == null) },
                 onRead = { model.flag(item, read = !(favorite?.read ?: true)) },
                 artworkServer = item.server,
+                displayOptions = liveOptions ?: model.articleDisplayOptions(item.server),
                 relay = model.coverRelay(servers.find { it.id == item.server }, item.run, item.article),
                 contextContent = {
                     ArticleContext(article) { submit ->

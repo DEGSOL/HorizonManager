@@ -30,17 +30,47 @@ report() {
 rollback() {
     if [[ -z "${rollback_dir:-}" ]]; then return; fi
     systemctl stop horizon-manager.service
-    cp -a "$rollback_dir/agent/." "$app/agent/"
+    rm -rf -- "$app/agent"
+    cp -a "$rollback_dir/agent" "$app/agent"
     cp -a "$rollback_dir/horizon.commit" "$app/horizon.commit"
+    cp -a "$rollback_dir/build-runtime.sh" "$app/build-runtime.sh"
     if [[ -f "$rollback_dir/bundle.sha256" ]]; then
         cp -a "$rollback_dir/bundle.sha256" "$app/bundle.sha256"
     else
         rm -f "$app/bundle.sha256"
     fi
     cp -a "$rollback_dir/horizon-manager.service" /etc/systemd/system/horizon-manager.service
+    if [[ -n "${database_backup:-}" && -f "$database_backup" ]]; then
+        copy_database "$database_backup" "$database"
+    fi
+    if [[ "${runtime_changed:-no}" == yes ]]; then build_runtime; fi
     systemctl daemon-reload
     systemctl start horizon-manager.service
 }
+copy_database() {
+    python3 - "$1" "$2" <<'PY'
+import sqlite3
+import sys
+from contextlib import closing
+from pathlib import Path
+
+source, target = map(Path, sys.argv[1:])
+with closing(sqlite3.connect(source.resolve().as_uri() + "?mode=ro", uri=True)) as original:
+    with closing(sqlite3.connect(target)) as copy:
+        original.backup(copy)
+PY
+}
+
+build_runtime() {
+    systemd-run --quiet --wait --collect --unit="horizon-manager-build-$(cat /proc/sys/kernel/random/uuid)" \
+      --property=TimeoutStartSec=20min --property=RuntimeMaxSec=20min \
+      --property=DynamicUser=yes --property=User=horizon-manager-runtime \
+      --property=StateDirectory=horizon-manager-runtime --property=StateDirectoryMode=0700 \
+      --property=ProtectSystem=strict --property=ProtectHome=yes --property=NoNewPrivileges=yes \
+      --property=PrivateTmp=yes --property=StandardOutput=null --property=StandardError=null \
+      "$app/build-runtime.sh"
+}
+
 cleanup() {
     rm -f "$installer/token" "$installer/bundle.zip"
     if [[ -n "${staging:-}" ]]; then rm -rf -- "$staging"; fi
@@ -135,16 +165,28 @@ PY
 if [[ "$upgrading" == yes ]]; then
     candidate_rollback="$staging/rollback"
     mkdir -m 700 "$candidate_rollback"
-    cp -a "$app/agent" "$app/horizon.commit" /etc/systemd/system/horizon-manager.service "$candidate_rollback/"
+    cp -a "$app/agent" "$app/horizon.commit" "$app/build-runtime.sh" /etc/systemd/system/horizon-manager.service "$candidate_rollback/"
     if [[ -f "$app/bundle.sha256" ]]; then cp -a "$app/bundle.sha256" "$candidate_rollback/"; fi
     if cmp -s "$staging/horizon.commit" "$app/horizon.commit" &&
        cmp -s "$staging/agent/requirements.txt" "$app/agent/requirements.txt"; then
         reuse_runtime=yes
     fi
     agent_get 'jobs?limit=100&active=true' | python3 -c 'import json,sys; assert not any(x["state"] in {"queued","running"} for x in json.load(sys.stdin))' || block 30
+    installed_agent=$(agent_get health | python3 -c 'import json,sys; print(json.load(sys.stdin)["agent"])')
+    downgrade=$(python3 -c 'import sys; print(tuple(map(int, sys.argv[1].split("."))) > tuple(map(int, sys.argv[2].split("."))))' "$installed_agent" "$target_agent")
     rollback_dir="$candidate_rollback"
     systemctl stop horizon-manager.service
+    if [[ "$downgrade" == True ]]; then
+        database=/var/lib/horizon-manager-runtime/manager.sqlite3
+        candidate_backup=$(mktemp "$progress/rollback-${installed_agent}-XXXXXXXX.sqlite3")
+        if ! copy_database "$database" "$candidate_backup"; then
+            rm -f -- "$candidate_backup"
+            block 28
+        fi
+        database_backup="$candidate_backup"
+    fi
 fi
+rm -rf -- "$app/agent"
 install -d -m 755 "$app/agent/horizon_manager"
 install -m 644 "$staging/horizon.commit" "$app/horizon.commit"
 install -m 644 "$staging/agent/requirements.txt" "$app/agent/requirements.txt"
@@ -153,14 +195,9 @@ install -m 755 "$staging/build-runtime.sh" "$app/build-runtime.sh"
 if [[ ! -f "$etc/api-token" ]]; then install -m 600 "$installer/token" "$etc/api-token"; fi
 
 if [[ "${reuse_runtime:-no}" != yes ]]; then
-stage runtime
-systemd-run --quiet --wait --collect --unit=horizon-manager-build \
-  --property=TimeoutStartSec=20min --property=RuntimeMaxSec=20min \
-  --property=DynamicUser=yes --property=User=horizon-manager-runtime \
-  --property=StateDirectory=horizon-manager-runtime --property=StateDirectoryMode=0700 \
-  --property=ProtectSystem=strict --property=ProtectHome=yes --property=NoNewPrivileges=yes \
-  --property=PrivateTmp=yes --property=StandardOutput=null --property=StandardError=null \
-  "$app/build-runtime.sh"
+    stage runtime
+    runtime_changed=yes
+    build_runtime
 fi
 
 stage service
