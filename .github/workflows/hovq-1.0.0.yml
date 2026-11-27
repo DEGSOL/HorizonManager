@@ -1,0 +1,59 @@
+name: Verify Hovq 1.0.0
+on:
+  push:
+    branches:
+      - release/1.0.0
+
+permissions:
+  contents: read
+
+jobs:
+  verify-agent:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Test agent against pinned Horizon
+        run: |
+          runtime="$RUNNER_TEMP/hovq-tests"
+          mkdir -p "$runtime/horizon"
+          git -C "$runtime/horizon" init --quiet
+          git -C "$runtime/horizon" fetch --quiet --depth 1 https://github.com/Thysrael/Horizon.git "$(cat bootstrap/horizon.commit)"
+          git -C "$runtime/horizon" checkout --quiet --detach FETCH_HEAD
+          python3 -m venv "$runtime/tools"
+          "$runtime/tools/bin/pip" install --quiet uv==0.13.9
+          uv="$runtime/tools/bin/uv"
+          "$uv" --directory "$runtime/horizon" sync --frozen --no-dev --no-editable --python /usr/bin/python3
+          python="$runtime/horizon/.venv/bin/python"
+          "$uv" pip install --python "$python" --no-deps --only-binary :all: -r agent/requirements.txt
+          bash -n bootstrap/install.sh
+          PYTHONPATH="$PWD/agent" "$python" -m unittest discover -s agent/tests -v
+  build-android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Build and test Android
+        run: |
+          export JAVA_HOME="$JAVA_HOME_21_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          if [[ ! -r "$ANDROID_HOME/platforms/android-36/android.jar" ||
+                ! -x "$ANDROID_HOME/build-tools/36.0.0/apksigner" ]]; then
+            sdkmanager="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -print -quit)"
+            test -n "$sdkmanager"
+            bash "$sdkmanager" "platforms;android-36" "build-tools;36.0.0"
+          fi
+          cd android
+          ./gradlew --no-daemon --max-workers=2 :app:testReleaseUnitTest :app:assembleRelease :app:lintRelease
+      - name: Retain the verified unsigned APK
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: hovq-unsigned
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: error
+          retention-days: 3

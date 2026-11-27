@@ -49,6 +49,8 @@ def claim(store, article=False):
         row = db.execute(f"SELECT * FROM jobs WHERE state='queued' AND {predicate} ORDER BY rowid").fetchone()
         if row is not None:
             db.execute("UPDATE jobs SET state='running',updated=? WHERE id=?", (utc(), row["id"]))
+            if row["kind"] == "run":
+                Store.event(db, "JOB_STARTED", job=row["id"])
             return dict(row), store.settings(db), store.enrichment_mode(db), store.digest_language(db)[0]
     return None
 

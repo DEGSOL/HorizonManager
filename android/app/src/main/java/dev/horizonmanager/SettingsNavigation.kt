@@ -41,10 +41,12 @@ internal fun SettingsHome(panel: Panel, model: ManagerModel, open: (String) -> U
                 }
             }
             if (panel.ready) SettingsSection(R.string.hovq_settings_feed_digest) {
-                GlassSettingRow(ui(R.string.archive_digests), ui(R.string.archive_digests_detail), open = rowPage("archive"))
                 GlassSettingRow(ui(R.string.mr_news), ui(R.string.mr_news_detail), open = rowPage("news_settings"))
                 GlassSettingRow(ui(R.string.editorial_ai_processing), ui(R.string.editorial_ai_settings_detail),
                     enabled = configured, open = rowPage("ai_settings"))
+                Spacer(Modifier.height(3.dp))
+                HorizontalDivider(Modifier.padding(horizontal = 10.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .35f))
+                GlassSettingRow(ui(R.string.archive_digests), ui(R.string.archive_digests_detail), open = rowPage("archive"))
             }
             SettingsSection(R.string.setting_group_application) {
                 GlassSettingRow(ui(R.string.mr_interface), ui(R.string.hovq_settings_interface_detail), open = rowPage("interface"))
@@ -97,27 +99,26 @@ internal fun ImageSettings(panel: Panel, model: ManagerModel) {
     }
 }
 
+internal const val DEFAULT_CARD_TEXT_MODE = "summary"
+
 @Composable
 internal fun AiSettings(panel: Panel, model: ManagerModel, open: (String) -> Unit) {
     val mode = panel.status.optString("enrichment_mode")
+    val options = panel.status.optJSONObject("article_options")
     Tile {
         GlassSettingRow(ui(R.string.settings_ai_model), ui(R.string.ui_model_api_address_and_request_limits)) { open("ai") }
         GlassSettingRow(ui(R.string.ui_processing_profiles), ui(R.string.ui_prompts_scoring_criteria_and_output_blocks),
             help = R.string.setting_help_profiles) { open("profiles") }
+        Choice(ui(R.string.article_text_display), listOf("classic", "summary"),
+            options?.optString("card_text_mode", DEFAULT_CARD_TEXT_MODE) ?: DEFAULT_CARD_TEXT_MODE, model::setArticleTextMode,
+            { ui(if (it == "classic") R.string.article_text_classic else R.string.article_text_summary) },
+            enabled = options != null && !panel.busy, row = true, help = R.string.article_text_display_help)
         Choice(ui(R.string.enrichment_mode), listOf("on_demand", "automatic"),
             mode.ifBlank { "on_demand" }, model::enrichmentMode, {
                 ui(if (it == "automatic") R.string.enrichment_automatic else R.string.enrichment_on_demand)
             }, enabled = mode.isNotBlank() && !panel.busy, row = true, help = R.string.setting_help_enrichment,
             menuDetail = R.string.hovq_enrichment_token_cost)
         if (mode.isBlank()) SettingNote(ui(R.string.article_context_update))
-    }
-    val options = panel.status.optJSONObject("article_options")
-    val enabled = options != null && !panel.busy
-    Tile {
-        Choice(ui(R.string.article_text_display), listOf("classic", "summary"),
-            options?.optString("card_text_mode", "classic") ?: "classic", model::setArticleTextMode,
-            { ui(if (it == "classic") R.string.article_text_classic else R.string.article_text_summary) },
-            enabled = enabled, row = true, help = R.string.article_text_display_help)
     }
 }
 
@@ -286,7 +287,7 @@ internal fun ServerMaintenance(panel: Panel, model: ManagerModel, open: (String)
 internal fun TransferSettings(panel: Panel, backup: (Boolean) -> Unit, restore: (Boolean) -> Unit) {
     val connected = panel.ready && panel.config.has("revision")
     Tile {
-        Text(ui(R.string.hovq_vps_backup), style = MaterialTheme.typography.titleMedium)
+        SettingHeading(ui(R.string.hovq_vps_backup), R.string.setting_help_backup)
         SettingNote(ui(R.string.hovq_vps_backup_detail))
         if (!connected) Text(ui(R.string.hovq_backup_connect_first), style = MaterialTheme.typography.bodySmall)
         val enabled = connected && !panel.busy
@@ -294,7 +295,7 @@ internal fun TransferSettings(panel: Panel, backup: (Boolean) -> Unit, restore: 
             { backup(false) }, { restore(false) })
     }
     Tile {
-        Text(ui(R.string.hovq_device_backup), style = MaterialTheme.typography.titleMedium)
+        SettingHeading(ui(R.string.hovq_device_backup), R.string.backup_favorites_help)
         SettingNote(ui(R.string.hovq_device_backup_detail))
         SettingsActionPair(R.string.hovq_export, R.string.hovq_import, !panel.busy, !panel.busy,
             { backup(true) }, { restore(true) })

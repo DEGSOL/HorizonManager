@@ -106,7 +106,8 @@ private fun stateName(value: String) = mapOf("queued" to ui(R.string.ui_waiting)
 
 internal fun phaseName(value: String) = mapOf("fetch" to ui(R.string.ui_collecting_news), "score" to ui(R.string.ui_ai_scoring),
     "filter" to ui(R.string.ui_filtering_and_deduplication), "enrich" to ui(R.string.ui_analysis_and_context),
-    "generate" to ui(R.string.ui_generating_digest), "save" to ui(R.string.ui_saving), "delivery" to ui(R.string.ui_delivery))[value] ?: stateName(value)
+    "generate" to ui(R.string.ui_generating_digest), "save" to ui(R.string.ui_saving), "delivery" to ui(R.string.ui_delivery),
+    "media" to ui(R.string.journal_digest_media))[value] ?: stateName(value)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

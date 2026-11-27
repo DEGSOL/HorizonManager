@@ -11,7 +11,7 @@
     <string name="hovq_vps_backup_detail">Один зашифрованный файл с источниками, профилями, настройками ИИ, ключами, расписанием и параметрами дайджеста.</string>
     <string name="hovq_backup_connect_first">Подключись к Horizon, чтобы перенести его настройки.</string>
     <string name="hovq_device_backup">Hovq на этом устройстве</string>
-    <string name="hovq_device_backup_detail">Один зашифрованный файл с подключениями к VPS и их данными доступа, настройками уведомлений, темой, сортировкой и значком.</string>
+    <string name="hovq_device_backup_detail">Один зашифрованный файл с подключениями к VPS, настройками уведомлений и чтения, а также избранными новостями.</string>
     <string name="hovq_transfer_detail">Перенос настроек Horizon или Hovq в зашифрованных файлах.</string>
     <string name="hovq_export">Экспорт</string>
     <string name="hovq_import">Импорт</string>

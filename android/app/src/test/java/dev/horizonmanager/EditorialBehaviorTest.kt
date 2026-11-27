@@ -124,6 +124,37 @@ class EditorialBehaviorTest {
     }
 
     @Test
+    fun digestJournalKeepsStagesInOrderAndUsesTerminalStatusEvenWithFilters() {
+        val id = "1".repeat(32)
+        val start = "2026-11-27T16:00:00Z"
+        fun event(code: String, detail: String = "") = JSONObject().put("job", id).put("job_kind", "run")
+            .put("time", "2026-11-27T16:02:00Z").put("job_created", start).put("code", code).put("detail", detail)
+        val score = diagnosticEvent(event("score"))
+        val fetch = diagnosticEvent(event("fetch"))
+        val running = groupJournalEvents(listOf(score, fetch), listOf(score, fetch), emptyList(), emptyList())
+            .single() as JournalEntry.Digest
+        assertEquals(start, running.time)
+        assertEquals(DigestJournalStatus.Preparing, running.status)
+        assertEquals(listOf(fetch, score), running.events)
+        assertTrue(running.progress in 0.01f..0.99f)
+        assertNull(running.totalTokens)
+
+        val success = diagnosticEvent(event("JOB_SUCCESS", "tokens 83 21").put("digest_ready", 1))
+        val completed = groupJournalEvents(listOf(success, score, fetch), listOf(score), emptyList(), emptyList())
+            .single() as JournalEntry.Digest
+        assertEquals(DigestJournalStatus.Completed, completed.status)
+        assertEquals(104L, completed.totalTokens)
+        assertEquals(listOf(score), completed.events)
+        assertEquals(1f, completed.progress, 0f)
+
+        val emptyRun = diagnosticEvent(event("JOB_SUCCESS", "tokens unavailable").put("digest_ready", 0))
+        val incomplete = groupJournalEvents(listOf(emptyRun, fetch), listOf(emptyRun, fetch), emptyList(), emptyList())
+            .single() as JournalEntry.Digest
+        assertEquals(DigestJournalStatus.Incomplete, incomplete.status)
+        assertNull(incomplete.totalTokens)
+    }
+
+    @Test
     fun normalizesPublicTelegramHandlesAndRejectsInviteLinks() {
         for (input in listOf("  @myChannel ", "myChannel", "https://t.me/myChannel/")) {
             assertEquals("myChannel", normalizeTelegramChannel(input))

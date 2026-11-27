@@ -138,10 +138,21 @@ internal interface Cache {
         purgeDigest(server, run)
     }
 
-    @Query("SELECT SavedPublication.*, ArticleFlag.read FROM SavedPublication INNER JOIN ArticleFlag " +
-        "ON SavedPublication.server = ArticleFlag.server AND SavedPublication.article = ArticleFlag.article " +
-        "WHERE ArticleFlag.saved = 1 ORDER BY SavedPublication.savedAt DESC, SavedPublication.rowid DESC")
+    @Query(FAVORITES_QUERY)
     fun favorites(): Flow<List<FavoritePublication>>
+
+    @Query(FAVORITES_QUERY)
+    suspend fun backupFavorites(): List<FavoritePublication>
+
+    @Transaction
+    suspend fun restoreFavorites(favorites: List<FavoritePublication>) {
+        for ((incoming, read) in favorites) {
+            val current = savedPublication(incoming.server, incoming.article)
+            val flag = articleFlag(incoming.server, incoming.article)
+            if (current == null || current.savedAt < incoming.savedAt) savePublication(incoming)
+            saveFlag(ArticleFlag(incoming.server, incoming.article, true, read || flag?.read == true))
+        }
+    }
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun savePublication(publication: SavedPublication)
@@ -236,6 +247,10 @@ internal interface Cache {
     @Query("DELETE FROM LocalEvent WHERE server = :server AND timestamp < :before")
     suspend fun pruneEvents(server: String, before: String)
 }
+
+private const val FAVORITES_QUERY = "SELECT SavedPublication.*, ArticleFlag.read FROM SavedPublication INNER JOIN ArticleFlag " +
+    "ON SavedPublication.server = ArticleFlag.server AND SavedPublication.article = ArticleFlag.article " +
+    "WHERE ArticleFlag.saved = 1 ORDER BY SavedPublication.savedAt DESC, SavedPublication.rowid DESC"
 
 @Database(entities = [CachedDigest::class, ArticleFlag::class, LocalEvent::class, CachedArchive::class,
     SavedPublication::class, HiddenDigest::class], version = 2, exportSchema = false)

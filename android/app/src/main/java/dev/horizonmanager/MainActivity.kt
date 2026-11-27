@@ -348,24 +348,28 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     val running = panel.jobs.firstOrNull()?.optString("state") in setOf("running", "queued")
     val checkingInstall = panel.probe["install"] == "running" || panel.updatingAgent
     val watchingFeed = panel.ready && tab == FEED && !manageServers
+    val watchingJournal = panel.ready && configPage == "journal"
     val preparing = digestIsPreparing(panel.jobs)
     LaunchedEffect(model, lifecycle) {
         lifecycle.repeatAt(androidx.lifecycle.Lifecycle.State.RESUMED) {
             model.networkAvailable.collect(model::networkChanged)
         }
     }
-    LaunchedEffect(currentServer?.id, panel.ready, running, checkingInstall, watchingFeed, preparing, lifecycle, locale) {
+    LaunchedEffect(currentServer?.id, panel.ready, running, checkingInstall, watchingFeed, watchingJournal, preparing, lifecycle, locale) {
         androidx.lifecycle.Lifecycle.State.RESUMED.let { minimum ->
             lifecycle.repeatAt(minimum) {
+                if (watchingJournal) model.refresh(quiet = true, journalOnly = true)
                 while (true) {
                     delay(when {
                         checkingInstall -> 5_000
+                        watchingJournal && (preparing || running) -> 3_000
+                        watchingJournal -> 8_000
                         watchingFeed && preparing -> 5_000
                         running -> 12_000
                         watchingFeed -> 15_000
                         else -> 60_000
                     })
-                    if (panel.ready) model.refresh(quiet = true)
+                    if (panel.ready) model.refresh(quiet = true, journalOnly = watchingJournal)
                     else if (currentServer != null) model.refreshInstallation()
                 }
             }
@@ -431,10 +435,10 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                 ui(when {
                     restoring && device -> R.string.hovq_device_restore_password
                     restoring -> R.string.hovq_vps_restore_password
-                    else -> R.string.ui_enter_a_password_of_at_least
+                    else -> R.string.backup_password_minimum
                 }),
-                minimum = if (restoring) 1 else 12,
-                maximum = 256,
+                minimum = DeviceBackup.MIN_PASSWORD,
+                maximum = DeviceBackup.MAX_PASSWORD,
                 close = { backupDialog = ""; restoreFile = "" },
             ) { password ->
                 backupDialog = ""

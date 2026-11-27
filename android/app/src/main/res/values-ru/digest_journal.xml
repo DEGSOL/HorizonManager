@@ -1,0 +1,14 @@
+<resources>
+    <string name="journal_digest_title">Дайджест · %1$s</string>
+    <string name="journal_digest_tokens">Всего токенов · %1$s</string>
+    <string name="journal_digest_started">Подготовка началась</string>
+    <string name="journal_digest_started_detail">Horizon проверяет настройки и запускает сбор новостей.</string>
+    <string name="journal_digest_ready">Дайджест готов</string>
+    <string name="journal_digest_incomplete">Дайджест не сформирован</string>
+    <string name="journal_digest_expanded">Этапы раскрыты</string>
+    <string name="journal_digest_collapsed">Этапы свёрнуты</string>
+    <string name="journal_digest_media">Подготовка обложек</string>
+    <string name="journal_digest_media_detail">Horizon ищет изображения для карточек новостей.</string>
+    <string name="backup_password_minimum">Введите минимум 4 символа. Подойдёт и код из четырёх цифр. Сохраните его для восстановления копии.</string>
+    <string name="backup_favorites_help">Экспортируйте эту копию перед переустановкой Hovq. После установки импортируйте её, чтобы вернуть избранные новости.</string>
+</resources>

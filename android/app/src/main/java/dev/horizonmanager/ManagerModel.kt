@@ -824,7 +824,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                 else panel.schedule
             val sources = (api.get("sources") as JSONArray).objects()
             val jobs = (api.get("jobs") as JSONArray).objects()
-            val events = (api.get(if (cursor == 0L) "events?limit=250&latest=true" else "events?after=$cursor&limit=1000") as JSONArray).objects()
+            val events = journalEvents(api, cursor)
             val media = if (!changed && selected?.optBoolean("media_ready") == true &&
                 panel.articles.any { !it.has("media") }) {
                 val id = selected.getString("id")
@@ -844,13 +844,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             cache.mergeArtwork(server.id, id, language, media)
             if (state.value.selectedRun == id) showCached(server.id, id, language)
         }
-        cache.saveEvents(remote.events.map {
-            LocalEvent(server.id, "remote", it.getLong("id"), it.getString("time"), it.toString())
-        })
-        if (System.currentTimeMillis() - journalSync > 3_600_000) {
-            cache.pruneEvents(server.id, Instant.now().minus(45, ChronoUnit.DAYS).toString())
-            journalSync = System.currentTimeMillis()
-        }
+        saveJournalEvents(server, remote.events)
         mutable.update { panel ->
             if (panel.server?.id != server.id) return@update panel
             panel.copy(archive = remote.archive, hasMoreDigests = remote.hasMore, collectionHours = hours,
@@ -859,6 +853,31 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                 schedule = remote.schedule, sourceHistory = remote.sources, status = remote.status, jobs = remote.jobs,
                 problem = if (panel.problem.startsWith("AGENT_") || panel.problem.startsWith("SSH_")) "" else panel.problem)
         }
+    }
+
+    private fun journalEvents(api: AgentApi, cursor: Long): List<JSONObject> {
+        val route = if (cursor == 0L) "events?limit=1000&latest=true" else "events?after=$cursor&limit=1000"
+        return (api.get(route) as JSONArray).objects()
+    }
+
+    private suspend fun saveJournalEvents(server: Server, events: List<JSONObject>) {
+        if (events.isNotEmpty()) cache.saveEvents(events.map {
+            LocalEvent(server.id, "remote", it.getLong("id"), it.getString("time"), it.toString())
+        })
+        if (System.currentTimeMillis() - journalSync > 3_600_000) {
+            cache.pruneEvents(server.id, Instant.now().minus(45, ChronoUnit.DAYS).toString())
+            journalSync = System.currentTimeMillis()
+        }
+    }
+
+    private suspend fun synchronizeJournal(server: Server) {
+        val cursor = cache.eventCursor(server.id)
+        val (jobs, events) = withAgent(server) { api ->
+            (api.get("jobs") as JSONArray).objects() to journalEvents(api, cursor)
+        }
+        connected(server)
+        saveJournalEvents(server, events)
+        mutable.update { if (it.server?.id == server.id) it.copy(jobs = jobs) else it }
     }
 
 
@@ -879,7 +898,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         return run to language
     }
 
-    fun refresh(quiet: Boolean = false) {
+    fun refresh(quiet: Boolean = false, journalOnly: Boolean = false) {
         if (!quiet) reconnectPaused = false
         if (reconnectPaused || quiet && android.os.SystemClock.elapsedRealtime() < quietRetryAfter) return
         val panel = state.value
@@ -898,6 +917,8 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
                     throw error
                 }
                 if (version != null) finishAgentUpdate(server, version)
+            } else if (journalOnly && state.value.connectionPhase == ConnectionPhase.Connected) {
+                retryConnection { synchronizeJournal(server) }
             } else {
                 retryConnection { synchronize(server, everything = !quiet || state.value.selectedRun.isEmpty()) }
             }
@@ -1392,7 +1413,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
 
     fun exportDevice(password: String) = operation {
         val panel = state.value
-        val settings = DeviceBackup.read(app, vault.load(), panel.server?.id.orEmpty())
+        val settings = DeviceBackup.read(app, vault.load(), panel.server?.id.orEmpty(), cache.backupFavorites())
         val encoded = DeviceBackup.pack(settings, password)
         mutable.update { it.copy(file = encoded, deviceFile = true) }
     }
@@ -1402,6 +1423,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         val previous = vault.load()
         val profiles = (previous + incoming.servers).associateBy { it.id }.values.toList()
         vault.save(profiles)
+        cache.restoreFavorites(incoming.favorites)
         val next = profiles.find { it.id == incoming.selected } ?: state.value.server
         withContext(Dispatchers.Main.immediate) {
             app.getSharedPreferences("reading", 0).edit().putString("default_order", incoming.order.name).apply()

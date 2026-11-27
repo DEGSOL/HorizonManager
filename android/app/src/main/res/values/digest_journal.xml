@@ -1,0 +1,14 @@
+<resources>
+    <string name="journal_digest_title">Digest · %1$s</string>
+    <string name="journal_digest_tokens">Total tokens · %1$s</string>
+    <string name="journal_digest_started">Preparation started</string>
+    <string name="journal_digest_started_detail">Horizon checks the settings and starts collecting news.</string>
+    <string name="journal_digest_ready">Digest ready</string>
+    <string name="journal_digest_incomplete">No completed digest</string>
+    <string name="journal_digest_expanded">Steps expanded</string>
+    <string name="journal_digest_collapsed">Steps collapsed</string>
+    <string name="journal_digest_media">Preparing covers</string>
+    <string name="journal_digest_media_detail">Horizon looks for preview images for the news cards.</string>
+    <string name="backup_password_minimum">Enter at least 4 characters. A four-digit PIN also works. Keep it for restoring this backup.</string>
+    <string name="backup_favorites_help">Export this copy before reinstalling Hovq. Import it on the new installation to get your favorite articles back.</string>
+</resources>

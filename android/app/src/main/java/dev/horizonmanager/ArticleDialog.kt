@@ -54,7 +54,7 @@ internal fun ArticleDialog(
     val bodyColor = Color(0xFF202020)
     val sourceLink = originalPublicationUrl(article)
     val link = article.optString("url")
-    val classic = displayOptions.optString("card_text_mode", "classic") == "classic"
+    val classic = displayOptions.optString("card_text_mode", DEFAULT_CARD_TEXT_MODE) == "classic"
     val analyzed = article.optBoolean("summary_from_analysis")
     val summary = if (analyzed) articleField(article, "summary") else ""
     val body = if (classic) articleField(article, "body").ifBlank { articleField(article, "summary") } else summary

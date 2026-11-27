@@ -9,7 +9,7 @@ from .router_catalog import ROUTERS
 from .configuration import (DEFAULT_HEADLINE_RANGE, DEFAULT_HEADLINE_WORDS,
                             DIGEST_LANGUAGES, ProfileDocument, builtin_profiles, initial_config)
 
-DEFAULT_ARTICLE_OPTIONS = {"card_text_mode": "classic", "show_score_reason": False}
+DEFAULT_ARTICLE_OPTIONS = {"card_text_mode": "summary", "show_score_reason": False}
 PROFILE_TEXT_FIELDS = {"summary_mode", "summary_instruction"}
 
 
@@ -175,9 +175,10 @@ class Store:
 
     @staticmethod
     def set_article_options(db, options):
-        updated = {**Store.article_options(db), **options}
+        row = db.execute("SELECT payload FROM article_display_options WHERE id=1").fetchone()
+        updated = {**(json.loads(row[0]) if row else {}), **options}
         db.execute("INSERT OR REPLACE INTO article_display_options VALUES (1, ?)", (json.dumps(updated),))
-        return updated
+        return {**DEFAULT_ARTICLE_OPTIONS, **updated}
 
     @staticmethod
     def merge_profiles(profiles, options):

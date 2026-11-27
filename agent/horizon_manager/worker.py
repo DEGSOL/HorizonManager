@@ -36,6 +36,7 @@ MESSAGES = {
     "generate": "Генерация Markdown",
     "save": "Сохранение дайджеста",
     "delivery": "Доставка дайджеста",
+    "media": "Подготовка обложек",
 }
 
 
@@ -276,11 +277,11 @@ async def main(payload, job):
                 for profile in settings["profiles"]
                 if profile["definition"]["id"] in assigned
             }, ensure_ascii=False))
+            phase("save")
             summaries = await save_localized(
                 run_path, items, [language], checked_raw=raw, date=today,
                 config=context.config, names=service._profiles(context).names,
             )
-            phase("save")
             orchestrator.storage.save_daily_summary(today, summaries[language], language=language)
             send("result", data={
                 "raw": raw, "scored": scored["scored"], "kept": kept, "enriched": enriched_count,
@@ -305,6 +306,7 @@ async def main(payload, job):
                 if webhook:
                     await webhook.send_daily_summary(markdown, items, raw, today, language, summarizer)
             from .media import prepare_images
+            phase("media")
             try:
                 covers = await prepare_images(store_dir / job, items, context.config, payload.get("media_search", False))
                 send("log", level="INFO", code="MEDIA_READY", detail=str(covers or 0))

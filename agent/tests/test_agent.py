@@ -299,8 +299,8 @@ class AgentTests(unittest.TestCase):
         saved = self.client.put("/v1/config", json=incoming)
         self.assertEqual(saved.status_code, 200, saved.text)
         self.assertEqual(self.client.get("/v1/status").json()["article_options"],
-                         {"card_text_mode": "classic", "show_score_reason": False})
-        self.assertEqual(self.client.put("/v1/article-options", json={"card_text_mode": "summary"}).status_code, 200)
+                         {"card_text_mode": "summary", "show_score_reason": False})
+        self.assertEqual(self.client.put("/v1/article-options", json={"card_text_mode": "classic"}).status_code, 200)
         self.assertEqual(self.client.put("/v1/article-options", json={"show_score_reason": True}).status_code, 200)
         self.client.put("/v1/digest-language", json={"language": "ru"})
         reopened = create_app(self.root, TOKEN)
@@ -310,7 +310,7 @@ class AgentTests(unittest.TestCase):
             self.assertEqual(current["analysis_prompt"], original_policy)
             self.assertEqual(current["definition"]["content"], content)
             self.assertEqual(client.get("/v1/status").json()["article_options"],
-                             {"card_text_mode": "summary", "show_score_reason": True})
+                             {"card_text_mode": "classic", "show_score_reason": True})
 
         run = uuid4()
         self.assertEqual(self.client.post("/v1/jobs", json={"id": str(run)}).status_code, 200)
@@ -428,14 +428,15 @@ class AgentTests(unittest.TestCase):
         invalid["config"]["processing"]["profiles_dir"] = "../../elsewhere"
         self.assertEqual(self.client.put("/v1/config", json=invalid).status_code, 422)
         self.assertEqual(self.client.get("/v1/config").json()["config"]["ai"]["model"], "fixture-model")
-        archive = self.client.post("/v1/backup", json={"password": "backup-password"}).json()["archive"]
+        self.assertEqual(self.client.post("/v1/backup", json={"password": "123"}).status_code, 422)
+        archive = self.client.post("/v1/backup", json={"password": "1234"}).json()["archive"]
         self.assertNotIn(SECRET.encode(), base64.b64decode(archive))
         self.assertEqual(self.client.post("/v1/restore", json={"password": "incorrect-password", "archive": archive,
                                                              "revision": 2}).status_code, 422)
         reverted = self.client.post("/v1/config/revert", json={"revision": 2})
         self.assertEqual(reverted.status_code, 200, reverted.text)
         self.assertEqual(reverted.json()["config"]["ai"]["model"], "")
-        response = self.client.post("/v1/restore", json={"password": "backup-password", "archive": archive, "revision": 3})
+        response = self.client.post("/v1/restore", json={"password": "1234", "archive": archive, "revision": 3})
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()["config"]["ai"]["model"], "fixture-model")
 
@@ -452,6 +453,12 @@ class AgentTests(unittest.TestCase):
         job = self.wait(id.hex)
         events = self.client.get("/v1/events").json()
         self.assertEqual(job["state"], "success", events)
+        history = [event for event in events if event["job"] == id.hex]
+        self.assertEqual({(event["job_kind"], event["job_created"]) for event in history}, {("run", job["created"])})
+        self.assertEqual([event["code"] for event in history if event["code"] in {"JOB_STARTED", "media", "JOB_SUCCESS"}],
+                         ["JOB_STARTED", "media", "JOB_SUCCESS"])
+        self.assertEqual(history[-1]["digest_ready"], 1)
+        self.assertRegex(history[-1]["detail"], r"^tokens [1-9]\d* [1-9]\d*$")
         self.assertEqual(job["result"]["fetch_status"], "partial_failure")
         self.assertEqual(job["result"]["raw"], 1)
         self.assertEqual(job["result"]["kept"], 1)

@@ -129,7 +129,7 @@ class PushDevice(Body):
 
 
 class Password(Body):
-    password: str = Field(min_length=12, max_length=256)
+    password: str = Field(min_length=4, max_length=256)
 
 
 class ImportBackup(Password):
@@ -524,6 +524,8 @@ def create_app(root, token):
             else:
                 fail(409, "JOB_FINISHED")
             Store.event(db, "STOP_REQUESTED", job=job)
+            if row["state"] == "queued":
+                Store.event(db, "JOB_CANCELLED", "WARNING", job=job)
         return {"id": job}
 
     @app.get("/v1/sources")
@@ -539,7 +541,12 @@ def create_app(root, token):
         with store.db() as db:
             order = "DESC" if latest else "ASC"
             rows = [dict(row) for row in db.execute(
-                f"SELECT * FROM events WHERE id > ? ORDER BY id {order} LIMIT ?", (after, limit))]
+                f"""SELECT events.*, jobs.kind AS job_kind, jobs.created AS job_created,
+                    CASE WHEN events.code = 'JOB_SUCCESS' AND jobs.kind = 'run'
+                        THEN COALESCE(json_array_length(jobs.result, '$.languages'), 0) > 0
+                    END AS digest_ready
+                    FROM events LEFT JOIN jobs ON jobs.id = events.job
+                    WHERE events.id > ? ORDER BY events.id {order} LIMIT ?""", (after, limit))]
             return rows[::-1] if latest else rows
 
     @app.delete("/v1/events")

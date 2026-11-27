@@ -11,7 +11,7 @@
     <string name="hovq_vps_backup_detail">One encrypted file with sources, profiles, AI settings, keys, schedule and digest options.</string>
     <string name="hovq_backup_connect_first">Connect to Horizon to transfer its settings.</string>
     <string name="hovq_device_backup">Hovq on this device</string>
-    <string name="hovq_device_backup_detail">One encrypted file with saved VPS connections and credentials, notification preferences, theme, sorting and icon.</string>
+    <string name="hovq_device_backup_detail">One encrypted file with saved VPS connections, notification preferences, reading settings and favorite articles.</string>
     <string name="hovq_transfer_detail">Transfer Horizon or Hovq settings in encrypted files.</string>
     <string name="hovq_export">Export</string>
     <string name="hovq_import">Import</string>

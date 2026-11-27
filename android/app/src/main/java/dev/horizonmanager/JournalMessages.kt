@@ -51,6 +51,7 @@ internal fun journalMessage(row: JSONObject): Pair<String, String> {
         "generate" -> R.string.journal_generate_detail
         "save" -> R.string.journal_save_detail
         "delivery" -> R.string.journal_delivery_detail
+        "media" -> R.string.journal_digest_media_detail
         else -> null
     }
     if (phaseBody != null) return phaseName(code) to ui(phaseBody)
@@ -60,6 +61,7 @@ internal fun journalMessage(row: JSONObject): Pair<String, String> {
         "INSTALL_SUCCESS" -> ui(R.string.journal_install_ok_title) to ui(R.string.journal_install_ok)
         "INSTALL_FAILED", "INSTALL_ERROR" -> installStep(detail) to ui(R.string.journal_install_failed)
         "JOB_QUEUED" -> ui(R.string.journal_queued_title, jobName(detail)) to ui(R.string.journal_queued)
+        "JOB_STARTED" -> ui(R.string.journal_digest_started) to ui(R.string.journal_digest_started_detail)
         "JOB_SUCCESS" -> {
             val tokens = jobTokenCounts(detail)
             val body = when {

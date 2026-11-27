@@ -20,6 +20,30 @@ import java.util.UUID
 @Config(sdk = [35])
 class SavedPublicationsTest {
     @Test
+    fun restoresFavoriteSnapshotsOnACleanDeviceWithAFourDigitPassword() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val server = UUID.randomUUID().toString()
+        val snapshot = SavedPublication(server, "favorite", "past", "en", 100L,
+            JSONObject().put("id", "favorite").put("title", "Saved offline").toString())
+        val favorite = FavoritePublication(snapshot, true)
+        val exported = Room.inMemoryDatabaseBuilder(context, ManagerDb::class.java).build().use { database ->
+            val cache = database.cache()
+            cache.updateFlag(server, "favorite", saved = true, read = true, publication = snapshot)
+            val settings = DeviceBackup.Settings(emptyList(), "", NewsOrder.Issue, LauncherAppearance.Dark, cache.backupFavorites())
+            DeviceBackup.pack(settings, "1234")
+        }
+        Room.inMemoryDatabaseBuilder(context, ManagerDb::class.java).build().use { database ->
+            val cache = database.cache()
+            val restored = DeviceBackup.unpack(exported, "1234")
+            cache.restoreFavorites(restored.favorites)
+            cache.restoreFavorites(restored.favorites)
+            assertEquals(favorite, cache.favorites().first().single())
+            assertEquals(listOf("favorite"), cache.savedIds(server))
+        }
+        Unit
+    }
+
+    @Test
     fun upgradesCachedV1FavoritesAndRetainsThemWhenAnIssueIsDeletedAndResynced() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val name = "legacy-${UUID.randomUUID()}.db"

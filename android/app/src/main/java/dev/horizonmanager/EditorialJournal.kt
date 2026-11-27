@@ -33,7 +33,6 @@ private val publicComponents = setOf("vps", "android", "agent", "horizon", "sche
 private val publicCode = Regex("[A-Z][A-Z0-9_]{1,79}")
 private val publicJob = Regex("(?:[0-9a-f]{32}|run-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8})")
 private val journalLevels = setOf("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
-private val phases = setOf("fetch", "score", "filter", "enrich", "generate", "save", "delivery")
 private val exitStatus = Regex("(?:preflight|packages|files|runtime|service|health) · exit [0-9]{1,3}")
 private val sourceResult = Regex(".* · ([0-9]{1,9})(?: · (AUTH|RATE_LIMIT|HTTP_NOT_FOUND|TIMEOUT|INVALID_FORMAT|NETWORK|UPSTREAM_FAILURE))?")
 private val jobTokenDetail = Regex("tokens ([0-9]{1,18}) ([0-9]{1,18})")
@@ -58,7 +57,7 @@ private fun isPublicConnectionTrace(value: String): Boolean {
 
 internal fun diagnosticEvent(row: JSONObject): JSONObject {
     val code = row.optString("code").substringBefore(" · ")
-        .takeIf { it in phases || publicCode.matches(it) }.orEmpty()
+        .takeIf { it in digestPhases || publicCode.matches(it) }.orEmpty()
     val raw = row.optString("detail")
     val detail = when {
         row.optString("component") == "android" && isConnectionFailure(code) -> raw.takeIf(::isPublicConnectionTrace)
@@ -80,6 +79,12 @@ internal fun diagnosticEvent(row: JSONObject): JSONObject {
         row.optString("component").takeIf { it in publicComponents }?.let { put("component", it) }
         row.optString("level").takeIf { it in journalLevels }?.let { put("level", it) }
         row.optString("job").takeIf(publicJob::matches)?.let { put("job", it) }
+        if (row.optString("job_kind") == "run") {
+            put("job_kind", "run")
+            row.optString("job_created").takeIf { runCatching { Instant.parse(it) }.isSuccess }
+                ?.let { put("job_created", it) }
+            (row.opt("digest_ready") as? Number)?.let { put("digest_ready", it.toInt() == 1) }
+        }
         if (code.isNotBlank()) put("code", code)
         if (!detail.isNullOrBlank()) put("detail", detail)
     }
@@ -96,6 +101,7 @@ internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model:
     var period by rememberSaveable { mutableStateOf("all") }
     var query by rememberSaveable { mutableStateOf("") }
     var job by rememberSaveable { mutableStateOf("") }
+    var expanded by rememberSaveable(panel.server?.id) { mutableStateOf(arrayListOf<String>()) }
     var detail by remember { mutableStateOf<JSONObject?>(null) }
     val context = LocalContext.current
     val safeEvents = remember(panel.events) { panel.events.map(::diagnosticEvent) }
@@ -122,7 +128,9 @@ internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model:
     val zone = ZoneId.systemDefault()
     val locale = appLocale()
     val dayLabel = remember(locale) { DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG).withLocale(locale) }
-    val days = remember(events, zone) { events.groupBy { journalEventDate(it.optString("time"), zone) } }
+    val days = remember(safeEvents, events, panel.jobs, panel.archive, zone) {
+        groupJournalEvents(safeEvents, events, panel.jobs, panel.archive).groupBy { journalEventDate(it.time, zone) }
+    }
     LazyColumn(Modifier.fillMaxSize().editorialSideBottomInsets(), state = rememberLazyListState(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -161,16 +169,18 @@ internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model:
                 Text(dayLabel.format(day), Modifier.padding(top = 4.dp, start = 4.dp).semantics { heading() },
                     style = MaterialTheme.typography.titleSmall)
             }
-            items(entries) { row ->
-                val importance = row.optString("level")
-                val color = when (importance) { "ERROR", "CRITICAL" -> MaterialTheme.colorScheme.error; "WARNING" -> Color(0xFF614400); else -> MaterialTheme.colorScheme.onSurfaceVariant }
-                val (title, explanation) = journalMessage(row)
-                Tile(Modifier.clickable(role = Role.Button) { detail = row }) {
-                    Text(listOf(journalLevel(importance), journalComponent(row.optString("component")), localTime(row.optString("time")))
-                        .filter(String::isNotBlank).joinToString(" · "), style = MaterialTheme.typography.labelMedium, color = color)
-                    Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                    Text(explanation, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall,
-                        maxLines = 3, overflow = TextOverflow.Ellipsis)
+            for (entry in entries) when (entry) {
+                is JournalEntry.Event -> item { JournalEventCard(entry.row) { detail = entry.row } }
+                is JournalEntry.Digest -> {
+                    val open = entry.id in expanded
+                    item("digest-${entry.id}") {
+                        DigestJournalHeader(entry, open) {
+                            expanded = ArrayList(if (open) expanded - entry.id else expanded + entry.id)
+                        }
+                    }
+                    if (open) items(entry.events, key = { "digest-${entry.id}-event-${it.optLong("id")}" }) { row ->
+                        Box(Modifier.padding(horizontal = 10.dp)) { JournalEventCard(row) { detail = row } }
+                    }
                 }
             }
         }
@@ -196,5 +206,23 @@ internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model:
                     context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Horizon", row.toString(2)))
                 }) { Text(ui(R.string.ui_copy)) }
             }, dismissButton = { TextButton(onClick = { detail = null }) { Text(ui(R.string.ui_close)) } })
+    }
+}
+
+@Composable
+private fun JournalEventCard(row: JSONObject, open: () -> Unit) {
+    val importance = row.optString("level")
+    val color = when (importance) {
+        "ERROR", "CRITICAL" -> MaterialTheme.colorScheme.error
+        "WARNING" -> Color(0xFF614400)
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val (title, explanation) = journalMessage(row)
+    Tile(Modifier.clickable(role = Role.Button, onClick = open)) {
+        Text(listOf(journalLevel(importance), journalComponent(row.optString("component")), localTime(row.optString("time")))
+            .filter(String::isNotBlank).joinToString(" · "), style = MaterialTheme.typography.labelMedium, color = color)
+        Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
+        Text(explanation, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall,
+            maxLines = 3, overflow = TextOverflow.Ellipsis)
     }
 }
