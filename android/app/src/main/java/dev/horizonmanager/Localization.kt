@@ -84,9 +84,13 @@ private fun agentVersionParts(version: String): List<Int>? {
 
 internal fun isAgentVersion(version: String): Boolean = agentVersionParts(version) != null
 
-internal fun agentUpdateAvailable(installed: String): Boolean {
-    val current = agentVersionParts(installed) ?: return false
-    val target = agentVersionParts(BuildConfig.AGENT_VERSION) ?: return false
+private fun agentVersionDifference(installed: String): Int? {
+    val current = agentVersionParts(installed) ?: return null
+    val target = checkNotNull(agentVersionParts(BuildConfig.AGENT_VERSION))
     val difference = current.zip(target).firstOrNull { (left, right) -> left != right }
-    return difference != null && difference.first < difference.second
+    return difference?.let { (left, right) -> left.compareTo(right) } ?: 0
 }
+
+internal fun agentUpdateAvailable(installed: String) = agentVersionDifference(installed) == -1
+internal fun agentRollbackRequired(installed: String) = agentVersionDifference(installed) == 1
+internal fun agentCompatible(installed: String) = installed == BuildConfig.AGENT_VERSION

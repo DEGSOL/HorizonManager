@@ -203,6 +203,7 @@ internal fun AgentGate(panel: Panel, model: ManagerModel) {
     val server = panel.server ?: return
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val known = isAgentVersion(panel.agentVersion)
+    val rollback = agentRollbackRequired(panel.agentVersion)
     LaunchedEffect(server.id, panel.updatingAgent, lifecycle) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (true) {
@@ -221,10 +222,17 @@ internal fun AgentGate(panel: Panel, model: ManagerModel) {
         (server.keyMode || problem.startsWith("SUDO_REQUIRED") || problem.startsWith("SSH_COMMAND"))
     var password by remember(server.id) { mutableStateOf("") }
     EntryScene {
-        EntryWindow(ui(if (known) R.string.ui_update_vps_agent else R.string.hovq_agent_check_title)) {
+        EntryWindow(ui(when {
+            rollback -> R.string.agent_rollback_title
+            known -> R.string.ui_update_vps_agent
+            else -> R.string.hovq_agent_check_title
+        })) {
             Text(
-                if (known) ui(R.string.hovq_agent_update_offer, panel.agentVersion, BuildConfig.AGENT_VERSION)
-                else ui(R.string.hovq_agent_check_detail),
+                when {
+                    rollback -> ui(R.string.agent_rollback_offer, panel.agentVersion, BuildConfig.AGENT_VERSION)
+                    known -> ui(R.string.hovq_agent_update_offer, panel.agentVersion, BuildConfig.AGENT_VERSION)
+                    else -> ui(R.string.hovq_agent_check_detail)
+                },
                 color = ReadingGlass.muted, style = MaterialTheme.typography.bodyMedium,
             )
             if (problem.isNotBlank() && !panel.busy) {
@@ -234,7 +242,11 @@ internal fun AgentGate(panel: Panel, model: ManagerModel) {
                 PasswordField(ui(R.string.hovq_update_sudo), password, enabled = !panel.busy, light = true) { password = it }
             }
             if (!known && (panel.busy || panel.syncing)) DottedProgress(Modifier.fillMaxWidth())
-            else SavedGlassButton(ui(if (known) R.string.hovq_update_now else R.string.ui_check_again),
+            else SavedGlassButton(ui(when {
+                rollback -> R.string.agent_rollback_action
+                known -> R.string.hovq_update_now
+                else -> R.string.ui_check_again
+            }),
                 Modifier.align(Alignment.CenterHorizontally), enabled = !panel.busy) {
                 if (known) {
                     model.updateAgent(password)

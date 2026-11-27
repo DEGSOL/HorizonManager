@@ -294,11 +294,27 @@ internal fun TransferSettings(panel: Panel, backup: (Boolean) -> Unit, restore: 
 }
 
 @Composable
-internal fun ReadingPreferences(order: NewsOrder, change: (NewsOrder) -> Unit) {
+internal fun ReadingPreferences(panel: Panel, model: ManagerModel, order: NewsOrder, change: (NewsOrder) -> Unit) {
     Tile {
         Choice(ui(R.string.ui_sort), NewsOrder.entries.map { it.name }, order.name,
             { change(NewsOrder.valueOf(it)) }, { ui(NewsOrder.valueOf(it).label) },
             row = true, help = R.string.setting_help_sort)
+    }
+    Tile {
+        val options = panel.status.optJSONObject("article_options")
+        val enabled = options != null && !panel.busy
+        Choice(ui(R.string.article_text_display), listOf("classic", "summary"),
+            options?.optString("card_text_mode", "classic") ?: "classic", model::setArticleTextMode,
+            { ui(if (it == "classic") R.string.article_text_classic else R.string.article_text_summary) },
+            enabled = enabled, row = true, help = R.string.article_text_display_help)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            val title = ui(R.string.show_score_reason)
+            Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+            SettingHelp(title, R.string.show_score_reason_help)
+            Switch(options?.optBoolean("show_score_reason") == true, onCheckedChange = model::setShowScoreReason,
+                enabled = enabled)
+        }
     }
 }
 

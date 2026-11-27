@@ -7,6 +7,12 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
 }
+val bundledAgentVersion = providers.fileContents(
+    rootProject.layout.projectDirectory.file("../agent/horizon_manager/__init__.py")
+).asText.map { source ->
+    Regex("""(?m)^VERSION = "([0-9]+[.][0-9]+[.][0-9]+)"$""")
+        .find(source)?.groupValues?.get(1) ?: error("The bundled agent must define a semantic version.")
+}
 android {
     namespace = "dev.horizonmanager"
     compileSdk = 36
@@ -15,9 +21,9 @@ android {
         applicationId = "dev.horizonmanager.mobile"
         minSdk = 26
         targetSdk = 36
-        versionCode = 45
-        versionName = "0.6.5"
-        buildConfigField("String", "AGENT_VERSION", "\"0.1.21\"")
+        versionCode = 46
+        versionName = "0.6.6"
+        buildConfigField("String", "AGENT_VERSION", "\"${bundledAgentVersion.get()}\"")
     }
     testOptions {
         unitTests.isIncludeAndroidResources = true

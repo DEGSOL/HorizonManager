@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
 from horizon_manager.api import REVISION, create_app
 from horizon_manager.article_context import key_for
 from horizon_manager.backup import pack, unpack
-from horizon_manager.configuration import DIGEST_LANGUAGES, only_source
+from horizon_manager.configuration import DEFAULT_SUMMARY_INSTRUCTION, DIGEST_LANGUAGES, only_source
 from horizon_manager.jobs import consume
 from horizon_manager.push import enqueue_digest, signed_message, valid_endpoint
 from horizon_manager.scheduler import Schedule, next_run
@@ -29,6 +29,9 @@ from horizon_manager.store import Store
 TOKEN = "1" * 64
 AUTH = {"Authorization": "Bearer " + TOKEN}
 SECRET = "test-key-this-string-must-not-leak"
+NEWS_INSTRUCTION = "Укажи место испытаний.\nСохрани данные о батарее."
+NEWS_TEXT = ("В Томске испытали новую батарею для электробусов. "
+             "Батарея выдержала 400 циклов, а первые пять машин выведут на маршрут в июле.")
 
 
 class Fixture(BaseHTTPRequestHandler):
@@ -36,7 +39,7 @@ class Fixture(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
-        if self.path not in {"/feed", "/alternate-feed"}:
+        if self.path not in {"/feed", "/alternate-feed", "/long-feed"}:
             self.send_error(404)
             return
         date = format_datetime(datetime.now(timezone.utc), usegmt=True)
@@ -45,10 +48,14 @@ class Fixture(BaseHTTPRequestHandler):
             if self.path == "/alternate-feed" else
             ("Fixture engineering article", "fixture-news", "fixture-id")
         )
+        article_content = "Fixture article content"
+        if self.path == "/long-feed":
+            title = "В Томске испытали батарею для электробусов"
+            article_content = "НАЧАЛО " + "а" * 3090 + " СЕРЕДИНА " + "б" * 3090 + " КОНЕЦ"
         data = f'''<?xml version="1.0"?>
         <rss version="2.0"><channel><title>Fixture</title><link>https://example.org/</link>
         <description>Local integration test feed</description><item><title>{title}</title>
-        <link>https://example.org/{story}</link><description>Fixture article content</description>
+        <link>https://example.org/{story}</link><description>{article_content}</description>
         <guid>{item}</guid><pubDate>{date}</pubDate></item></channel></rss>'''.encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/rss+xml")
@@ -71,7 +78,12 @@ class Fixture(BaseHTTPRequestHandler):
             self.server.enrichment_requests.append(request["messages"])
             if request.get("model") == "slow-context":
                 time.sleep(3)
-        if "You route content" in instructions and request.get("model") == "classify-with-retry":
+        if '"summary": "<one-sentence summary>"' in instructions:
+            self.server.original_summary_requests.append(instructions)
+        if NEWS_INSTRUCTION in instructions:
+            self.server.news_analysis_requests.append(request["messages"])
+            content = json.dumps({"score": 9, "summary": NEWS_TEXT, "reason": "Обоснование оценки.", "tags": ["транспорт"]})
+        elif "You route content" in instructions and request.get("model") == "classify-with-retry":
             self.server.classification_requests.append(instructions)
             content = '{"profile":"tech-news"}' if "containing only" in instructions else '{"profile":"unknown",'
         elif "Return OK as plain text." in instructions:
@@ -133,6 +145,8 @@ class AgentTests(unittest.TestCase):
         self.fixture.enrichment_requests = []
         self.fixture.duplicate_requests = []
         self.fixture.translation_requests = []
+        self.fixture.news_analysis_requests = []
+        self.fixture.original_summary_requests = []
         self.temp = TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
@@ -226,6 +240,73 @@ class AgentTests(unittest.TestCase):
         invalid["profiles"].append(invalid["profiles"][0])
         self.assertEqual(self.client.put("/v1/config", json=invalid).json()["detail"]["code"], "PROFILE_DUPLICATE_ID")
         self.assertEqual(self.client.get("/v1/config").json(), before)
+
+    def test_profile_news_text_uses_saved_options_in_primary_analysis(self):
+        incoming = self.config()
+        incoming["config"]["sources"]["rss"] = [{"name": "Long", "url": self.url + "/long-feed", "profile": "tech-news"}]
+        profile = next(row for row in incoming["profiles"] if row["definition"]["id"] == "tech-news")
+        self.assertEqual(profile["summary_mode"], "news")
+        self.assertEqual(profile["summary_instruction"], DEFAULT_SUMMARY_INSTRUCTION)
+        self.assertEqual(profile["definition"]["content"], {
+            "analysis_max_chars": 6000, "enrichment_max_chars": 8000, "sampling": "prefix",
+        })
+        original_policy = profile["analysis_prompt"]
+        profile["summary_instruction"] = NEWS_INSTRUCTION
+        content = profile["definition"]["content"]
+        content.update(analysis_max_chars=499, enrichment_max_chars=905, sampling="head-middle-tail")
+        self.assertEqual(self.client.put("/v1/config", json=incoming).status_code, 422)
+        content["analysis_max_chars"] = 755
+        saved = self.client.put("/v1/config", json=incoming)
+        self.assertEqual(saved.status_code, 200, saved.text)
+        self.assertEqual(self.client.get("/v1/status").json()["article_options"],
+                         {"card_text_mode": "classic", "show_score_reason": False})
+        self.assertEqual(self.client.put("/v1/article-options", json={"card_text_mode": "summary"}).status_code, 200)
+        self.assertEqual(self.client.put("/v1/article-options", json={"show_score_reason": True}).status_code, 200)
+        self.client.put("/v1/digest-language", json={"language": "ru"})
+        reopened = create_app(self.root, TOKEN)
+        with TestClient(reopened, headers=AUTH) as client:
+            current = next(row for row in client.get("/v1/config").json()["profiles"] if row["definition"]["id"] == "tech-news")
+            self.assertEqual(current["summary_instruction"], NEWS_INSTRUCTION)
+            self.assertEqual(current["analysis_prompt"], original_policy)
+            self.assertEqual(current["definition"]["content"], content)
+            self.assertEqual(client.get("/v1/status").json()["article_options"],
+                             {"card_text_mode": "summary", "show_score_reason": True})
+
+        run = uuid4()
+        self.assertEqual(self.client.post("/v1/jobs", json={"id": str(run)}).status_code, 200)
+        self.assertEqual(self.wait(run.hex)["state"], "success", self.client.get("/v1/events").json())
+        self.assertEqual(len(self.fixture.news_analysis_requests), 1)
+        system, user = [message["content"] for message in self.fixture.news_analysis_requests[0]]
+        self.assertIn(original_policy.strip(), system)
+        self.assertNotIn("one-sentence summary", system)
+        excerpt = user.split("Content: ", 1)[1].strip()
+        self.assertLessEqual(len(excerpt), 755)
+        for marker in ("НАЧАЛО", "СЕРЕДИНА", "КОНЕЦ"):
+            self.assertIn(marker, excerpt)
+        self.assertEqual(self.fixture.enrichment_requests, [])
+        self.assertEqual(self.fixture.translation_requests, [])
+        digest = f"/v1/digests/{run.hex}/ru"
+        card = self.client.get(digest).json()["items"][0]
+        self.assertEqual((card["summary"], card["reason"], card["score"], card["tags"]),
+                         (NEWS_TEXT, "Обоснование оценки.", 9, ["транспорт"]))
+        self.assertTrue(card["summary_from_analysis"])
+        self.assertEqual(card["body"], NEWS_TEXT)
+        self.assertEqual(self.client.get(digest, params={"article": card["id"]}).json()["items"], [card])
+        context = f'/v1/article-context/{run.hex}/{key_for(card["id"])}/ru'
+        queued = self.client.post(context, json={}).json()
+        self.assertEqual(self.wait(queued["job"])["state"], "success")
+        self.assertIn("[Closing excerpt]", self.fixture.enrichment_requests[0][1]["content"])
+        self.assertEqual(self.client.get(digest).json()["items"][0]["summary"], NEWS_TEXT)
+
+        original = self.config()
+        original["config"]["sources"]["rss"] = [{"name": "Other", "url": self.url + "/alternate-feed", "profile": "tech-news"}]
+        next(row for row in original["profiles"] if row["definition"]["id"] == "tech-news")["summary_mode"] = "original"
+        self.assertEqual(self.client.put("/v1/config", json=original).status_code, 200)
+        original_run = uuid4()
+        self.assertEqual(self.client.post("/v1/jobs", json={"id": str(original_run)}).status_code, 200)
+        self.assertEqual(self.wait(original_run.hex)["state"], "success")
+        self.assertEqual(len(self.fixture.original_summary_requests), 1)
+        self.assertEqual(len(self.fixture.news_analysis_requests), 1)
 
     def test_media_and_language_settings_survive_backup_without_changing_horizon_config(self):
         before = self.client.get("/v1/config").json()
@@ -347,7 +428,8 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(ru["items"][0]["body"], "Текст новости на русском языке.")
         self.assertEqual(ru["items"][0]["score"], 9)
         self.assertIn("media", ru["items"][0])
-        self.assertEqual(ru["items"][0]["reason"], "")
+        self.assertEqual(ru["items"][0]["reason"], "Fixture rubric")
+        self.assertEqual(ru["items"][0]["summary"], "Fixture AI summary")
         article_key = key_for(ru["items"][0]["id"])
         path = f"/v1/article-context/{id.hex}/{article_key}/ru"
         self.assertEqual(self.client.post(path, json={}).json()["state"], "ready")
@@ -512,7 +594,7 @@ class AgentTests(unittest.TestCase):
         (directory / "summary-ru.md").write_text("# Перевод недоступен")
         requests_before = len(self.fixture.translation_requests)
         result = self.client.get(f"/v1/digests/{run.hex}/ru").json()
-        self.assertEqual(result["content_version"], 3)
+        self.assertEqual(result["content_version"], 4)
         self.assertEqual(result["items"][0]["title"], raw[0]["title"])
         self.assertEqual(result["items"][0]["body"], raw[0]["content"])
         self.assertEqual(result["items"][0]["telegram_channel"], "mrizonNews")

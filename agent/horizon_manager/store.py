@@ -6,7 +6,11 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 
 from .router_catalog import ROUTERS
-from .configuration import DEFAULT_HEADLINE_RANGE, DEFAULT_HEADLINE_WORDS, DIGEST_LANGUAGES, builtin_profiles, initial_config
+from .configuration import (DEFAULT_HEADLINE_RANGE, DEFAULT_HEADLINE_WORDS,
+                            DIGEST_LANGUAGES, ProfileDocument, builtin_profiles, initial_config)
+
+DEFAULT_ARTICLE_OPTIONS = {"card_text_mode": "classic", "show_score_reason": False}
+PROFILE_TEXT_FIELDS = {"summary_mode", "summary_instruction"}
 
 
 def utc():
@@ -40,6 +44,10 @@ class Store:
                 CREATE TABLE IF NOT EXISTS enrichment_options (
                     id INTEGER PRIMARY KEY CHECK(id=1), mode TEXT NOT NULL
                         CHECK(mode IN ('on_demand', 'automatic')));
+                CREATE TABLE IF NOT EXISTS article_display_options (
+                    id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS profile_text_options (
+                    profile TEXT PRIMARY KEY, payload TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS events (
                     id INTEGER PRIMARY KEY AUTOINCREMENT, time TEXT NOT NULL,
                     component TEXT NOT NULL, level TEXT NOT NULL,
@@ -64,10 +72,24 @@ class Store:
             """)
             db.execute("BEGIN IMMEDIATE")
             self.migrate_digest_options(db)
+            self.migrate_article_options(db)
             db.execute("DROP INDEX IF EXISTS only_one_active")
             db.execute("INSERT OR IGNORE INTO configuration VALUES (1, 1, ?, ?, '{}')",
-                       (json.dumps(initial_config()), json.dumps(builtin_profiles())))
+                       (json.dumps(initial_config()), json.dumps(self.split_profiles(builtin_profiles())[0])))
             db.execute("INSERT OR IGNORE INTO schedule VALUES (1, '{\"mode\":\"off\"}', NULL)")
+
+    @staticmethod
+    def migrate_article_options(db):
+        # Import preferences from the 0.6.6 test agent while keeping its tables readable.
+        if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='profile_summary_instructions'").fetchone():
+            for profile, instruction in db.execute("SELECT profile, instruction FROM profile_summary_instructions"):
+                payload = json.dumps({"summary_mode": "news", "summary_instruction": instruction})
+                db.execute("INSERT OR IGNORE INTO profile_text_options VALUES (?, ?)", (profile, payload))
+        if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='article_options'").fetchone():
+            row = db.execute("SELECT show_reason FROM article_options WHERE id=1").fetchone()
+            if row:
+                db.execute("INSERT OR IGNORE INTO article_display_options VALUES (1, ?)",
+                           (json.dumps({"show_score_reason": bool(row[0])}),))
 
     @staticmethod
     def migrate_digest_options(db):
@@ -146,9 +168,42 @@ class Store:
     def set_digest_language(db, language):
         db.execute("INSERT OR REPLACE INTO digest_options VALUES (1, ?)", (language,))
 
+    @staticmethod
+    def article_options(db):
+        row = db.execute("SELECT payload FROM article_display_options WHERE id=1").fetchone()
+        return {**DEFAULT_ARTICLE_OPTIONS, **(json.loads(row[0]) if row else {})}
+
+    @staticmethod
+    def set_article_options(db, options):
+        updated = {**Store.article_options(db), **options}
+        db.execute("INSERT OR REPLACE INTO article_display_options VALUES (1, ?)", (json.dumps(updated),))
+        return updated
+
+    @staticmethod
+    def merge_profiles(profiles, options):
+        return [
+            ProfileDocument.model_validate({**profile, **options.get(profile["definition"]["id"], {})})
+            .model_dump(mode="json")
+            for profile in profiles
+        ]
+
+    @staticmethod
+    def split_profiles(profiles):
+        # Keep configuration and saved runs readable by older agents after a downgrade.
+        documents = [ProfileDocument.model_validate(profile) for profile in profiles]
+        original = [doc.model_dump(mode="json", exclude=PROFILE_TEXT_FIELDS) for doc in documents]
+        options = {
+            doc.definition.id: doc.model_dump(mode="json", include=PROFILE_TEXT_FIELDS)
+            for doc in documents
+        }
+        return original, options
+
     def settings(self, db):
         row = db.execute("SELECT * FROM configuration WHERE id=1").fetchone()
-        return {"revision": row["revision"], **{key: json.loads(row[key]) for key in ("config", "profiles", "secrets")}}
+        settings = {"revision": row["revision"], **{key: json.loads(row[key]) for key in ("config", "profiles", "secrets")}}
+        options = {entry["profile"]: json.loads(entry["payload"]) for entry in db.execute("SELECT * FROM profile_text_options")}
+        settings["profiles"] = self.merge_profiles(settings["profiles"], options)
+        return settings
 
     @staticmethod
     def provider_settings(db):
@@ -162,9 +217,15 @@ class Store:
                 url = str(ai.get("base_url") or "").rstrip("/")
                 provider = next((name for name, spec in ROUTERS.items() if spec[0] == url), provider)
             db.execute("INSERT OR REPLACE INTO ai_provider_settings VALUES (?, ?)", (provider, json.dumps(ai)))
-        db.execute("INSERT OR REPLACE INTO previous VALUES (1, ?)", (json.dumps(current),))
+        previous_profiles, previous_options = self.split_profiles(current["profiles"])
+        previous = {**current, "profiles": previous_profiles, "profile_text_options": previous_options}
+        db.execute("INSERT OR REPLACE INTO previous VALUES (1, ?)", (json.dumps(previous),))
+        profiles, options = self.split_profiles(updated["profiles"])
+        db.execute("DELETE FROM profile_text_options")
+        db.executemany("INSERT INTO profile_text_options VALUES (?, ?)",
+                       ((profile, json.dumps(payload)) for profile, payload in options.items()))
         db.execute("UPDATE configuration SET revision=?, config=?, profiles=?, secrets=? WHERE id=1",
-                   (current["revision"] + 1, *(json.dumps(updated[key]) for key in ("config", "profiles", "secrets"))))
+                   (current["revision"] + 1, json.dumps(updated["config"]), json.dumps(profiles), json.dumps(updated["secrets"])))
 
     def import_installer_events(self, source=Path("/var/lib/horizon-manager-install/events")):
         if not source.is_file():

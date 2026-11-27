@@ -3,14 +3,37 @@ package dev.horizonmanager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import org.json.JSONArray
 import org.json.JSONObject
+
+private val sourceSize = 500..100_000
+private const val summaryInstructionLimit = 12_000
+private val sourceSampling = listOf("prefix", "head-middle-tail")
+private const val horizonAnalysisSize = 1000
+private const val standardAnalysisSize = 6000
+private const val standardEnrichmentSize = 8000
+
+private fun validSourceSize(value: String): Boolean =
+    value.toIntOrNull()?.let { it in sourceSize } == true
+
+private fun validInstruction(value: String): Boolean =
+    value.isNotBlank() && '\u0000' !in value && value.codePointCount(0, value.length) <= summaryInstructionLimit
 
 @Composable
 internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boolean) -> Unit) {
@@ -18,6 +41,7 @@ internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boo
     val base = panel.config.getJSONObject("config")
     val revision = panel.config.getInt("revision")
     val originals = panel.config.getJSONArray("profiles")
+    val defaultInstruction = root.getJSONObject("properties").getJSONObject("summary_instruction").getString("default")
     var draft by rememberSaveable(revision) { mutableStateOf(originals.toString()) }
     var references by rememberSaveable(revision) { mutableStateOf(base.toString()) }
     var processing by
@@ -53,6 +77,12 @@ internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boo
                 else ui(R.string.mr_new_profile),
             )
         def.put("display_names", JSONObject())
+        if (!duplicate) {
+            def.put("content", JSONObject().put("analysis_max_chars", standardAnalysisSize)
+                .put("enrichment_max_chars", standardEnrichmentSize).put("sampling", "prefix"))
+            doc.remove("summary_instruction")
+            doc.put("summary_mode", "news")
+        }
         draft = JSONArray(profiles).put(doc).toString()
         editing = id
     }
@@ -107,6 +137,14 @@ internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boo
     } else {
         val doc = profiles[index]
         val def = doc.getJSONObject("definition")
+        val docProps = root.getJSONObject("properties")
+        val textFields = mapOf(
+            "summary_instruction" to R.string.profile_summary_instruction,
+            "match_prompt" to R.string.ui_profile_selection_prompt,
+            "analysis_prompt" to R.string.ui_scoring_criteria_and_prompt,
+            "enrichment_prompt" to R.string.ui_enrichment_prompt,
+        )
+        var promptEditor by rememberSaveable(editing) { mutableStateOf("") }
         fun update(changed: JSONObject) {
             draft = JSONArray(profiles).put(index, changed).toString()
         }
@@ -149,15 +187,17 @@ internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boo
             }
         }
         var section by rememberSaveable(editing) { mutableStateOf("") }
-        val docProps = root.getJSONObject("properties")
         val defProps =
             definition(root, docProps.getJSONObject("definition")).getJSONObject("properties")
         for ((key, title) in
-            listOf("definition" to R.string.mr_structure, "prompts" to R.string.mr_prompts)) {
+            listOf("news" to R.string.profile_news_text, "prompts" to R.string.mr_prompts,
+                "definition" to R.string.mr_structure)) {
             GlassSettingRow(ui(title), if (section == key) "−" else "+") {
                 section = if (section == key) "" else key
             }
-            if (section == key)
+            if (section == key && key == "news") {
+                ProfileNewsText(doc, defaultInstruction, { promptEditor = "summary_instruction" }, ::update)
+            } else if (section == key)
                 Tile {
                     if (key == "definition") {
                         var newId by rememberSaveable(editing) { mutableStateOf(editing) }
@@ -186,7 +226,12 @@ internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boo
                     }
                     val props = if (key == "definition") defProps else docProps
                     for (field in props.keys()) {
-                        if (field in setOf("id", "name", "definition")) continue
+                        if (field in setOf("id", "name", "definition", "content", "summary_mode", "summary_instruction")) continue
+                        if (key == "prompts") {
+                            val promptTitle = textFields[field] ?: continue
+                            ProfilePromptRow(ui(promptTitle), doc.optString(field)) { promptEditor = field }
+                            continue
+                        }
                         val obj = if (key == "definition") def else doc
                         EditValue(
                             root,
@@ -205,6 +250,16 @@ internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boo
                         )
                     }
                 }
+        }
+        if (promptEditor.isNotEmpty()) {
+            val field = promptEditor
+            val instruction = field == "summary_instruction"
+            ProfilePromptDialog(ui(textFields.getValue(field)),
+                doc.optString(field, if (instruction) defaultInstruction else ""), instruction,
+                close = { promptEditor = "" }, save = {
+                    update(doc.copyObject().put(field, it))
+                    promptEditor = ""
+                })
         }
         SettingsActionPair(R.string.ui_duplicate_and_edit, R.string.ui_remove, !panel.busy,
             editing != active && profiles.size > 1 && !panel.busy, { add(doc, true) }, { remove = true })
@@ -236,8 +291,13 @@ internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boo
             Button(
                 enabled =
                     !panel.busy &&
-                        profiles.all {
-                            it.getJSONObject("definition").optString("name").isNotBlank()
+                        profiles.all { profile ->
+                            val def = profile.getJSONObject("definition")
+                            val content = def.optJSONObject("content")
+                            def.optString("name").isNotBlank() &&
+                                validInstruction(profile.optString("summary_instruction", defaultInstruction)) &&
+                                validSourceSize(content?.optString("analysis_max_chars").orEmpty()) &&
+                                validSourceSize(content?.optString("enrichment_max_chars").orEmpty())
                         },
                 onClick = {
                     model.saveConfig(
@@ -258,6 +318,105 @@ internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boo
                 Text(ui(R.string.ui_cancel))
             }
         }
+}
+
+@Composable
+private fun ProfilePromptRow(title: String, value: String, help: Int? = null, open: () -> Unit) {
+    GlassSettingRow(title, ui(R.string.profile_edit_text), help = help, open = open)
+    Text(value, Modifier.padding(horizontal = 6.dp), maxLines = 3, overflow = TextOverflow.Ellipsis,
+        style = MaterialTheme.typography.bodySmall, color = ReadingGlass.muted)
+}
+
+@Composable
+private fun ProfileNewsText(doc: JSONObject, instructionDefault: String, editInstruction: () -> Unit,
+                            update: (JSONObject) -> Unit) {
+    val def = doc.getJSONObject("definition")
+    val content = def.optJSONObject("content") ?: JSONObject()
+    val instruction = doc.optString("summary_instruction", instructionDefault)
+    val mode = doc.optString("summary_mode", "news")
+    fun setContent(value: JSONObject) {
+        update(doc.copyObject().put("definition", def.copyObject().put("content", value)))
+    }
+
+    Tile {
+        Choice(ui(R.string.profile_news_format), listOf("news", "original"), mode,
+            { update(doc.copyObject().put("summary_mode", it)) },
+            { ui(if (it == "original") R.string.profile_news_short else R.string.profile_news_full) },
+            row = true, help = R.string.profile_news_format_help)
+        if (mode == "news") {
+            ProfilePromptRow(ui(R.string.profile_summary_instruction), instruction,
+                R.string.profile_instruction_help, editInstruction)
+            OutlinedButton(onClick = { update(doc.copyObject().put("summary_instruction", instructionDefault)) },
+                enabled = instruction != instructionDefault, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                Text(ui(R.string.profile_restore_instruction))
+            }
+        }
+    }
+    Tile {
+        SettingHeading(ui(R.string.profile_source_text), R.string.profile_source_help)
+        val analysis = content.optString("analysis_max_chars", standardAnalysisSize.toString())
+        val enrichment = content.optString("enrichment_max_chars", standardEnrichmentSize.toString())
+        val sampling = content.optString("sampling", "prefix")
+        ProfileTextLimit(ui(R.string.profile_analysis_limit), analysis, R.string.profile_analysis_limit_help) {
+            setContent(content.copyObject().put("analysis_max_chars", it.toIntOrNull() ?: it))
+        }
+        ProfileTextLimit(ui(R.string.profile_enrichment_limit), enrichment, R.string.profile_enrichment_limit_help) {
+            setContent(content.copyObject().put("enrichment_max_chars", it.toIntOrNull() ?: it))
+        }
+        Choice(ui(R.string.profile_sampling), sourceSampling, sampling,
+            { setContent(content.copyObject().put("sampling", it)) },
+            { ui(if (it == "prefix") R.string.profile_sampling_prefix else R.string.profile_sampling_parts) },
+            row = true, help = R.string.profile_sampling_help)
+        fun differs(analysisSize: Int): Boolean =
+            analysis != analysisSize.toString() || enrichment != standardEnrichmentSize.toString() || sampling != "prefix"
+        fun reset(analysisSize: Int) {
+            setContent(content.copyObject().put("analysis_max_chars", analysisSize)
+                .put("enrichment_max_chars", standardEnrichmentSize).put("sampling", "prefix"))
+        }
+        SettingsActionPair(R.string.profile_horizon_limits, R.string.profile_hovq_limits,
+            differs(horizonAnalysisSize), differs(standardAnalysisSize),
+            { reset(horizonAnalysisSize) }, { reset(standardAnalysisSize) })
+    }
+}
+
+@Composable
+private fun ProfileTextLimit(title: String, value: String, help: Int, change: (String) -> Unit) {
+    val invalid = !validSourceSize(value)
+    SettingsTextField(title, value, { if (it.all(Char::isDigit)) change(it) }, isError = invalid,
+        help = help, hint = if (invalid) ui(R.string.profile_text_range) else null,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+}
+
+@Composable
+private fun ProfilePromptDialog(title: String, original: String, instruction: Boolean, close: () -> Unit,
+                                save: (String) -> Unit) {
+    var draft by rememberSaveable(title, original) { mutableStateOf(original) }
+    val valid = if (instruction) validInstruction(draft) else draft.isNotBlank() && draft.length <= 100_000
+    val focus = remember { FocusRequester() }
+    Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false,
+        decorFitsSystemWindows = false)) {
+        val keyboard = LocalSoftwareKeyboardController.current
+        // Give a long prompt its own viewport so the settings page does not scroll it
+        // again after the keyboard has already reduced the available height.
+        BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding().padding(horizontal = 14.dp, vertical = 8.dp),
+            contentAlignment = Alignment.BottomCenter) {
+            val height = maxHeight.coerceAtMost(520.dp)
+            Box(Modifier.widthIn(max = 620.dp).fillMaxWidth()) {
+                Tile(Modifier.height(height)) {
+                    Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    OutlinedTextField(draft, { draft = it }, Modifier.fillMaxWidth().weight(1f).focusRequester(focus)
+                        .semantics { contentDescription = title },
+                        colors = horizonFieldColors(), shape = horizonFieldShape(), isError = !valid)
+                    if (!valid && instruction) SettingNote(ui(R.string.profile_instruction_range))
+                    SettingsActionPair(R.string.ui_cancel, R.string.profile_apply_text, true, valid, close, { save(draft) })
+                }
+            }
+        }
+        LaunchedEffect(Unit) {
+            focus.requestFocus()
+            keyboard?.show()
+        }
+    }
 }
 
 @Composable

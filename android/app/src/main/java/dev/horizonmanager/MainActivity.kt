@@ -563,7 +563,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                         { openSettings("ai") }, { openSettings("sources") }, ::goBack,
                         { if (screen == currentDestination) navVisible = it },
                         { if (screen == currentDestination) overlay = it })
-                    screen.page == "favorites" -> FavoritesScreen(model, panel.servers, {
+                    screen.page == "favorites" -> FavoritesScreen(model, panel, {
                         Text(heading, Modifier.padding(top = 6.dp, bottom = 8.dp),
                             style = MaterialTheme.typography.headlineLarge)
                     }) {
@@ -635,7 +635,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
                                             fileAction = if (device) "device" else "vps"
                                             input.launch(arrayOf("*/*"))
                                         })
-                                    "reading" -> ReadingPreferences(defaultOrder) {
+                                    "reading" -> ReadingPreferences(panel, model, defaultOrder) {
                                         defaultOrder = it
                                         readingPrefs.edit().putString("default_order", it.name).apply()
                                         localSave++

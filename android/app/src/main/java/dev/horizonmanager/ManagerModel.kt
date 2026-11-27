@@ -81,7 +81,7 @@ internal data class Panel(
 internal fun Panel.preferredDigestLanguage() = status.optString("digest_language", digestLocale())
 
 internal fun Panel.agentGateRequired() = updatingAgent || server?.installed == true &&
-    (!isAgentVersion(agentVersion) || agentUpdateAvailable(agentVersion))
+    !agentCompatible(agentVersion)
 
 internal data class SavedModelCheck(val model: String, val revision: Int, val pending: Boolean, val error: String = "")
 internal data class ChatGptLoginStatus(val server: String, val waiting: Boolean, val error: String = "")
@@ -107,6 +107,10 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     private val initializedProfiles = MutableStateFlow(false)
     val profilesLoaded = initializedProfiles.asStateFlow()
     val favorites = cache.favorites()
+    private val articleDisplay = app.getSharedPreferences("article_display", 0)
+
+    fun articleDisplayOptions(server: String): JSONObject =
+        JSONObject(articleDisplay.getString(server, "{}") ?: "{}")
 
     fun unreadFeed(server: String, run: String, language: String) =
         cache.digestPages(server, run, language).map { pages ->
@@ -629,7 +633,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         }
         val version = withAgent(server) { it.health().optString("agent") }
         if (!isAgentVersion(version)) throw Problem("AGENT_PROTOCOL")
-        if (agentUpdateAvailable(version)) throw Problem("AGENT_UPDATE_FAILED")
+        if (!agentCompatible(version)) throw Problem("AGENT_UPDATE_FAILED")
         return version
     }
 
@@ -726,9 +730,11 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
     private class DigestUpgrades {
         val translations = mutableSetOf<Int>()
         val originalLinks = mutableSetOf<Int>()
+        val primaryAnalysis = mutableSetOf<Int>()
 
         fun pending(version: Int): Set<Int> =
-            (if (version >= 2) translations else emptySet()) + (if (version >= 3) originalLinks else emptySet())
+            (if (version >= 2) translations else emptySet()) + (if (version >= 3) originalLinks else emptySet()) +
+                (if (version >= 4) primaryAnalysis else emptySet())
     }
 
     private suspend fun staleDigestOffsets(server: String, run: String, language: String): DigestUpgrades {
@@ -736,6 +742,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         for (page in cache.digest(server, run, language)) {
             val value = JSONObject(page.data)
             val version = value.optInt("content_version")
+            if (version < 4) upgrades.primaryAnalysis.add(page.offset)
             if (version >= 3) continue
             val items = value.optJSONArray("items")?.objects().orEmpty()
             if (version < 2 && items.any {
@@ -762,7 +769,12 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             val version = status.optString("agent")
             if (!isAgentVersion(version)) throw Problem("AGENT_PROTOCOL")
             rememberAgentVersion(server, version)
-            if (agentUpdateAvailable(version)) return@withAgent null
+            if (!agentCompatible(version)) return@withAgent null
+            status.optJSONObject("article_options")?.let { options ->
+                val serialized = options.toString()
+                if (articleDisplay.getString(server.id, null) != serialized)
+                    articleDisplay.edit().putString(server.id, serialized).apply()
+            }
             if (status.has("digest_language") && !status.optBoolean("digest_language_chosen")) {
                 val accepted = status.optJSONArray("digest_languages")?.strings() ?: legacyDigestLanguages
                 val language = digestLocale()
@@ -791,6 +803,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             }
             val changed = selected?.getString("id") != panel.selectedRun || lang != panel.language
             val repairVersion = when {
+                status.optInt("digest_content_version") >= 4 -> 4
                 status.optBoolean("article_source_links") -> 3
                 status.optBoolean("cover_relay") -> 2
                 else -> 1
@@ -1055,6 +1068,25 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
             if (save == true) publication.copy(savedAt = System.currentTimeMillis()) else null)
     }
 
+    suspend fun refreshSavedArticle(snapshot: SavedPublication) {
+        if (snapshot.run.isBlank() || snapshot.language.isBlank()) return
+        val server = state.value.servers.find { it.id == snapshot.server && it.installed } ?: return
+        try {
+            val article = withAgent(server) { api ->
+                val key = android.net.Uri.encode(snapshot.article)
+                val page = api.get("digests/${snapshot.run}/${snapshot.language}?article=$key") as JSONObject
+                page.optJSONArray("items")?.objects()?.find {
+                    it.optString("id") == snapshot.article && it.optBoolean("summary_from_analysis")
+                }
+            } ?: return
+            cache.refreshSavedArticle(snapshot.server, snapshot.article, snapshot.run, snapshot.language, article.toString())
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            // A favorite still opens offline with its cached metadata and source link.
+        }
+    }
+
     private fun flag(serverId: String, article: String, save: Boolean?, read: Boolean?, snapshot: SavedPublication?) {
         viewModelScope.launch {
             try {
@@ -1266,6 +1298,14 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         mutable.update {
             if (it.server?.id == serverId) it.copy(status = it.status.copyObject().put("headline_range", confirmed)) else it
         }
+    }
+
+    fun setArticleTextMode(mode: String) = mutate(setting = true) { api ->
+        api.put("article-options", JSONObject().put("card_text_mode", mode))
+    }
+
+    fun setShowScoreReason(enabled: Boolean) = mutate(setting = true) { api ->
+        api.put("article-options", JSONObject().put("show_score_reason", enabled))
     }
 
     fun enrichmentMode(mode: String) = mutate(setting = true) { api ->

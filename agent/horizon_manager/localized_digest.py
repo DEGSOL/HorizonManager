@@ -245,14 +245,19 @@ def _response_rows(reply, single_id=None):
     return rows
 
 
-async def complete_artifacts(items, language, config, report=None, *, headline_range=DEFAULT_HEADLINE_RANGE):
+async def complete_artifacts(items, language, config, report=None, *, headline_range=DEFAULT_HEADLINE_RANGE,
+                             primary_news_ids=frozenset()):
     """Publish single-language articles and reuse headlines that already fit."""
     minimum, maximum = headline_range
     headline_instruction = HEADLINE_INSTRUCTION.format(minimum=minimum, maximum=maximum)
     missing = []
     headlines = []
     for item in items:
-        if _has_main_text(item, language) and not is_legacy_placeholder(
+        summary = item.processing.analysis.summary if item.id in primary_news_ids else ""
+        if summary and (_native_text(summary, language) or language == "en" and _has_expected_script("", summary, language)):
+            artifact = _article_artifact(language, _source_headline(item), summary)
+            item.processing.artifacts[language] = artifact
+        elif _has_main_text(item, language) and not is_legacy_placeholder(
                 item.processing.artifacts[language].model_dump(), language):
             artifact = item.processing.artifacts[language]
         else:
@@ -265,7 +270,7 @@ async def complete_artifacts(items, language, config, report=None, *, headline_r
             artifact = _article_artifact(language, title, body[:1600])
             item.processing.artifacts[language] = artifact
         artifact.title = _headline_text(artifact.title, language)
-        if not _headline_fits(artifact.title, headline_range):
+        if not _headline_fits(artifact.title, headline_range) or not _has_expected_script(artifact.title, "", language):
             headlines.append((item, artifact))
     if not missing and not headlines:
         return 0
