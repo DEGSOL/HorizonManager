@@ -99,13 +99,14 @@ internal fun ServerCredentialFields(draft: ServerDraft, enabled: Boolean, sectio
     fun Credentials() {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for ((key, label) in listOf(false to R.string.ui_password, true to R.string.ui_ssh_key)) {
-                FilterChip(draft.keyMode == key, {
-                    if (draft.keyMode != key) {
-                        keyError = false
-                        change(draft.copy(keyMode = key, credential = "", passphrase = ""))
-                    }
-                }, { Text(ui(label), Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
-                    enabled = enabled, modifier = Modifier.weight(1f))
+                Box(Modifier.weight(1f)) {
+                    FilterChip(draft.keyMode == key, {
+                        if (draft.keyMode != key) {
+                            keyError = false
+                            change(draft.copy(keyMode = key, credential = "", passphrase = ""))
+                        }
+                    }, { Text(ui(label), Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }, enabled = enabled)
+                }
             }
         }
         if (draft.keyMode) {
