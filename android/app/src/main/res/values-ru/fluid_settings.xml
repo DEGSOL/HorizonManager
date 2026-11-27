@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="feed_digest_nearly_ready">Новый дайджест скоро будет готов</string>
+    <string name="journal_digest_directions">Отправлено %1$s · Получено %2$s токенов</string>
     <string name="vps_form_address">Адрес сервера</string>
     <string name="vps_form_credentials">Вход на сервер</string>
     <string name="vps_form_address_help">Возьми IP-адрес или имя сервера из панели управления VPS.</string>

@@ -150,7 +150,7 @@ internal fun DigestJournalHeader(digest: JournalEntry.Digest, expanded: Boolean,
                 val summary = when {
                     digest.tokens != null -> {
                         val number = NumberFormat.getIntegerInstance(locale)
-                        ui(R.string.journal_job_tokens, number.format(digest.tokens.first), number.format(digest.tokens.second))
+                        ui(R.string.journal_digest_directions, number.format(digest.tokens.first), number.format(digest.tokens.second))
                     }
                     digest.status == DigestJournalStatus.Completed -> ui(R.string.journal_job_tokens_unavailable)
                     else -> status

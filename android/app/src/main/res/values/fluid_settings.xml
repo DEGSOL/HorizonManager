@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
     <string name="feed_digest_nearly_ready">The new digest will be ready soon</string>
+    <string name="journal_digest_directions">Tokens sent %1$s · Received %2$s</string>
     <string name="vps_form_address">Server address</string>
     <string name="vps_form_credentials">How to sign in</string>
     <string name="vps_form_address_help">Enter the IP address or host name shown in your VPS control panel.</string>

@@ -625,7 +625,7 @@ class FluidScreensTest {
         field(other.host).assertExists()
         field(other.port.toString()).assertExists()
         field(other.user).assertExists()
-        val save = text(R.string.ui_save_connection).assertIsNotEnabled()
+        val save = text(R.string.ui_save_connection).assertDoesNotExist()
         field(other.name).performTextReplacement("Резервный сервер")
         save.assertIsEnabled()
         assertEquals(active.id, flow.value.server?.id)
@@ -963,18 +963,18 @@ class FluidScreensTest {
     }
 
     @Test
-    fun articleMoreIsOnTheRightAndActionsOpenInADismissiblePopup() {
+    fun articleMoreIsOnTheRightAndActionsOpenInASelectionDialog() {
         loadIssue(articleCount = 12)
         compose.onNodeWithText(headlines[0]).performClick()
         val more = text(R.string.article_more).getUnclippedBoundsInRoot()
         val body = compose.onNode(isDialog()).getUnclippedBoundsInRoot()
         assertTrue(more.left > (body.left + body.right) / 2)
         compose.onNodeWithContentDescription(ui(R.string.editorial_article_actions)).performClick()
-        compose.onNode(isPopup()).assertExists()
+        text(R.string.editorial_article_actions).assertIsDisplayed()
         text(R.string.ui_copy).assertIsDisplayed()
         text(R.string.editorial_share).assertIsDisplayed()
         text(R.string.ui_copy).performClick()
-        compose.onNode(isPopup()).assertDoesNotExist()
+        text(R.string.editorial_article_actions).assertDoesNotExist()
         compose.onNode(isDialog()).assertExists()
     }
 

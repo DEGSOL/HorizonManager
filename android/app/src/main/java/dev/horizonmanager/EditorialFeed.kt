@@ -165,6 +165,7 @@ internal fun NewsScreen(
             )
         }
     val preparing = !archived && digestIsPreparing(panel.jobs)
+    LaunchedEffect(preparing) { if (preparing) state.scrollToItem(0) }
     val status =
         when {
             preparing -> ui(R.string.digest_preparing)

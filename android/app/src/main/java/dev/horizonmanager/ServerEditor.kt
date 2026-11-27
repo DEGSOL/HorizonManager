@@ -50,7 +50,6 @@ internal fun Server.sameSshCredentials(other: Server): Boolean =
     user == other.user && keyMode == other.keyMode && credential == other.credential &&
         (!keyMode || passphrase == other.passphrase)
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ServerCredentialFields(draft: ServerDraft, enabled: Boolean, sectioned: Boolean = false,
                                     change: (ServerDraft) -> Unit) {
