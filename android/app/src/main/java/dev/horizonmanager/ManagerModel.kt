@@ -864,7 +864,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
 
     private fun collectionHours(config: JSONObject, fallback: Int) =
         config.optJSONObject("config")?.optJSONObject("collection")
-            ?.optInt("time_window_hours", fallback)?.coerceIn(1, 8760) ?: fallback
+            ?.optInt("time_window_hours", DEFAULT_COLLECTION_HOURS)?.coerceIn(1, 8760) ?: fallback
 
     private data class Refresh(
         val archive: List<JSONObject>, val hasMore: Boolean, val digest: JSONObject?, val config: JSONObject, val schema: JSONObject,
