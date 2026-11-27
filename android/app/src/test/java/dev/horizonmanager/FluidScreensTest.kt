@@ -108,7 +108,7 @@ class FluidScreensTest {
         compose.waitForIdle()
         val docked = button.assertIsDisplayed().getUnclippedBoundsInRoot()
         val last = compose.onNodeWithText("Last setting").assertIsDisplayed().getUnclippedBoundsInRoot()
-        assertTrue(docked.width > floating.width)
+        assertTrue(docked.right - docked.left > floating.right - floating.left)
         assertTrue(docked.top >= last.bottom)
     }
 
@@ -625,7 +625,8 @@ class FluidScreensTest {
         field(other.host).assertExists()
         field(other.port.toString()).assertExists()
         field(other.user).assertExists()
-        val save = text(R.string.ui_save_connection).assertDoesNotExist()
+        val save = text(R.string.ui_save_connection)
+        save.assertDoesNotExist()
         field(other.name).performTextReplacement("Резервный сервер")
         save.assertIsEnabled()
         assertEquals(active.id, flow.value.server?.id)
