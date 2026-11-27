@@ -26,19 +26,25 @@ class SavedPublicationsTest {
         val snapshot = SavedPublication(server, "favorite", "past", "en", 100L,
             JSONObject().put("id", "favorite").put("title", "Saved offline").toString())
         val favorite = FavoritePublication(snapshot, true)
-        val exported = Room.inMemoryDatabaseBuilder(context, ManagerDb::class.java).build().use { database ->
-            val cache = database.cache()
+        val original = Room.inMemoryDatabaseBuilder(context, ManagerDb::class.java).build()
+        val exported = try {
+            val cache = original.cache()
             cache.updateFlag(server, "favorite", saved = true, read = true, publication = snapshot)
             val settings = DeviceBackup.Settings(emptyList(), "", NewsOrder.Issue, LauncherAppearance.Dark, cache.backupFavorites())
             DeviceBackup.pack(settings, "1234")
+        } finally {
+            original.close()
         }
-        Room.inMemoryDatabaseBuilder(context, ManagerDb::class.java).build().use { database ->
-            val cache = database.cache()
+        val fresh = Room.inMemoryDatabaseBuilder(context, ManagerDb::class.java).build()
+        try {
+            val cache = fresh.cache()
             val restored = DeviceBackup.unpack(exported, "1234")
             cache.restoreFavorites(restored.favorites)
             cache.restoreFavorites(restored.favorites)
             assertEquals(favorite, cache.favorites().first().single())
             assertEquals(listOf("favorite"), cache.savedIds(server))
+        } finally {
+            fresh.close()
         }
         Unit
     }
