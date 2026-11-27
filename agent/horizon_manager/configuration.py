@@ -47,12 +47,8 @@ class ManagedProfileDefinition(ProfileDefinition):
     content: ManagedProfileContent = Field(default_factory=ManagedProfileContent)
 
 
-class ProfileDocument(BaseModel):
+class ProfileSummaryOptions(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    definition: ManagedProfileDefinition
-    match_prompt: str = Field(min_length=1, max_length=100_000)
-    analysis_prompt: str = Field(min_length=1, max_length=100_000)
-    enrichment_prompt: str = Field(min_length=1, max_length=100_000)
     summary_mode: SummaryMode = "news"
     summary_instruction: str = Field(default=DEFAULT_SUMMARY_INSTRUCTION, min_length=1, max_length=12_000)
 
@@ -62,6 +58,17 @@ class ProfileDocument(BaseModel):
         if not value.strip() or "\0" in value:
             raise ValueError("summary instruction must contain text")
         return value
+
+
+class ProfileDocument(ProfileSummaryOptions):
+    definition: ManagedProfileDefinition
+    match_prompt: str = Field(min_length=1, max_length=100_000)
+    analysis_prompt: str = Field(min_length=1, max_length=100_000)
+    enrichment_prompt: str = Field(min_length=1, max_length=100_000)
+
+
+class ProfileNewsText(ProfileSummaryOptions):
+    content: ManagedProfileContent
 
 
 def builtin_profiles():

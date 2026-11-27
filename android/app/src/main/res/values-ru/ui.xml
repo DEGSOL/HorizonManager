@@ -95,7 +95,7 @@
     <string name="ui_enter_an_address_like_https_example">"Укажите адрес вида https://домен."</string>
     <string name="ui_wait_for_the_active_job_to">"Активное задание должно завершиться перед этой операцией."</string>
     <string name="ui_the_configuration_changed_on_the_vps">"Конфигурация изменилась на VPS. Обновите её и повторите редактирование."</string>
-    <string name="ui_horizon_rejected_the_values_in_the">"Horizon отклонил значения указанных полей."</string>
+    <string name="ui_horizon_rejected_the_values_in_the">"Horizon отклонил значения указанных полей"</string>
     <string name="ui_there_is_no_previous_configuration_on">"На VPS ещё нет предыдущей версии конфигурации."</string>
     <string name="ui_check_the_password_and_backup_file">"Проверьте пароль и целостность файла копии."</string>
     <string name="ui_check_the_address_ssh_port_username">"Проверьте адрес, SSH-порт, имя пользователя и учётные данные."</string>

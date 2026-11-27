@@ -34,6 +34,19 @@ internal data class SavedNotice(override val message: String) : SnackbarVisuals 
     override val duration = SnackbarDuration.Short
 }
 
+internal data class ErrorNotice(override val message: String) : SnackbarVisuals {
+    override val actionLabel: String? = null
+    override val withDismissAction = false
+    override val duration = SnackbarDuration.Long
+}
+
+private val SnackbarVisuals.wash: NoticeWash?
+    get() = when (this) {
+        is SavedNotice -> NoticeWash.Saved
+        is ErrorNotice -> NoticeWash.Disconnected
+        else -> null
+    }
+
 internal class NoticeQueue {
     val messages = SnackbarHostState()
     val dialogs = mutableStateListOf<Any>()
@@ -54,9 +67,9 @@ internal fun BoxScope.GlassNoticeHost(bottomClearance: Dp = defaultNavigationCle
     if (queue.dialogs.lastOrNull() != surface) return
 
     val current = queue.messages.currentSnackbarData
-    var lastWasSaved by remember { mutableStateOf(false) }
-    val atBottom = if (current == null) lastWasSaved else current.visuals is SavedNotice
-    SideEffect { if (current != null) lastWasSaved = atBottom }
+    var lastAtBottom by remember { mutableStateOf(false) }
+    val atBottom = if (current == null) lastAtBottom else current.visuals.wash != null
+    SideEffect { if (current != null) lastAtBottom = atBottom }
     val insets = WindowInsetsSides.Horizontal + if (atBottom) WindowInsetsSides.Bottom else WindowInsetsSides.Top
     SnackbarHost(
         queue.messages,
@@ -66,11 +79,12 @@ internal fun BoxScope.GlassNoticeHost(bottomClearance: Dp = defaultNavigationCle
                 bottom = if (atBottom) bottomClearance else 0.dp)
             .widthIn(max = navigationMaxWidth),
     ) { message ->
-        if (message.visuals is SavedNotice) {
-            BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                NoticeLabel(message.visuals.message, Modifier.width(navigationBarWidth(maxWidth) * .85f), Modifier.savedNoticeWash())
-            }
-        } else NoticeLabel(message.visuals.message)
+        val wash = message.visuals.wash
+        if (wash == null) NoticeLabel(message.visuals.message)
+        else BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            NoticeLabel(message.visuals.message, Modifier.width(navigationBarWidth(maxWidth) * .85f),
+                Modifier.savedNoticeWash(wash))
+        }
     }
 }
 

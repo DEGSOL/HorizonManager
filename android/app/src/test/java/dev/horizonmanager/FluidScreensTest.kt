@@ -822,6 +822,24 @@ class FluidScreensTest {
     }
 
     @Test
+    @Suppress("UNCHECKED_CAST")
+    fun invalidProfileSettingsNoticeAppearsAboveBottomNavigation() {
+        loadIssue(articleCount = 2)
+        tab(R.string.settings)
+        compose.runOnIdle {
+            val model = ViewModelProvider(compose.activity)[ManagerModel::class.java]
+            val state = ManagerModel::class.java.getDeclaredField("mutable").apply { isAccessible = true }
+                .get(model) as MutableStateFlow<Panel>
+            state.value = state.value.copy(userProblem = "CONFIG_FIELDS · profiles.tech-news.content.analysis_max_chars")
+        }
+        val notice = text(R.string.ui_horizon_rejected_the_values_in_the)
+        notice.assertIsDisplayed()
+        val screenBottom = (compose.activity.window.decorView.height / compose.activity.resources.displayMetrics.density).dp
+        val gap = screenBottom - notice.getUnclippedBoundsInRoot().bottom
+        assertTrue("The error notice should sit at the saved notice position", gap in 70.dp..130.dp)
+    }
+
+    @Test
     fun appIconSettingsSaveAndBackupsOfferTwoTargets() {
         loadIssue()
         tab(R.string.settings)

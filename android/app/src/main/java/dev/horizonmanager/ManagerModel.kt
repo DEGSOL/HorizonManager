@@ -1316,15 +1316,21 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         api.put("media-search", JSONObject().put("enabled", enabled))
     }
 
-    fun saveConfig(config: JSONObject, profiles: JSONArray, secrets: JSONObject = JSONObject()) {
+    fun saveConfig(config: JSONObject, profiles: JSONArray, secrets: JSONObject = JSONObject()) =
+        saveConfiguration("config?include_ai_providers=true",
+            JSONObject().put("config", config).put("profiles", profiles).put("secrets", secrets))
+
+    fun saveProfileNewsText(changes: JSONObject, revision: Int) =
+        saveConfiguration("profile-news-text", JSONObject().put("profiles", changes), revision)
+
+    private fun saveConfiguration(path: String, values: JSONObject, expectedRevision: Int? = null) {
         val panel = state.value
         val server = panel.server ?: return
-        val revision = panel.config.optInt("revision")
+        val revision = expectedRevision ?: panel.config.optInt("revision")
         operation {
             if (state.value.server?.id != server.id) return@operation
             val savedConfig = withAgent(server) { api ->
-                api.put("config?include_ai_providers=true", JSONObject().put("revision", revision)
-                    .put("config", config).put("profiles", profiles).put("secrets", secrets)) as JSONObject
+                api.put(path, values.put("revision", revision)) as JSONObject
             }
             if (state.value.server?.id != server.id) return@operation
             // The PUT response already contains the new config revision. Forms must see it

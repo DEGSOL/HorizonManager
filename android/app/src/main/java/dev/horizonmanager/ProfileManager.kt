@@ -35,6 +35,32 @@ private fun validSourceSize(value: String): Boolean =
 private fun validInstruction(value: String): Boolean =
     value.isNotBlank() && '\u0000' !in value && value.codePointCount(0, value.length) <= summaryInstructionLimit
 
+private fun profileNewsText(profile: JSONObject, defaultInstruction: String) = JSONObject()
+    .put("summary_mode", profile.optString("summary_mode", "news"))
+    .put("summary_instruction", profile.optString("summary_instruction", defaultInstruction))
+    .put("content", profile.getJSONObject("definition").getJSONObject("content"))
+
+private fun withoutNewsText(profile: JSONObject) = profile.copyObject().apply {
+    remove("summary_mode")
+    remove("summary_instruction")
+    getJSONObject("definition").remove("content")
+}
+
+internal fun changedProfileNewsText(original: JSONArray, edited: JSONArray, defaultInstruction: String): JSONObject? {
+    if (original.length() != edited.length()) return null
+    val changes = JSONObject()
+    for (index in 0 until original.length()) {
+        val before = original.getJSONObject(index)
+        val after = edited.getJSONObject(index)
+        if (withoutNewsText(before).toString() != withoutNewsText(after).toString()) return null
+        val options = profileNewsText(after, defaultInstruction)
+        if (options.toString() != profileNewsText(before, defaultInstruction).toString()) {
+            changes.put(after.getJSONObject("definition").getString("id"), options)
+        }
+    }
+    return changes.takeIf { it.length() != 0 }
+}
+
 @Composable
 internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boolean) -> Unit) {
     val root = panel.schema.getJSONObject("profile")
@@ -300,10 +326,12 @@ internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boo
                                 validSourceSize(content?.optString("enrichment_max_chars").orEmpty())
                         },
                 onClick = {
-                    model.saveConfig(
-                        JSONObject(references).put("processing", settings),
-                        JSONArray(draft),
-                    )
+                    val edited = JSONArray(draft)
+                    val newsChanges = if (references == base.toString() &&
+                        processing == base.getJSONObject("processing").toString()
+                    ) changedProfileNewsText(originals, edited, defaultInstruction) else null
+                    if (newsChanges == null) model.saveConfig(JSONObject(references).put("processing", settings), edited)
+                    else model.saveProfileNewsText(newsChanges, revision)
                 },
             ) {
                 Text(ui(R.string.ui_save_settings))

@@ -248,7 +248,7 @@ private fun Manager(model: ManagerModel, notificationServer: String, consumed: (
     var restoreFile by remember { mutableStateOf("") }
     LaunchedEffect(panel.userProblem) {
         val problem = panel.userProblem.takeIf(String::isNotEmpty) ?: return@LaunchedEffect
-        notices.showSnackbar(errorText(problem), duration = SnackbarDuration.Long)
+        notices.showSnackbar(ErrorNotice(errorText(problem)))
         model.consumeProblem(problem)
     }
     var backupDialog by remember { mutableStateOf("") }

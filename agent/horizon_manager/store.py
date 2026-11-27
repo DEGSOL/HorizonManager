@@ -217,6 +217,9 @@ class Store:
                 url = str(ai.get("base_url") or "").rstrip("/")
                 provider = next((name for name, spec in ROUTERS.items() if spec[0] == url), provider)
             db.execute("INSERT OR REPLACE INTO ai_provider_settings VALUES (?, ?)", (provider, json.dumps(ai)))
+        self.put_configuration(db, current, updated)
+
+    def put_configuration(self, db, current, updated):
         previous_profiles, previous_options = self.split_profiles(current["profiles"])
         previous = {**current, "profiles": previous_profiles, "profile_text_options": previous_options}
         db.execute("INSERT OR REPLACE INTO previous VALUES (1, ?)", (json.dumps(previous),))

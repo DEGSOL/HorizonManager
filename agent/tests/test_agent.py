@@ -241,6 +241,46 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(self.client.put("/v1/config", json=invalid).json()["detail"]["code"], "PROFILE_DUPLICATE_ID")
         self.assertEqual(self.client.get("/v1/config").json(), before)
 
+    def test_profile_news_settings_save_independently_of_unrelated_horizon_validation(self):
+        store = Store(self.root)
+        with store.db() as db:
+            # Simulate settings retained from a runtime with a different display schema.
+            raw = store.settings(db)
+            raw["config"]["display"]["icon_style"] = "legacy"
+            db.execute("UPDATE configuration SET config=? WHERE id=1", (json.dumps(raw["config"]),))
+        config_url = "/v1/config"
+        url = "/v1/profile-news-text"
+        before = self.client.get(config_url).json()
+        profile_id = "tech-news"
+        options = {"summary_mode": "original", "summary_instruction": NEWS_INSTRUCTION,
+                   "content": {"analysis_max_chars": 7500, "enrichment_max_chars": 9200, "sampling": "head-middle-tail"}}
+        full = {**before, "profiles": json.loads(json.dumps(before["profiles"])), "secrets": {}}
+        original = next(profile for profile in full["profiles"] if profile["definition"]["id"] == profile_id)
+        original["definition"]["content"] = options["content"]
+        original["summary_mode"] = "original"
+        rejected = self.client.put(config_url, json=full)
+        self.assertEqual(rejected.status_code, 422)
+        self.assertEqual(rejected.json()["detail"], {"code": "CONFIG_FIELDS", "fields": ["display.icon_style"]})
+
+        request = {"revision": before["revision"], "profiles": {profile_id: options}}
+        saved = self.client.put(url, json=request)
+        self.assertEqual(saved.status_code, 200, saved.text)
+        reloaded = self.client.get(config_url).json()
+        self.assertEqual(reloaded["revision"], before["revision"] + 1)
+        self.assertEqual(reloaded["config"], before["config"])
+        for old, updated in zip(before["profiles"], reloaded["profiles"], strict=True):
+            if old["definition"]["id"] == profile_id:
+                old["definition"]["content"] = options["content"]
+                old.update(summary_mode=options["summary_mode"], summary_instruction=options["summary_instruction"])
+            self.assertEqual(updated, old)
+        self.assertEqual(self.client.put(url, json=request).status_code, 409)
+        request["revision"] = reloaded["revision"]
+        options["content"]["analysis_max_chars"] = 499
+        invalid = self.client.put(url, json=request)
+        self.assertEqual(invalid.status_code, 422)
+        self.assertEqual(invalid.json()["detail"]["fields"], ["profiles.tech-news.content.analysis_max_chars"])
+        self.assertEqual(self.client.get(config_url).json(), reloaded)
+
     def test_profile_news_text_uses_saved_options_in_primary_analysis(self):
         incoming = self.config()
         incoming["config"]["sources"]["rss"] = [{"name": "Long", "url": self.url + "/long-feed", "profile": "tech-news"}]

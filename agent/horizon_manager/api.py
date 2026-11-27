@@ -28,7 +28,7 @@ from .article_context import find_item, key_for, localized_context, previous_con
 from .chatgpt_login import ChatGptLogin
 from .classification import check_analysis_contract
 from .configuration import (DIGEST_LANGUAGES, MAX_HEADLINE_CHARACTERS, MAX_HEADLINE_WORDS, MIN_HEADLINE_WORDS,
-                            DigestLanguageCode, ai_missing, schema, secret_name_allowed, validate)
+                            DigestLanguageCode, ProfileNewsText, ai_missing, schema, secret_name_allowed, validate)
 from .localized_digest import LocalizedSummarizer, restore_original_cards
 from .media import relay_cover, web_url
 from .scheduler import Schedule, next_run
@@ -52,6 +52,10 @@ class ConfigInput(Body):
 
 class Revision(Body):
     revision: int
+
+
+class ProfileNewsInput(Revision):
+    profiles: dict[str, dict] = Field(min_length=1, max_length=32)
 
 
 class JobInput(Body):
@@ -403,6 +407,31 @@ def create_app(root, token):
             store.put_settings(db, current, {"config": body.config, "profiles": body.profiles, "secrets": secrets})
             Store.event(db, "CONFIG_SAVED")
             return {**public_settings(db, include_ai_providers), "missing": missing}
+
+    @app.put("/v1/profile-news-text")
+    def set_profile_news_text(body: ProfileNewsInput):
+        with store.db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            no_active(db)
+            current = store.settings(db)
+            if current["revision"] != body.revision:
+                fail(409, "CONFIG_CHANGED")
+            profiles = {entry["definition"]["id"]: entry for entry in current["profiles"]}
+            for profile_id, submitted in body.profiles.items():
+                if profile_id not in profiles:
+                    fail(422, "CONFIG_FIELDS", fields=["profiles"])
+                try:
+                    options = ProfileNewsText.model_validate(submitted).model_dump(mode="json")
+                except ValidationError as exc:
+                    fields = [".".join(("profiles", profile_id, *map(str, error["loc"])))
+                              for error in exc.errors(include_input=False, include_context=False)]
+                    fail(422, "CONFIG_FIELDS", fields=fields[:20])
+                entry = profiles[profile_id]
+                definition = {**entry["definition"], "content": options.pop("content")}
+                profiles[profile_id] = {**entry, **options, "definition": definition}
+            store.put_configuration(db, current, {**current, "profiles": list(profiles.values())})
+            Store.event(db, "CONFIG_SAVED")
+            return public_settings(db, include_ai_providers=True)
 
     @app.post("/v1/config/check")
     def check():

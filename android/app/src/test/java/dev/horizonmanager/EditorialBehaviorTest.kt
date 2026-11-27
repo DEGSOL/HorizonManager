@@ -2,6 +2,7 @@ package dev.horizonmanager
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
@@ -74,6 +75,29 @@ class EditorialBehaviorTest {
     fun unreadBadgeHidesZeroAndCapsItsVisibleNumber() {
         assertEquals(listOf(null, "1", "9", "12", "99", "99+", "99+"),
             listOf(0, 1, 9, 12, 99, 100, 115).map(::unreadBadgeText))
+    }
+
+    @Test
+    fun savesNewsTextSeparatelyWhenOtherProfileFieldsAreUnchanged() {
+        val originals = JSONArray("""[{"definition":{"id":"tech-news","name":"News",
+            "content":{"analysis_max_chars":6000,"enrichment_max_chars":8000,"sampling":"prefix"}},
+            "analysis_prompt":"Original scoring policy","summary_mode":"news","summary_instruction":"Keep details"}]""")
+        val edited = JSONArray(originals.toString())
+        val profile = edited.getJSONObject(0)
+        val definition = profile.getJSONObject("definition")
+        val content = definition.getJSONObject("content")
+        profile.put("summary_mode", "original")
+        content.put("analysis_max_chars", 7500).put("sampling", "head-middle-tail")
+        val changes = requireNotNull(changedProfileNewsText(originals, edited, "Default"))
+        assertEquals(1, changes.length())
+        val options = changes.getJSONObject("tech-news")
+        assertEquals("original", options.getString("summary_mode"))
+        assertEquals("Keep details", options.getString("summary_instruction"))
+        assertEquals(7500, options.getJSONObject("content").getInt("analysis_max_chars"))
+        assertEquals("head-middle-tail", options.getJSONObject("content").getString("sampling"))
+        assertFalse(options.has("analysis_prompt"))
+        definition.put("name", "New name")
+        assertNull(changedProfileNewsText(originals, edited, "Default"))
     }
 
     @Test
