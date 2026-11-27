@@ -83,4 +83,6 @@
     <string name="journal_operation_issue">Problem during the operation</string>
     <string name="journal_unknown_issue">This entry does not contain a readable cause. Check the earlier events and the technical code below.</string>
     <string name="journal_unknown_info">This entry only provides a technical code. Related records can show what led to it.</string>
+    <string name="journal_job_tokens">Input tokens %1$s · Output tokens %2$s</string>
+    <string name="journal_job_tokens_unavailable">Token usage is unavailable for this job</string>
 </resources>

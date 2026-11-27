@@ -864,7 +864,7 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
 
     private fun collectionHours(config: JSONObject, fallback: Int) =
         config.optJSONObject("config")?.optJSONObject("collection")
-            ?.optInt("time_window_hours", DEFAULT_COLLECTION_HOURS)?.coerceIn(1, 8760) ?: fallback
+            ?.optInt("time_window_hours", fallback)?.coerceIn(1, 8760) ?: fallback
 
     private data class Refresh(
         val archive: List<JSONObject>, val hasMore: Boolean, val digest: JSONObject?, val config: JSONObject, val schema: JSONObject,
@@ -1316,9 +1316,10 @@ internal class ManagerModel(private val app: Application) : AndroidViewModel(app
         api.put("media-search", JSONObject().put("enabled", enabled))
     }
 
-    fun saveConfig(config: JSONObject, profiles: JSONArray, secrets: JSONObject = JSONObject()) =
+    fun saveConfig(config: JSONObject, profiles: JSONArray, secrets: JSONObject = JSONObject(),
+                   expectedRevision: Int? = null) =
         saveConfiguration("config?include_ai_providers=true",
-            JSONObject().put("config", config).put("profiles", profiles).put("secrets", secrets))
+            JSONObject().put("config", config).put("profiles", profiles).put("secrets", secrets), expectedRevision)
 
     fun saveProfileNewsText(changes: JSONObject, revision: Int) =
         saveConfiguration("profile-news-text", JSONObject().put("profiles", changes), revision)

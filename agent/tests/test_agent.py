@@ -114,6 +114,7 @@ class Fixture(BaseHTTPRequestHandler):
         else:
             content = json.dumps({"score": 9, "summary": "Fixture AI summary", "reason": "Fixture rubric", "tags": ["test"]})
         body = json.dumps({"id": "fixture", "object": "chat.completion", "created": 0, "model": "fixture",
+                           "usage": {"prompt_tokens": 83, "completion_tokens": 21, "total_tokens": 104},
                            "choices": [{"index": 0, "message": {"role": "assistant", "content": content},
                                         "finish_reason": "stop"}]}).encode()
         self.send_response(200)
@@ -247,16 +248,15 @@ class AgentTests(unittest.TestCase):
             # Simulate settings retained from a runtime with a different display schema.
             raw = store.settings(db)
             raw["config"]["display"]["icon_style"] = "legacy"
+            raw["config"]["collection"]["time_window_hours"] = 72
             db.execute("UPDATE configuration SET config=? WHERE id=1", (json.dumps(raw["config"]),))
         config_url = "/v1/config"
         url = "/v1/profile-news-text"
         before = self.client.get(config_url).json()
         profile_id = "tech-news"
-        options = {"summary_mode": "original", "summary_instruction": NEWS_INSTRUCTION,
-                   "content": {"analysis_max_chars": 7500, "enrichment_max_chars": 9200, "sampling": "head-middle-tail"}}
+        options = {"summary_mode": "original", "summary_instruction": NEWS_INSTRUCTION}
         full = {**before, "profiles": json.loads(json.dumps(before["profiles"])), "secrets": {}}
         original = next(profile for profile in full["profiles"] if profile["definition"]["id"] == profile_id)
-        original["definition"]["content"] = options["content"]
         original["summary_mode"] = "original"
         rejected = self.client.put(config_url, json=full)
         self.assertEqual(rejected.status_code, 422)
@@ -268,17 +268,17 @@ class AgentTests(unittest.TestCase):
         reloaded = self.client.get(config_url).json()
         self.assertEqual(reloaded["revision"], before["revision"] + 1)
         self.assertEqual(reloaded["config"], before["config"])
+        self.assertEqual(reloaded["config"]["collection"]["time_window_hours"], 72)
         for old, updated in zip(before["profiles"], reloaded["profiles"], strict=True):
             if old["definition"]["id"] == profile_id:
-                old["definition"]["content"] = options["content"]
                 old.update(summary_mode=options["summary_mode"], summary_instruction=options["summary_instruction"])
             self.assertEqual(updated, old)
         self.assertEqual(self.client.put(url, json=request).status_code, 409)
         request["revision"] = reloaded["revision"]
-        options["content"]["analysis_max_chars"] = 499
+        options["summary_instruction"] = " "
         invalid = self.client.put(url, json=request)
         self.assertEqual(invalid.status_code, 422)
-        self.assertEqual(invalid.json()["detail"]["fields"], ["profiles.tech-news.content.analysis_max_chars"])
+        self.assertEqual(invalid.json()["detail"]["fields"], ["profiles.tech-news.summary_instruction"])
         self.assertEqual(self.client.get(config_url).json(), reloaded)
 
     def test_profile_news_text_uses_saved_options_in_primary_analysis(self):
@@ -288,14 +288,14 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(profile["summary_mode"], "news")
         self.assertEqual(profile["summary_instruction"], DEFAULT_SUMMARY_INSTRUCTION)
         self.assertEqual(profile["definition"]["content"], {
-            "analysis_max_chars": 6000, "enrichment_max_chars": 8000, "sampling": "prefix",
+            "analysis_max_chars": 2000, "enrichment_max_chars": 8000, "sampling": "prefix",
         })
         original_policy = profile["analysis_prompt"]
         profile["summary_instruction"] = NEWS_INSTRUCTION
-        content = profile["definition"]["content"]
-        content.update(analysis_max_chars=499, enrichment_max_chars=905, sampling="head-middle-tail")
-        self.assertEqual(self.client.put("/v1/config", json=incoming).status_code, 422)
-        content["analysis_max_chars"] = 755
+        content = profile["definition"]["content"].copy()
+        # Old clients and backups can send previously editable values.
+        profile["definition"]["content"].update(analysis_max_chars=755, enrichment_max_chars=905,
+                                                sampling="head-middle-tail")
         saved = self.client.put("/v1/config", json=incoming)
         self.assertEqual(saved.status_code, 200, saved.text)
         self.assertEqual(self.client.get("/v1/status").json()["article_options"],
@@ -320,9 +320,10 @@ class AgentTests(unittest.TestCase):
         self.assertIn(original_policy.strip(), system)
         self.assertNotIn("one-sentence summary", system)
         excerpt = user.split("Content: ", 1)[1].strip()
-        self.assertLessEqual(len(excerpt), 755)
-        for marker in ("НАЧАЛО", "СЕРЕДИНА", "КОНЕЦ"):
-            self.assertIn(marker, excerpt)
+        self.assertEqual(len(excerpt), 2000)
+        self.assertIn("НАЧАЛО", excerpt)
+        self.assertNotIn("СЕРЕДИНА", excerpt)
+        self.assertNotIn("КОНЕЦ", excerpt)
         self.assertEqual(self.fixture.enrichment_requests, [])
         self.assertEqual(self.fixture.translation_requests, [])
         digest = f"/v1/digests/{run.hex}/ru"
@@ -335,7 +336,10 @@ class AgentTests(unittest.TestCase):
         context = f'/v1/article-context/{run.hex}/{key_for(card["id"])}/ru'
         queued = self.client.post(context, json={}).json()
         self.assertEqual(self.wait(queued["job"])["state"], "success")
-        self.assertIn("[Closing excerpt]", self.fixture.enrichment_requests[0][1]["content"])
+        enrichment_prompt = self.fixture.enrichment_requests[0][1]["content"]
+        self.assertIn("НАЧАЛО", enrichment_prompt)
+        self.assertIn("КОНЕЦ", enrichment_prompt)
+        self.assertNotIn("[Closing excerpt]", enrichment_prompt)
         self.assertEqual(self.client.get(digest).json()["items"][0]["summary"], NEWS_TEXT)
 
         original = self.config()
@@ -824,6 +828,9 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(self.wait(job.hex)["state"], "success")
         self.assertEqual(self.client.get(f"/v1/jobs/{job.hex}").json()["result"],
                          {"model": "fixture-model", "verified": True})
+        completed = [event["detail"] for event in self.client.get("/v1/events").json()
+                     if event["code"] == "JOB_SUCCESS" and event["job"] == job.hex]
+        self.assertEqual(completed, ["tokens 83 21"])
 
     def test_ai_wrong_secret_and_cancel(self):
         self.assertEqual(self.client.put("/v1/config", json=self.config(secret="wrong")).status_code, 200)

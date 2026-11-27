@@ -1,6 +1,7 @@
 package dev.horizonmanager
 
 import org.json.JSONObject
+import java.text.NumberFormat
 
 internal fun journalLevel(level: String) = when (level) {
     "ERROR", "CRITICAL" -> ui(R.string.journal_level_error)
@@ -59,7 +60,18 @@ internal fun journalMessage(row: JSONObject): Pair<String, String> {
         "INSTALL_SUCCESS" -> ui(R.string.journal_install_ok_title) to ui(R.string.journal_install_ok)
         "INSTALL_FAILED", "INSTALL_ERROR" -> installStep(detail) to ui(R.string.journal_install_failed)
         "JOB_QUEUED" -> ui(R.string.journal_queued_title, jobName(detail)) to ui(R.string.journal_queued)
-        "JOB_SUCCESS" -> ui(R.string.journal_job_ok_title) to ui(R.string.journal_job_ok)
+        "JOB_SUCCESS" -> {
+            val tokens = jobTokenCounts(detail)
+            val body = when {
+                tokens != null -> {
+                    val number = NumberFormat.getIntegerInstance(appLocale())
+                    ui(R.string.journal_job_tokens, number.format(tokens.first), number.format(tokens.second))
+                }
+                detail == unavailableJobTokens -> ui(R.string.journal_job_tokens_unavailable)
+                else -> ui(R.string.journal_job_ok)
+            }
+            ui(R.string.journal_job_ok_title) to body
+        }
         "JOB_FAILED", "HORIZON_EXIT" -> ui(R.string.journal_job_failed_title) to ui(R.string.journal_job_failed)
         "JOB_CANCELLED", "STOP_REQUESTED" -> ui(R.string.journal_job_stop_title) to ui(
             if (code == "STOP_REQUESTED") R.string.journal_job_stop_requested else R.string.journal_job_stop)

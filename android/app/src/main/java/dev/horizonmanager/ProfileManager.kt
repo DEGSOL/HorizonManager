@@ -3,7 +3,6 @@ package dev.horizonmanager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -14,7 +13,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -22,15 +20,7 @@ import androidx.compose.ui.window.DialogProperties
 import org.json.JSONArray
 import org.json.JSONObject
 
-private val sourceSize = 500..100_000
 private const val summaryInstructionLimit = 12_000
-private val sourceSampling = listOf("prefix", "head-middle-tail")
-private const val horizonAnalysisSize = 1000
-private const val standardAnalysisSize = 6000
-private const val standardEnrichmentSize = 8000
-
-private fun validSourceSize(value: String): Boolean =
-    value.toIntOrNull()?.let { it in sourceSize } == true
 
 private fun validInstruction(value: String): Boolean =
     value.isNotBlank() && '\u0000' !in value && value.codePointCount(0, value.length) <= summaryInstructionLimit
@@ -38,12 +28,10 @@ private fun validInstruction(value: String): Boolean =
 private fun profileNewsText(profile: JSONObject, defaultInstruction: String) = JSONObject()
     .put("summary_mode", profile.optString("summary_mode", "news"))
     .put("summary_instruction", profile.optString("summary_instruction", defaultInstruction))
-    .put("content", profile.getJSONObject("definition").getJSONObject("content"))
 
 private fun withoutNewsText(profile: JSONObject) = profile.copyObject().apply {
     remove("summary_mode")
     remove("summary_instruction")
-    getJSONObject("definition").remove("content")
 }
 
 internal fun changedProfileNewsText(original: JSONArray, edited: JSONArray, defaultInstruction: String): JSONObject? {
@@ -68,10 +56,21 @@ internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boo
     val revision = panel.config.getInt("revision")
     val originals = panel.config.getJSONArray("profiles")
     val defaultInstruction = root.getJSONObject("properties").getJSONObject("summary_instruction").getString("default")
-    var draft by rememberSaveable(revision) { mutableStateOf(originals.toString()) }
-    var references by rememberSaveable(revision) { mutableStateOf(base.toString()) }
-    var processing by
-        rememberSaveable(revision) { mutableStateOf(base.getJSONObject("processing").toString()) }
+    val (draftState, renamesState, processingState) = key(revision) {
+        Triple(
+            rememberSaveable { mutableStateOf(originals.toString()) },
+            rememberSaveable { mutableStateOf("[]") },
+            rememberSaveable { mutableStateOf(base.getJSONObject("processing").toString()) },
+        )
+    }
+    var draft by draftState
+    var profileRenames by renamesState
+    var processing by processingState
+    val references = remember(base, profileRenames) {
+        JSONArray(profileRenames).objects().fold(base) { config, rename ->
+            renameProfileReferences(config, rename.getString("from"), rename.getString("to"))
+        }
+    }
     val profiles = remember(draft) { JSONArray(draft).objects() }
     val settings = remember(processing) { JSONObject(processing) }
     val ids = profiles.map { it.getJSONObject("definition").getString("id") }
@@ -81,7 +80,7 @@ internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boo
     var advanced by rememberSaveable { mutableStateOf(false) }
     val index = ids.indexOf(editing)
     val dirty =
-        references != base.toString() ||
+        profileRenames != "[]" ||
             draft != originals.toString() ||
             processing != base.getJSONObject("processing").toString()
     SideEffect { dirtyChange(dirty) }
@@ -104,8 +103,6 @@ internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boo
             )
         def.put("display_names", JSONObject())
         if (!duplicate) {
-            def.put("content", JSONObject().put("analysis_max_chars", standardAnalysisSize)
-                .put("enrichment_max_chars", standardEnrichmentSize).put("sampling", "prefix"))
             doc.remove("summary_instruction")
             doc.put("summary_mode", "news")
         }
@@ -234,11 +231,12 @@ internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boo
                                 onClick = {
                                     val renamed =
                                         renameProfileReferences(
-                                            JSONObject(references).put("processing", settings),
+                                            references.copyObject().put("processing", settings),
                                             editing,
                                             newId,
                                         )
-                                    references = renamed.toString()
+                                    profileRenames = JSONArray(profileRenames)
+                                        .put(JSONObject().put("from", editing).put("to", newId)).toString()
                                     processing = renamed.getJSONObject("processing").toString()
                                     update(
                                         doc.copyObject()
@@ -319,19 +317,18 @@ internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boo
                     !panel.busy &&
                         profiles.all { profile ->
                             val def = profile.getJSONObject("definition")
-                            val content = def.optJSONObject("content")
                             def.optString("name").isNotBlank() &&
-                                validInstruction(profile.optString("summary_instruction", defaultInstruction)) &&
-                                validSourceSize(content?.optString("analysis_max_chars").orEmpty()) &&
-                                validSourceSize(content?.optString("enrichment_max_chars").orEmpty())
+                                validInstruction(profile.optString("summary_instruction", defaultInstruction))
                         },
                 onClick = {
                     val edited = JSONArray(draft)
-                    val newsChanges = if (references == base.toString() &&
+                    val newsChanges = if (profileRenames == "[]" &&
                         processing == base.getJSONObject("processing").toString()
                     ) changedProfileNewsText(originals, edited, defaultInstruction) else null
-                    if (newsChanges == null) model.saveConfig(JSONObject(references).put("processing", settings), edited)
-                    else model.saveProfileNewsText(newsChanges, revision)
+                    if (newsChanges == null) {
+                        model.saveConfig(references.copyObject().put("processing", settings), edited,
+                            expectedRevision = revision)
+                    } else model.saveProfileNewsText(newsChanges, revision)
                 },
             ) {
                 Text(ui(R.string.ui_save_settings))
@@ -339,7 +336,7 @@ internal fun ProfileManager(panel: Panel, model: ManagerModel, dirtyChange: (Boo
             TextButton(
                 onClick = {
                     draft = originals.toString()
-                    references = base.toString()
+                    profileRenames = "[]"
                     processing = base.getJSONObject("processing").toString()
                 }
             ) {
@@ -358,13 +355,8 @@ private fun ProfilePromptRow(title: String, value: String, help: Int? = null, op
 @Composable
 private fun ProfileNewsText(doc: JSONObject, instructionDefault: String, editInstruction: () -> Unit,
                             update: (JSONObject) -> Unit) {
-    val def = doc.getJSONObject("definition")
-    val content = def.optJSONObject("content") ?: JSONObject()
     val instruction = doc.optString("summary_instruction", instructionDefault)
     val mode = doc.optString("summary_mode", "news")
-    fun setContent(value: JSONObject) {
-        update(doc.copyObject().put("definition", def.copyObject().put("content", value)))
-    }
 
     Tile {
         Choice(ui(R.string.profile_news_format), listOf("news", "original"), mode,
@@ -380,39 +372,6 @@ private fun ProfileNewsText(doc: JSONObject, instructionDefault: String, editIns
             }
         }
     }
-    Tile {
-        SettingHeading(ui(R.string.profile_source_text), R.string.profile_source_help)
-        val analysis = content.optString("analysis_max_chars", standardAnalysisSize.toString())
-        val enrichment = content.optString("enrichment_max_chars", standardEnrichmentSize.toString())
-        val sampling = content.optString("sampling", "prefix")
-        ProfileTextLimit(ui(R.string.profile_analysis_limit), analysis, R.string.profile_analysis_limit_help) {
-            setContent(content.copyObject().put("analysis_max_chars", it.toIntOrNull() ?: it))
-        }
-        ProfileTextLimit(ui(R.string.profile_enrichment_limit), enrichment, R.string.profile_enrichment_limit_help) {
-            setContent(content.copyObject().put("enrichment_max_chars", it.toIntOrNull() ?: it))
-        }
-        Choice(ui(R.string.profile_sampling), sourceSampling, sampling,
-            { setContent(content.copyObject().put("sampling", it)) },
-            { ui(if (it == "prefix") R.string.profile_sampling_prefix else R.string.profile_sampling_parts) },
-            row = true, help = R.string.profile_sampling_help)
-        fun differs(analysisSize: Int): Boolean =
-            analysis != analysisSize.toString() || enrichment != standardEnrichmentSize.toString() || sampling != "prefix"
-        fun reset(analysisSize: Int) {
-            setContent(content.copyObject().put("analysis_max_chars", analysisSize)
-                .put("enrichment_max_chars", standardEnrichmentSize).put("sampling", "prefix"))
-        }
-        SettingsActionPair(R.string.profile_horizon_limits, R.string.profile_hovq_limits,
-            differs(horizonAnalysisSize), differs(standardAnalysisSize),
-            { reset(horizonAnalysisSize) }, { reset(standardAnalysisSize) })
-    }
-}
-
-@Composable
-private fun ProfileTextLimit(title: String, value: String, help: Int, change: (String) -> Unit) {
-    val invalid = !validSourceSize(value)
-    SettingsTextField(title, value, { if (it.all(Char::isDigit)) change(it) }, isError = invalid,
-        help = help, hint = if (invalid) ui(R.string.profile_text_range) else null,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
 }
 
 @Composable

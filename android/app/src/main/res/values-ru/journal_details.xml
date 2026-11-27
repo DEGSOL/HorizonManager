@@ -83,4 +83,6 @@
     <string name="journal_operation_issue">Проблема при выполнении</string>
     <string name="journal_unknown_issue">В этой записи нет подробной причины. Проверь предыдущие события и технический код ниже.</string>
     <string name="journal_unknown_info">У этой записи есть только технический код. Связанные события покажут, что к ней привело.</string>
+    <string name="journal_job_tokens">Входящие токены %1$s · Исходящие %2$s</string>
+    <string name="journal_job_tokens_unavailable">Данных о расходе токенов для этого задания нет</string>
 </resources>

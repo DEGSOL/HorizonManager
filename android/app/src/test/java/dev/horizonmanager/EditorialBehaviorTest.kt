@@ -85,16 +85,13 @@ class EditorialBehaviorTest {
         val edited = JSONArray(originals.toString())
         val profile = edited.getJSONObject(0)
         val definition = profile.getJSONObject("definition")
-        val content = definition.getJSONObject("content")
         profile.put("summary_mode", "original")
-        content.put("analysis_max_chars", 7500).put("sampling", "head-middle-tail")
         val changes = requireNotNull(changedProfileNewsText(originals, edited, "Default"))
         assertEquals(1, changes.length())
         val options = changes.getJSONObject("tech-news")
         assertEquals("original", options.getString("summary_mode"))
         assertEquals("Keep details", options.getString("summary_instruction"))
-        assertEquals(7500, options.getJSONObject("content").getInt("analysis_max_chars"))
-        assertEquals("head-middle-tail", options.getJSONObject("content").getString("sampling"))
+        assertFalse(options.has("content"))
         assertFalse(options.has("analysis_prompt"))
         definition.put("name", "New name")
         assertNull(changedProfileNewsText(originals, edited, "Default"))
@@ -104,14 +101,26 @@ class EditorialBehaviorTest {
     fun profileRenamePreservesLinkedRoutesAndUnrelatedText() {
         val raw=JSONObject("""{"sources":{"rss":[{"profile":["old","other"],"name":"old"}]},
             "processing":{"default_profile":"old","profile_settings":{"old":{"weight":2}}},
+            "collection":{"time_window_hours":72},
             "digest":{"group_by":"profile","profile_order":["old"],"category_groups":{"one":{"categories":["old"]}}}}""")
         val actual=renameProfileReferences(raw,"old","custom")
         assertEquals("custom",actual.getJSONObject("processing").getString("default_profile"))
+        assertEquals(72, actual.getJSONObject("collection").getInt("time_window_hours"))
         assertTrue(actual.getJSONObject("processing").getJSONObject("profile_settings").has("custom"))
         val source=actual.getJSONObject("sources").getJSONArray("rss").getJSONObject(0)
         assertEquals("custom",source.getJSONArray("profile").getString(0))
         assertEquals("old",source.getString("name"))
         assertEquals("old",raw.getJSONObject("processing").getString("default_profile"))
+    }
+
+    @Test
+    fun jobTokensAreRetainedInTheJournalAndDatesFollowTheLocalZone() {
+        val completed = JSONObject().put("code", "JOB_SUCCESS").put("detail", "tokens 83 21")
+        assertEquals(83L to 21L, jobTokenCounts(diagnosticEvent(completed).getString("detail")))
+        completed.put("detail", "tokens 83 21 private provider data")
+        assertFalse(diagnosticEvent(completed).has("detail"))
+        val zone = java.time.ZoneId.of("Asia/Yekaterinburg")
+        assertEquals(java.time.LocalDate.of(2026, 11, 28), journalEventDate("2026-11-27T20:00:00Z", zone))
     }
 
     @Test

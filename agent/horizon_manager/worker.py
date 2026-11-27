@@ -12,6 +12,7 @@ from urllib.parse import quote, quote_plus
 
 from rich.console import Console
 from src.ai.client import create_ai_client
+from src.ai.tokens import get_usage_snapshot
 from src.mcp.horizon_adapter import dicts_to_items, items_to_dicts
 from src.mcp.service import HorizonPipelineService
 from src.models import Config
@@ -320,6 +321,9 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.WARNING, handlers=[HorizonLogs()], force=True)
     try:
         asyncio.run(main(json.load(sys.stdin), sys.argv[1]))
+        usage = get_usage_snapshot()
+        send("usage", input_tokens=usage.total_input_tokens, output_tokens=usage.total_output_tokens,
+             reported=bool(usage.per_provider))
     except Exception as exc:
         while isinstance(exc, ExceptionGroup):
             exc = exc.exceptions[0]

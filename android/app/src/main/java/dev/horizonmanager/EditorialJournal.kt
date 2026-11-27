@@ -16,11 +16,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import java.time.temporal.ChronoUnit
 
 private val publicComponents = setOf("vps", "android", "agent", "horizon", "scheduler", "delivery", "push")
@@ -30,6 +36,15 @@ private val journalLevels = setOf("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL
 private val phases = setOf("fetch", "score", "filter", "enrich", "generate", "save", "delivery")
 private val exitStatus = Regex("(?:preflight|packages|files|runtime|service|health) · exit [0-9]{1,3}")
 private val sourceResult = Regex(".* · ([0-9]{1,9})(?: · (AUTH|RATE_LIMIT|HTTP_NOT_FOUND|TIMEOUT|INVALID_FORMAT|NETWORK|UPSTREAM_FAILURE))?")
+private val jobTokenDetail = Regex("tokens ([0-9]{1,18}) ([0-9]{1,18})")
+internal const val unavailableJobTokens = "tokens unavailable"
+
+internal fun jobTokenCounts(detail: String): Pair<Long, Long>? =
+    jobTokenDetail.matchEntire(detail)?.destructured?.let { (input, output) -> input.toLong() to output.toLong() }
+
+internal fun journalEventDate(time: String, zone: ZoneId): LocalDate? =
+    runCatching { Instant.parse(time).atZone(zone).toLocalDate() }.getOrNull()
+
 private val contextResult = Regex("[0-9]{1,9} ms(?: · [A-Z][A-Z0-9_]{1,79})?")
 private val safeException = setOf("TimeoutError", "ConnectionError", "ValueError", "RuntimeError", "OSError", "HTTPError")
 
@@ -50,6 +65,7 @@ internal fun diagnosticEvent(row: JSONObject): JSONObject {
         code.startsWith("INSTALL_") -> raw.takeIf(exitStatus::matches)
         code.startsWith("SOURCE_") -> sourceResult.matchEntire(raw)?.groupValues?.drop(1)?.filter(String::isNotBlank)?.joinToString(" · ")
         code == "JOB_QUEUED" -> raw.takeIf { it in setOf("run", "ai", "source", "localize", "article_context") }
+        code == "JOB_SUCCESS" -> raw.takeIf { it == unavailableJobTokens || jobTokenDetail.matches(it) }
         code.startsWith("ARTICLE_CONTEXT_") -> raw.takeIf(contextResult::matches)
         code == "DIGEST_LANGUAGE_CHANGED" -> raw.takeIf { it in digestLanguages }
         code in setOf("LOCALIZATION_PARTIAL", "LOCALIZATION_RESPONSE_INVALID", "LOCALIZATION_RECOVERED",
@@ -103,6 +119,10 @@ internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model:
                     })
         }
     }
+    val zone = ZoneId.systemDefault()
+    val locale = appLocale()
+    val dayLabel = remember(locale) { DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG).withLocale(locale) }
+    val days = remember(events, zone) { events.groupBy { journalEventDate(it.optString("time"), zone) } }
     LazyColumn(Modifier.fillMaxSize().editorialSideBottomInsets(), state = rememberLazyListState(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -136,16 +156,22 @@ internal fun Journal(panel: Panel, confirm: (String, () -> Unit) -> Unit, model:
                 if (events.isEmpty() && !panel.syncing) Text(ui(R.string.ui_no_entries_match_these_filters))
             }
         }
-        items(events) { row ->
-            val importance = row.optString("level")
-            val color = when (importance) { "ERROR", "CRITICAL" -> MaterialTheme.colorScheme.error; "WARNING" -> Color(0xFF614400); else -> MaterialTheme.colorScheme.onSurfaceVariant }
-            val (title, explanation) = journalMessage(row)
-            Tile(Modifier.clickable(role = Role.Button) { detail = row }) {
-                Text(listOf(journalLevel(importance), journalComponent(row.optString("component")), localTime(row.optString("time")))
-                    .filter(String::isNotBlank).joinToString(" · "), style = MaterialTheme.typography.labelMedium, color = color)
-                Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                Text(explanation, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall,
-                    maxLines = 3, overflow = TextOverflow.Ellipsis)
+        for ((day, entries) in days) {
+            if (day != null) item("day-$day") {
+                Text(dayLabel.format(day), Modifier.padding(top = 4.dp, start = 4.dp).semantics { heading() },
+                    style = MaterialTheme.typography.titleSmall)
+            }
+            items(entries) { row ->
+                val importance = row.optString("level")
+                val color = when (importance) { "ERROR", "CRITICAL" -> MaterialTheme.colorScheme.error; "WARNING" -> Color(0xFF614400); else -> MaterialTheme.colorScheme.onSurfaceVariant }
+                val (title, explanation) = journalMessage(row)
+                Tile(Modifier.clickable(role = Role.Button) { detail = row }) {
+                    Text(listOf(journalLevel(importance), journalComponent(row.optString("component")), localTime(row.optString("time")))
+                        .filter(String::isNotBlank).joinToString(" · "), style = MaterialTheme.typography.labelMedium, color = color)
+                    Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                    Text(explanation, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall,
+                        maxLines = 3, overflow = TextOverflow.Ellipsis)
+                }
             }
         }
     }

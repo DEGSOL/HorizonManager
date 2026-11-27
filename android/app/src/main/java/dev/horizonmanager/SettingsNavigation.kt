@@ -111,6 +111,14 @@ internal fun AiSettings(panel: Panel, model: ManagerModel, open: (String) -> Uni
             menuDetail = R.string.hovq_enrichment_token_cost)
         if (mode.isBlank()) SettingNote(ui(R.string.article_context_update))
     }
+    val options = panel.status.optJSONObject("article_options")
+    val enabled = options != null && !panel.busy
+    Tile {
+        Choice(ui(R.string.article_text_display), listOf("classic", "summary"),
+            options?.optString("card_text_mode", "classic") ?: "classic", model::setArticleTextMode,
+            { ui(if (it == "classic") R.string.article_text_classic else R.string.article_text_summary) },
+            enabled = enabled, row = true, help = R.string.article_text_display_help)
+    }
 }
 
 internal fun ConnectionPhase.label(): Int = when (this) {
@@ -303,10 +311,6 @@ internal fun ReadingPreferences(panel: Panel, model: ManagerModel, order: NewsOr
     Tile {
         val options = panel.status.optJSONObject("article_options")
         val enabled = options != null && !panel.busy
-        Choice(ui(R.string.article_text_display), listOf("classic", "summary"),
-            options?.optString("card_text_mode", "classic") ?: "classic", model::setArticleTextMode,
-            { ui(if (it == "classic") R.string.article_text_classic else R.string.article_text_summary) },
-            enabled = enabled, row = true, help = R.string.article_text_display_help)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically) {
             val title = ui(R.string.show_score_reason)

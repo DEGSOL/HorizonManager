@@ -154,7 +154,9 @@ internal fun SettingsForm(panel: Panel, model: ManagerModel, page: String, dirty
     val storedProfiles = panel.config.getJSONArray("profiles")
     when (page) {
         "digest" -> {
-            DigestRulesForm(panel, model, stored, storedProfiles, dirtyChange)
+            key(panel.config.optInt("revision")) {
+                DigestRulesForm(panel, model, stored, storedProfiles, dirtyChange)
+            }
             return
         }
         "secrets" -> {

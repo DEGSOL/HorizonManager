@@ -101,6 +101,7 @@ async def execute(store, row, settings, enrichment_mode, digest_language, on_dig
     start = time.monotonic()
     state = "failed"
     failure = "UPSTREAM_FAILURE"
+    usage_detail = "tokens unavailable"
     process, line = None, None
     if article:
         with store.db() as db:
@@ -157,10 +158,15 @@ async def execute(store, row, settings, enrichment_mode, digest_language, on_dig
                         Store.event(db, "HORIZON_EXIT", "ERROR", "horizon", job, str(status))
                 break
             event = json.loads(raw)
-            if event["kind"] == "log" and event["level"] == "ERROR":
-                failure = event["code"]
-            if consume(store, job, event) and on_digest is not None:
-                await on_digest()
+            if event["kind"] == "usage":
+                counts = (event.get("input_tokens"), event.get("output_tokens"))
+                if event.get("reported") is True and all(type(count) is int and 0 <= count < 10**18 for count in counts):
+                    usage_detail = f"tokens {counts[0]} {counts[1]}"
+            else:
+                if event["kind"] == "log" and event["level"] == "ERROR":
+                    failure = event["code"]
+                if consume(store, job, event) and on_digest is not None:
+                    await on_digest()
             line = asyncio.create_task(process.stdout.readline())
     except asyncio.CancelledError:
         state = "interrupted"
@@ -179,7 +185,8 @@ async def execute(store, row, settings, enrichment_mode, digest_language, on_dig
             await terminate(process)
         with store.db() as db:
             db.execute("UPDATE jobs SET state=?,updated=? WHERE id=?", (state, utc(), job))
-            Store.event(db, "JOB_" + state.upper(), "INFO" if state == "success" else "WARNING", job=job)
+            Store.event(db, "JOB_" + state.upper(), "INFO" if state == "success" else "WARNING",
+                        job=job, detail=usage_detail if state == "success" else "")
             if article or row["kind"] == "ai":
                 reason = {"timeout": "TIMEOUT", "interrupted": "INTERRUPTED_BY_RESTART",
                           "cancelled": "CANCELLED", "failed": failure}.get(state, "")

@@ -131,7 +131,7 @@ internal fun DigestRulesForm(panel: Panel, model: ManagerModel, base: JSONObject
             val updated = base.copyObject()
                 .put("collection", collection.copyObject().put("time_window_hours", hours.toInt()))
                 .put("digest", digest.copyObject().put("max_items", maximum.toIntOrNull() ?: JSONObject.NULL))
-            model.saveConfig(updated, profiles)
+            model.saveConfig(updated, profiles, expectedRevision = revision)
         }) { Text(ui(R.string.ui_save_settings)) }
     }
 }

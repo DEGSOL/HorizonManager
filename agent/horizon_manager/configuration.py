@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from src.collection_window import collection_hours
 from src.mcp.horizon_adapter import get_enabled_sources
 from src.models import AI_PROVIDER_DEFAULTS, Config, SOURCE_REGISTRY
-from src.processing.profiles import BUILTIN_PROFILES_DIR, ProfileContent, ProfileDefinition, ProfileRegistry
+from src.processing.profiles import BUILTIN_PROFILES_DIR, ProfileDefinition, ProfileRegistry
 
 SECRET_NAMES = frozenset({
     "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY", "AZURE_OPENAI_API_KEY",
@@ -38,13 +38,21 @@ def secret_name_allowed(name):
     return name in SECRET_NAMES or SECRET_ALIAS.fullmatch(name) is not None
 
 
-class ManagedProfileContent(ProfileContent):
-    analysis_max_chars: int = Field(default=6000, ge=500, le=100_000)
-    enrichment_max_chars: int = Field(default=8000, ge=500, le=100_000)
+class ManagedProfileContent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    analysis_max_chars: Literal[2000] = 2000
+    enrichment_max_chars: Literal[8000] = 8000
+    sampling: Literal["prefix"] = "prefix"
 
 
 class ManagedProfileDefinition(ProfileDefinition):
     content: ManagedProfileContent = Field(default_factory=ManagedProfileContent)
+
+    @field_validator("content", mode="before")
+    @classmethod
+    def use_managed_content(cls, _stored):
+        # Old configuration files and digest snapshots can still contain editable limits.
+        return ManagedProfileContent()
 
 
 class ProfileSummaryOptions(BaseModel):
@@ -65,10 +73,6 @@ class ProfileDocument(ProfileSummaryOptions):
     match_prompt: str = Field(min_length=1, max_length=100_000)
     analysis_prompt: str = Field(min_length=1, max_length=100_000)
     enrichment_prompt: str = Field(min_length=1, max_length=100_000)
-
-
-class ProfileNewsText(ProfileSummaryOptions):
-    content: ManagedProfileContent
 
 
 def builtin_profiles():

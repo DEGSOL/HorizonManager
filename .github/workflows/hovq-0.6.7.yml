@@ -1,0 +1,124 @@
+name: Hovq 0.6.7 release
+on:
+  push:
+    branches:
+      - release/0.6.7
+
+permissions:
+  contents: read
+
+jobs:
+  verify-agent:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Test agent against pinned Horizon
+        run: |
+          runtime="$RUNNER_TEMP/hovq-tests"
+          mkdir -p "$runtime/horizon"
+          git -C "$runtime/horizon" init --quiet
+          git -C "$runtime/horizon" fetch --quiet --depth 1 https://github.com/Thysrael/Horizon.git "$(cat bootstrap/horizon.commit)"
+          git -C "$runtime/horizon" checkout --quiet --detach FETCH_HEAD
+          python3 -m venv "$runtime/tools"
+          "$runtime/tools/bin/pip" install --quiet uv==0.13.9
+          uv="$runtime/tools/bin/uv"
+          "$uv" --directory "$runtime/horizon" sync --frozen --no-dev --no-editable --python /usr/bin/python3
+          python="$runtime/horizon/.venv/bin/python"
+          "$uv" pip install --python "$python" --no-deps --only-binary :all: -r agent/requirements.txt
+          bash -n bootstrap/install.sh
+          PYTHONPATH="$PWD/agent" "$python" -m unittest discover -s agent/tests -v
+  build-android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Build and test Android
+        run: |
+          export JAVA_HOME="$JAVA_HOME_21_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          if [[ ! -r "$ANDROID_HOME/platforms/android-36/android.jar" ||
+                ! -x "$ANDROID_HOME/build-tools/36.0.0/apksigner" ]]; then
+            sdkmanager="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -print -quit)"
+            test -n "$sdkmanager"
+            bash "$sdkmanager" "platforms;android-36" "build-tools;36.0.0"
+          fi
+          cd android
+          ./gradlew --no-daemon --max-workers=2 :app:testReleaseUnitTest :app:assembleRelease
+      - name: Transfer unsigned build to signing job
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: hovq-unsigned
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: error
+          retention-days: 1
+
+  check-credentials:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check signing configuration
+        env:
+          HOVQ_SIGNING_KEY: ${{ secrets.HM_RELEASE_KEYSTORE_BASE64 }}
+          HOVQ_SIGNING_PASSWORD: ${{ secrets.HM_RELEASE_STORE_PASSWORD }}
+        run: |
+          if [[ -z "$HOVQ_SIGNING_KEY" || -z "$HOVQ_SIGNING_PASSWORD" ]]; then
+            echo "::error::The existing Hovq signing key and password must be available as Actions secrets HM_RELEASE_KEYSTORE_BASE64 and HM_RELEASE_STORE_PASSWORD."
+            exit 1
+          fi
+
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    needs: [verify-agent, build-android, check-credentials]
+    permissions:
+      contents: write
+    steps:
+      - name: Get verified build input
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: hovq-unsigned
+          path: build
+      - name: Sign and verify APK
+        env:
+          HOVQ_SIGNING_KEY: ${{ secrets.HM_RELEASE_KEYSTORE_BASE64 }}
+          HOVQ_SIGNING_PASSWORD: ${{ secrets.HM_RELEASE_STORE_PASSWORD }}
+        run: |
+          export JAVA_HOME="$JAVA_HOME_21_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          tools="$ANDROID_HOME/build-tools/36.0.0"
+          if [[ ! -x "$tools/apksigner" ]]; then
+            sdkmanager="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -print -quit)"
+            test -n "$sdkmanager"
+            bash "$sdkmanager" "build-tools;36.0.0"
+          fi
+          umask 077
+          signing="$(mktemp -d)"
+          trap 'rm -rf -- "$signing"' EXIT
+          printf '%s' "$HOVQ_SIGNING_KEY" | base64 --decode > "$signing/hovq.p12"
+          "$tools/zipalign" -f -P 16 4 build/app-release-unsigned.apk "$signing/aligned.apk"
+          "$tools/apksigner" sign --ks "$signing/hovq.p12" --ks-type PKCS12 \
+            --ks-pass env:HOVQ_SIGNING_PASSWORD --out Hovq_0.6.7.apk "$signing/aligned.apk"
+          "$tools/apksigner" verify --print-certs Hovq_0.6.7.apk > "$signing/certificate.txt"
+          grep -Fx 'Signer #1 certificate SHA-256 digest: ac361b3d0d4c650ab99a0c4f2ea7710b99aae7b34ba8ad5cee6e8cb7374714de' "$signing/certificate.txt"
+          "$tools/zipalign" -c -P 16 4 Hovq_0.6.7.apk
+          "$tools/aapt" dump badging Hovq_0.6.7.apk > "$signing/package.txt"
+          grep -F "package: name='dev.horizonmanager.mobile' versionCode='48' versionName='0.6.7'" "$signing/package.txt"
+      - name: Publish the signed release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create v0.6.7 Hovq_0.6.7.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Hovq 0.6.7" --latest --notes "- Редактирование профиля сохраняет установленный период сбора.
+          - Оценка получает до 2000 символов, обогащение — до 8000. Текст берётся с начала публикации.
+          - Выбор текста карточки перенесён в Обработку AI.
+          - В журнале появились даты и расход входящих и исходящих токенов.
+          - Версия агента — 0.1.25."
+          gh release view v0.6.7 --repo "$GITHUB_REPOSITORY" --json assets,isDraft,url \
+            | jq -e '(.isDraft | not) and any(.assets[]; .name == "Hovq_0.6.7.apk" and .size > 0)'
