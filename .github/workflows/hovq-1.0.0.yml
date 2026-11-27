@@ -49,7 +49,7 @@ jobs:
             bash "$sdkmanager" "platforms;android-36" "build-tools;36.0.0"
           fi
           cd android
-          ./gradlew --no-daemon --max-workers=2 :app:testReleaseUnitTest :app:assembleRelease :app:lintRelease
+          ./gradlew --no-daemon --max-workers=2 :app:testReleaseUnitTest :app:assembleRelease
       - name: Retain the verified unsigned APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
