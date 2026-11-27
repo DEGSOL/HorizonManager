@@ -81,7 +81,7 @@ internal fun ServerCredentialFields(draft: ServerDraft, enabled: Boolean, sectio
                 ValueField(ui(R.string.ui_ssh_user), draft.user, { change(draft.copy(user = it)) }, enabled = enabled,
                     help = R.string.vps_form_user_help)
             }
-            if (maxWidth < 280.dp || LocalConfiguration.current.fontScale > 1.3f) {
+            if (maxWidth < 330.dp || LocalConfiguration.current.fontScale > 1.3f) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     port()
                     user()
@@ -89,7 +89,7 @@ internal fun ServerCredentialFields(draft: ServerDraft, enabled: Boolean, sectio
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                     Box(Modifier.weight(1f)) { port() }
-                    Box(Modifier.weight(2f)) { user() }
+                    Box(Modifier.weight(1f)) { user() }
                 }
             }
         }
